@@ -21,8 +21,9 @@ export default function OnboardingPage() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { router.push("/auth/login"); return; }
 
-    const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-    const role = profile?.role;
+    // Ensure profile row exists (trigger may have failed silently)
+    const ensureRes = await fetch("/api/auth/ensure-profile", { method: "POST" });
+    const { role } = ensureRes.ok ? await ensureRes.json() : { role: "influencer" };
     const isAdmin = role === "admin" || role === "ops" || role === "finance";
 
     const { error: profileError } = await supabase
