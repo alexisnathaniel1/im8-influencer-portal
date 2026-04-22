@@ -41,14 +41,15 @@ export default function LoginPage() {
         .eq("id", user.id)
         .single();
 
-      if (profile.role === "admin" || profile.role === "ops" || profile.role === "finance") {
-        router.push("/admin");
-      } else if (profile.role === "approver") {
-        router.push("/approver");
+      const role = profile?.role;
+      if (role === "admin" || role === "ops" || role === "finance") {
+        window.location.href = "/admin";
+      } else if (role === "approver") {
+        window.location.href = "/approver";
       } else if (!profile?.full_name) {
-        router.push("/auth/onboarding");
+        window.location.href = "/auth/onboarding";
       } else {
-        router.push("/influencer");
+        window.location.href = "/influencer";
       }
     }
     setLoading(false);
