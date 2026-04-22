@@ -21,6 +21,10 @@ export default function OnboardingPage() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { router.push("/auth/login"); return; }
 
+    const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+    const role = profile?.role;
+    const isAdmin = role === "admin" || role === "ops" || role === "finance";
+
     const { error: profileError } = await supabase
       .from("profiles")
       .update({ full_name: fullName, phone })
@@ -28,19 +32,20 @@ export default function OnboardingPage() {
 
     if (profileError) { setError(profileError.message); setLoading(false); return; }
 
+    if (isAdmin) {
+      router.push("/admin");
+      return;
+    }
+
     setStep("folder");
 
-    // Create Drive folder in background
+    // Create Drive folder for influencers/agencies only
     const folderRes = await fetch("/api/drive/create-folder", { method: "POST" });
     if (!folderRes.ok) {
-      // Non-fatal — admin can create it later
       console.warn("Drive folder creation failed:", await folderRes.text());
     }
 
-    const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-    if (profile?.role === "admin" || profile?.role === "ops" || profile?.role === "finance") {
-      router.push("/admin");
-    } else if (profile?.role === "approver") {
+    if (role === "approver") {
       router.push("/approver");
     } else {
       router.push("/influencer");
