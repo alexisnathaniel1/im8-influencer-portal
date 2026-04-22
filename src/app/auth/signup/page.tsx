@@ -3,11 +3,12 @@
 import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
+const ADMIN_DOMAINS = ["@prenetics.com", "@im8health.com"];
+
 export default function SignupPage() {
-  const router = useRouter();
+  const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -21,10 +22,26 @@ export default function SignupPage() {
     setLoading(true);
     setError("");
 
-    const { error } = await supabase.auth.signUp({ email, password });
-    if (error) { setError(error.message); setLoading(false); return; }
+    const { error: signUpError } = await supabase.auth.signUp({ email, password });
+    if (signUpError) { setError(signUpError.message); setLoading(false); return; }
 
-    router.push("/auth/onboarding");
+    const isAdminEmail = ADMIN_DOMAINS.some(d => email.toLowerCase().endsWith(d));
+
+    // Create profile server-side with correct role + full_name (uses admin client, bypasses RLS)
+    const res = await fetch("/api/auth/ensure-profile", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ full_name: fullName }),
+    });
+
+    if (!res.ok) {
+      setError("Could not create profile. Please try signing in.");
+      setLoading(false);
+      return;
+    }
+
+    // Hard redirect forces server to see fresh session cookies
+    window.location.href = isAdminEmail ? "/admin" : "/auth/onboarding";
   }
 
   return (
@@ -43,6 +60,12 @@ export default function SignupPage() {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-im8-burgundy mb-1">Full name</label>
+              <input type="text" value={fullName} onChange={e => setFullName(e.target.value)}
+                placeholder="Your full name" required
+                className="w-full px-4 py-3 rounded-lg border border-im8-stone/40 focus:outline-none focus:ring-2 focus:ring-im8-red/50 focus:border-im8-red text-im8-burgundy transition-colors" />
+            </div>
             <div>
               <label className="block text-sm font-medium text-im8-burgundy mb-1">Email address</label>
               <input type="email" value={email} onChange={e => setEmail(e.target.value)}

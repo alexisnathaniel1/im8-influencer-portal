@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+
+const ADMIN_DOMAINS = ["@prenetics.com", "@im8health.com"];
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -13,49 +15,43 @@ export default function OnboardingPage() {
   const [error, setError] = useState("");
   const supabase = createClient();
 
+  // Admins never need onboarding — bounce them to /admin
+  useEffect(() => {
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { window.location.href = "/auth/login"; return; }
+      const isAdmin = ADMIN_DOMAINS.some(d => user.email?.toLowerCase().endsWith(d));
+      if (isAdmin) { window.location.href = "/admin"; return; }
+    })();
+  }, [supabase]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError("");
 
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { router.push("/auth/login"); return; }
+    if (!user) { window.location.href = "/auth/login"; return; }
 
-    const ADMIN_DOMAINS = ["@prenetics.com", "@im8health.com"];
-    const isAdminEmail = ADMIN_DOMAINS.some(d => user.email?.toLowerCase().endsWith(d));
+    // Ensure profile exists with correct role and name (admin-client path, bypasses RLS)
+    const ensureRes = await fetch("/api/auth/ensure-profile", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ full_name: fullName }),
+    });
+    if (!ensureRes.ok) { setError("Could not save profile."); setLoading(false); return; }
 
-    // Ensure profile row exists (trigger may have failed silently)
-    await fetch("/api/auth/ensure-profile", { method: "POST" });
-
-    const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-    const role = profile?.role;
-    const isAdmin = isAdminEmail || role === "admin" || role === "ops" || role === "finance";
-
-    const { error: profileError } = await supabase
-      .from("profiles")
-      .update({ full_name: fullName, phone })
-      .eq("id", user.id);
-
-    if (profileError) { setError(profileError.message); setLoading(false); return; }
-
-    if (isAdmin) {
-      router.push("/admin");
-      return;
+    // Save phone (influencer-specific field)
+    if (phone) {
+      await supabase.from("profiles").update({ phone }).eq("id", user.id);
     }
 
     setStep("folder");
 
-    // Create Drive folder for influencers/agencies only
     const folderRes = await fetch("/api/drive/create-folder", { method: "POST" });
-    if (!folderRes.ok) {
-      console.warn("Drive folder creation failed:", await folderRes.text());
-    }
+    if (!folderRes.ok) console.warn("Drive folder creation failed:", await folderRes.text());
 
-    if (role === "approver") {
-      router.push("/approver");
-    } else {
-      router.push("/influencer");
-    }
+    window.location.href = "/influencer";
   }
 
   return (
