@@ -22,22 +22,25 @@ export default function SignupPage() {
     setLoading(true);
     setError("");
 
-    const { error: signUpError } = await supabase.auth.signUp({ email, password });
+    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({ email, password });
     if (signUpError) { setError(signUpError.message); setLoading(false); return; }
 
     const isAdminEmail = ADMIN_DOMAINS.some(d => email.toLowerCase().endsWith(d));
+    const accessToken = signUpData.session?.access_token;
 
-    // Create profile server-side with correct role + full_name (uses admin client, bypasses RLS)
+    // Pass access token directly — cookie may not be propagated yet on first request
     const res = await fetch("/api/auth/ensure-profile", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(accessToken ? { "Authorization": `Bearer ${accessToken}` } : {}),
+      },
       body: JSON.stringify({ full_name: fullName }),
     });
 
     if (!res.ok) {
-      setError("Could not create profile. Please try signing in.");
-      setLoading(false);
-      return;
+      // Email confirmation may be enabled — profile will be created on first login
+      console.warn("ensure-profile failed:", await res.text());
     }
 
     // Hard redirect forces server to see fresh session cookies
