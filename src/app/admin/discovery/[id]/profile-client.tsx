@@ -122,12 +122,12 @@ export default function DiscoveryProfileClient({
               {(profile.youtube_handle as string) && (
                 <Row label="YouTube" value={`@${profile.youtube_handle}`} />
               )}
-              {profile.follower_count && (
+              {profile.follower_count ? (
                 <Row label="Followers" value={Number(profile.follower_count).toLocaleString()} />
-              )}
-              {profile.proposed_rate_cents && (
+              ) : null}
+              {profile.proposed_rate_cents ? (
                 <Row label="Proposed rate" value={`$${(Number(profile.proposed_rate_cents) / 100).toFixed(0)}/mo`} />
-              )}
+              ) : null}
               {portfolioUrl && (
                 <Row label="Portfolio" value="Open link ↗" href={portfolioUrl} />
               )}
