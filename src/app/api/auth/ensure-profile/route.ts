@@ -26,7 +26,14 @@ export async function POST() {
       email: user.email ?? "",
       role,
     });
+    return NextResponse.json({ role });
   }
 
-  return NextResponse.json({ role: existing?.role ?? role });
+  // Correct the role if email domain changed or trigger assigned wrong role
+  if (isAdmin && existing.role !== "admin") {
+    await admin.from("profiles").update({ role: "admin" }).eq("id", user.id);
+    return NextResponse.json({ role: "admin" });
+  }
+
+  return NextResponse.json({ role: existing.role });
 }
