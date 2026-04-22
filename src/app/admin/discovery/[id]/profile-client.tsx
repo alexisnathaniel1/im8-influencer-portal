@@ -146,7 +146,7 @@ export default function DiscoveryProfileClient({
           </div>
 
           {/* AI assessment */}
-          {(profile.ai_summary || redFlags.length > 0) && (
+          {(!!profile.ai_summary || redFlags.length > 0) ? (
             <div className="bg-white rounded-xl border border-im8-stone/30 p-6 space-y-3">
               <div className="flex items-center gap-2">
                 <h2 className="font-semibold text-im8-burgundy">AI assessment</h2>
@@ -154,9 +154,9 @@ export default function DiscoveryProfileClient({
                   <span className={`text-lg font-bold ${scoreColor}`}>{aiScore}/100</span>
                 )}
               </div>
-              {profile.ai_summary && (
+              {profile.ai_summary ? (
                 <p className="text-sm text-im8-burgundy/70 leading-relaxed">{profile.ai_summary as string}</p>
-              )}
+              ) : null}
               {redFlags.length > 0 && (
                 <div className="space-y-1">
                   <p className="text-xs font-medium text-red-600 uppercase tracking-wide">Red flags</p>
@@ -168,7 +168,7 @@ export default function DiscoveryProfileClient({
                 </div>
               )}
             </div>
-          )}
+          ) : null}
 
           {/* Reviewer notes */}
           <div className="bg-white rounded-xl border border-im8-stone/30 p-6 space-y-3">
