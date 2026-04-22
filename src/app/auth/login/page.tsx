@@ -30,29 +30,46 @@ export default function LoginPage() {
       return;
     }
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data: signInData, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) { setError(error.message); setLoading(false); return; }
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
+    const accessToken = signInData.session?.access_token;
+
+    // Self-heal: ensure profile row exists with correct role based on email domain
+    const ensureRes = await fetch("/api/auth/ensure-profile", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(accessToken ? { "Authorization": `Bearer ${accessToken}` } : {}),
+      },
+      body: JSON.stringify({}),
+    });
+
+    let role: string | undefined;
+    let fullName: string | undefined;
+    if (ensureRes.ok) {
+      const data = await ensureRes.json();
+      role = data.role;
+      fullName = data.full_name;
+    } else {
       const { data: profile } = await supabase
         .from("profiles")
         .select("role, full_name")
-        .eq("id", user.id)
+        .eq("id", signInData.user!.id)
         .single();
-
-      const role = profile?.role;
-      if (role === "admin" || role === "ops" || role === "finance") {
-        window.location.href = "/admin";
-      } else if (role === "approver") {
-        window.location.href = "/approver";
-      } else if (!profile?.full_name) {
-        window.location.href = "/auth/onboarding";
-      } else {
-        window.location.href = "/influencer";
-      }
+      role = profile?.role;
+      fullName = profile?.full_name;
     }
-    setLoading(false);
+
+    if (role === "admin" || role === "ops" || role === "finance") {
+      window.location.href = "/admin";
+    } else if (role === "approver") {
+      window.location.href = "/approver";
+    } else if (!fullName) {
+      window.location.href = "/auth/onboarding";
+    } else {
+      window.location.href = "/influencer";
+    }
   }
 
   return (
