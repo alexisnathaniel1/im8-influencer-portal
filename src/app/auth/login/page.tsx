@@ -41,12 +41,12 @@ export default function LoginPage() {
         .eq("id", user.id)
         .single();
 
-      if (!profile?.full_name) {
-        router.push("/auth/onboarding");
-      } else if (profile.role === "admin" || profile.role === "ops" || profile.role === "finance") {
+      if (profile.role === "admin" || profile.role === "ops" || profile.role === "finance") {
         router.push("/admin");
       } else if (profile.role === "approver") {
         router.push("/approver");
+      } else if (!profile?.full_name) {
+        router.push("/auth/onboarding");
       } else {
         router.push("/influencer");
       }
