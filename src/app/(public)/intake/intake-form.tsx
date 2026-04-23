@@ -10,7 +10,7 @@ const NICHES = [
   "Hyrox/CrossFit", "Wellness", "Longevity", "Fitness Coach",
   "Pilates", "Yoga", "Padel", "Pickleball", "Ironman", "Lifestyle", "Others",
 ];
-const PLATFORMS = ["instagram", "tiktok", "youtube", "facebook", "other"] as const;
+const PLATFORMS = ["instagram", "tiktok", "youtube", "other"] as const;
 const POSITIONING_LIMIT = 100;
 
 const STANDARD_DELIVERABLES_LABEL = "3 IG Reels · 3 IG Stories · Raw footage · Whitelisting · Paid ad usage rights · Link in bio · 3 UGC Videos for ads — across 3 months";
@@ -146,6 +146,13 @@ export default function IntakeForm({
       return;
     }
     const data = await res.json();
+
+    // Surface insert-level errors (e.g. DB constraint violations)
+    if (data.insertErrors?.length > 0 && data.submitted === 0) {
+      setError(`Submission failed: ${data.insertErrors[0].error}`);
+      setLoading(false);
+      return;
+    }
 
     if (isAdmin) {
       // Send admin straight back to Discovery with a success indicator

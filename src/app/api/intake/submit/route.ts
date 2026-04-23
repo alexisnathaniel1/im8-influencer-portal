@@ -81,13 +81,14 @@ export async function POST(request: NextRequest) {
 
     const supabase = createAdminClient();
 
-    // Determine source — admin can pass "admin_manual"; partners always get "inbound_form"
+    // Determine source — maps to discovery_source enum ('manual' | 'intake_form' | 'agency_email')
     const { data: submitterProfile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
     const isAdminUser = ["admin", "management", "support"].includes(submitterProfile?.role ?? "");
     const requestedSource = (formData.get("source") as string) || "inbound_form";
-    const source = (isAdminUser && requestedSource === "admin_manual") ? "admin_manual" : "inbound_form";
+    const source: "manual" | "intake_form" | "agency_email" = (isAdminUser && requestedSource === "admin_manual") ? "manual" : "intake_form";
     const inserted: Array<{ id: string; name: string; data: InfluencerEntry }> = [];
     const duplicates: string[] = [];
+    const errors: Array<{ name: string; error: string }> = [];
 
     for (const inf of influencers) {
       if (!inf.influencerName?.trim()) continue;
@@ -127,7 +128,8 @@ export async function POST(request: NextRequest) {
         .single();
 
       if (error) {
-        console.error("[intake/submit] Insert error:", error.message);
+        console.error("[intake/submit] Insert error:", error.message, error.details, error.hint);
+        errors.push({ name: inf.influencerName, error: error.message });
         continue;
       }
 
@@ -195,6 +197,7 @@ export async function POST(request: NextRequest) {
       submitted: inserted.length,
       duplicates: duplicates.length,
       duplicateNames: duplicates,
+      insertErrors: errors,
     });
   } catch (err) {
     console.error("[intake/submit]", err);

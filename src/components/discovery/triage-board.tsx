@@ -248,7 +248,7 @@ export default function DiscoveryBoard({
                       <div className="font-medium text-im8-burgundy">{p.influencer_name}</div>
                       <div className="flex items-center gap-2 mt-0.5">
                         <span className="text-xs text-im8-burgundy/50 capitalize">{p.platform_primary}</span>
-                        {p.source === "admin_manual"
+                        {p.source === "manual"
                           ? <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-600 font-medium">Manual</span>
                           : <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-500 font-medium">Form</span>}
                       </div>
