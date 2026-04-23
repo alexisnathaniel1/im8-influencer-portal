@@ -28,6 +28,8 @@ type DiscoveryProfile = {
   ai_red_flags: string[];
   comments_count?: number;
   created_at: string;
+  negotiation_counter: string | null;
+  agency_response: string | null;
 };
 
 const STATUSES = ["new", "reviewing", "negotiation_needed", "approved", "rejected", "converted"];
@@ -87,6 +89,8 @@ export default function DiscoveryBoard({
   const [notifyEmail, setNotifyEmail] = useState("");
   const [notifyMessage, setNotifyMessage] = useState("");
   const [notifying, setNotifying] = useState(false);
+  const [counterOffer, setCounterOffer] = useState("");
+  const [savingCounter, setSavingCounter] = useState(false);
 
   function applyFilter(key: string, value: string) {
     const params = new URLSearchParams(currentFilters as Record<string, string>);
@@ -113,6 +117,7 @@ export default function DiscoveryBoard({
     setOpenProfile(profile);
     setNotifyEmail(profile.submitter_email ?? "");
     setNotifyMessage("");
+    setCounterOffer(profile.negotiation_counter ?? "");
     setCommentsLoading(true);
     const res = await fetch(`/api/discovery/${profile.id}/comments`);
     if (res.ok) {
@@ -160,6 +165,18 @@ export default function DiscoveryBoard({
     } else {
       alert("Failed to send notification");
     }
+  }
+
+  async function saveCounterOffer() {
+    if (!openProfile) return;
+    setSavingCounter(true);
+    await fetch(`/api/discovery/${openProfile.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ negotiation_counter: counterOffer }),
+    });
+    setSavingCounter(false);
+    router.refresh();
   }
 
   return (
@@ -316,9 +333,10 @@ export default function DiscoveryBoard({
               <div>
                 <div className="text-xs text-im8-burgundy/50 uppercase tracking-wide mb-2">Profile</div>
                 <div className="space-y-1 text-sm">
-                  {openProfile.instagram_handle && <div><span className="text-im8-burgundy/50">IG:</span> @{openProfile.instagram_handle}</div>}
-                  {openProfile.tiktok_handle && <div><span className="text-im8-burgundy/50">TT:</span> @{openProfile.tiktok_handle}</div>}
-                  {openProfile.youtube_handle && <div><span className="text-im8-burgundy/50">YT:</span> @{openProfile.youtube_handle}</div>}
+                  {openProfile.instagram_handle && <div><span className="text-im8-burgundy/50">IG:</span> <a href={`https://instagram.com/${openProfile.instagram_handle.replace(/^@/, "")}`} target="_blank" rel="noopener noreferrer" className="text-im8-red hover:underline">@{openProfile.instagram_handle}</a></div>}
+                  {openProfile.tiktok_handle && <div><span className="text-im8-burgundy/50">TT:</span> <a href={`https://tiktok.com/@${openProfile.tiktok_handle.replace(/^@/, "")}`} target="_blank" rel="noopener noreferrer" className="text-im8-red hover:underline">@{openProfile.tiktok_handle}</a></div>}
+                  {openProfile.youtube_handle && <div><span className="text-im8-burgundy/50">YT:</span> <a href={`https://youtube.com/@${openProfile.youtube_handle.replace(/^@/, "")}`} target="_blank" rel="noopener noreferrer" className="text-im8-red hover:underline">@{openProfile.youtube_handle}</a></div>}
+                  <div><span className="text-im8-burgundy/50">Submitted:</span> {new Date(openProfile.created_at).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" })}</div>
                   {openProfile.follower_count !== null && <div><span className="text-im8-burgundy/50">Followers:</span> {openProfile.follower_count?.toLocaleString()}</div>}
                   {openProfile.proposed_rate_cents !== null && <div><span className="text-im8-burgundy/50">Proposed rate:</span> ${((openProfile.proposed_rate_cents ?? 0) / 100).toFixed(0)}/mo</div>}
                 </div>
@@ -367,6 +385,29 @@ export default function DiscoveryBoard({
                       {openProfile.ai_red_flags.map((f, i) => <li key={i}>{f}</li>)}
                     </ul>
                   )}
+                </div>
+              )}
+
+              {/* Counter-offer (negotiation_needed only) */}
+              {openProfile.status === "negotiation_needed" && (
+                <div className="border-t border-im8-stone/30 pt-5">
+                  <div className="text-xs text-orange-600 uppercase tracking-wide mb-2 font-semibold">Counter-proposal to agency</div>
+                  {openProfile.agency_response && (
+                    <div className={`mb-3 text-xs px-3 py-2 rounded-lg font-medium ${openProfile.agency_response === "accepted" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
+                      Agency {openProfile.agency_response === "accepted" ? "accepted" : "declined"} this proposal
+                    </div>
+                  )}
+                  <textarea
+                    value={counterOffer}
+                    onChange={e => setCounterOffer(e.target.value)}
+                    placeholder="Write your counter-proposal here — rates, revised deliverables, terms... This will be visible to the agency on their dashboard."
+                    rows={4}
+                    className="w-full px-3 py-2 border border-orange-300 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-orange-400/40 resize-none"
+                  />
+                  <button onClick={saveCounterOffer} disabled={savingCounter}
+                    className="mt-2 w-full py-2 bg-orange-500 text-white text-sm font-medium rounded-lg hover:bg-orange-600 disabled:opacity-50 transition-colors">
+                    {savingCounter ? "Saving..." : "Save counter-proposal"}
+                  </button>
                 </div>
               )}
 

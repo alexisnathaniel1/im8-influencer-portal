@@ -25,7 +25,6 @@ export default function DealDetailClient({
     monthlyRateCents: deal.monthly_rate_cents ? String(Number(deal.monthly_rate_cents) / 100) : "",
     totalMonths: String(deal.total_months ?? 3),
     rationale: (deal.rationale as string) ?? "",
-    outreachThreadUrl: (deal.outreach_thread_url as string) ?? "",
     igHandle: (deal.instagram_handle as string) ?? "",
     tiktokHandle: (deal.tiktok_handle as string) ?? "",
     youtubeHandle: (deal.youtube_handle as string) ?? "",
@@ -84,7 +83,6 @@ export default function DealDetailClient({
         monthly_rate_cents: form.monthlyRateCents ? Math.round(parseFloat(form.monthlyRateCents) * 100) : null,
         total_months: parseInt(form.totalMonths),
         rationale: form.rationale,
-        outreach_thread_url: form.outreachThreadUrl || null,
         instagram_handle: form.igHandle.trim().replace(/^@/, "") || null,
         tiktok_handle: form.tiktokHandle.trim().replace(/^@/, "") || null,
         youtube_handle: form.youtubeHandle.trim().replace(/^@/, "") || null,
@@ -268,14 +266,6 @@ export default function DealDetailClient({
             ))}
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-im8-burgundy mb-1">Gmail thread URL</label>
-            <input type="url" value={form.outreachThreadUrl}
-              onChange={e => setForm(f => ({ ...f, outreachThreadUrl: e.target.value }))}
-              placeholder="https://mail.google.com/mail/u/0/#inbox/..."
-              className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40" />
-          </div>
-
           {/* Portal access */}
           <div className="p-4 bg-im8-sand/40 rounded-xl border border-im8-stone/20 space-y-3">
             <span className="text-xs font-semibold text-im8-burgundy/50 uppercase tracking-wide">Portal access</span>
@@ -283,10 +273,6 @@ export default function DealDetailClient({
           </div>
 
           <div className="flex justify-between items-center pt-2">
-            {form.outreachThreadUrl && (
-              <a href={form.outreachThreadUrl} target="_blank" rel="noopener noreferrer"
-                className="text-sm text-im8-red hover:underline">Open Gmail thread →</a>
-            )}
             <button onClick={saveOverview} disabled={saving}
               className={`ml-auto px-5 py-2 text-white text-sm rounded-lg disabled:opacity-50 transition-colors ${saved ? "bg-green-600 hover:bg-green-700" : "bg-im8-red hover:bg-im8-burgundy"}`}>
               {saving ? "Saving..." : saved ? "Saved ✓" : "Save changes"}
@@ -332,7 +318,7 @@ export default function DealDetailClient({
 
           <div>
             <label className="block text-sm font-medium text-im8-burgundy mb-1">Contract document URL</label>
-            <input type="url" value={contract.contractUrl} placeholder="https://drive.google.com/... or DocuSign link"
+            <input type="url" value={contract.contractUrl} placeholder="https://drive.google.com/..."
               onChange={e => setContract(c => ({ ...c, contractUrl: e.target.value }))}
               className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40" />
             {contract.contractUrl && (

@@ -1,12 +1,38 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
-type Deal = { id: string; influencer_name: string; agency_name: string | null; platform_primary: string; monthly_rate_cents: number | null; total_months: number | null; total_rate_cents: number | null; rationale: string | null };
-type Packet = { id: string; title: string; status: string; deal_ids: string[]; created_at: string; created_by: { full_name: string } | null };
+type Deal = {
+  id: string;
+  influencer_name: string;
+  agency_name: string | null;
+  platform_primary: string;
+  monthly_rate_cents: number | null;
+  total_months: number | null;
+  total_rate_cents: number | null;
+  rationale: string | null;
+};
+type Packet = {
+  id: string;
+  title: string;
+  status: string;
+  deal_ids: string[];
+  approver_ids: string[];
+  approved_count: number;
+  rejected_count: number;
+  created_at: string;
+  created_by: { full_name: string } | null;
+};
 type Approver = { id: string; full_name: string; email: string };
+type ApprovalComment = {
+  id: string;
+  author_display_name: string;
+  body: string;
+  kind: string;
+  created_at: string;
+};
 
 const PACKET_STATUS_COLORS: Record<string, string> = {
   pending: "bg-yellow-100 text-yellow-700",
@@ -15,22 +41,44 @@ const PACKET_STATUS_COLORS: Record<string, string> = {
   rejected: "bg-red-100 text-red-600",
 };
 
-export default function ApprovalsDashboard({ agreedDeals, packets, approvers }: {
-  agreedDeals: Deal[]; packets: Packet[]; approvers: Approver[];
+export default function ApprovalsDashboard({
+  agreedDeals,
+  packets,
+  approvers,
+}: {
+  agreedDeals: Deal[];
+  packets: Packet[];
+  approvers: Approver[];
 }) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [selectedDealIds, setSelectedDealIds] = useState<string[]>([]);
-  const [title, setTitle] = useState(`${new Date().toLocaleString("default", { month: "long", year: "numeric" })} Batch`);
-  const [selectedApprovers, setSelectedApprovers] = useState<string[]>([]);
+  const [title, setTitle] = useState(
+    `${new Date().toLocaleString("default", { month: "long", year: "numeric" })} Batch`
+  );
+  const [selectedApprovers, setSelectedApprovers] = useState<string[]>(
+    approvers.map((a) => a.id)
+  );
   const [creating, setCreating] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
 
+  // Side panel state
+  const [openPacket, setOpenPacket] = useState<Packet | null>(null);
+  const [comments, setComments] = useState<ApprovalComment[]>([]);
+  const [loadingComments, setLoadingComments] = useState(false);
+  const [commentBody, setCommentBody] = useState("");
+  const [postingComment, setPostingComment] = useState(false);
+
   function toggleDeal(id: string) {
-    setSelectedDealIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+    setSelectedDealIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
   }
 
   function toggleApprover(id: string) {
-    setSelectedApprovers(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+    setSelectedApprovers((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
   }
 
   async function createPacket() {
@@ -39,24 +87,74 @@ export default function ApprovalsDashboard({ agreedDeals, packets, approvers }: 
     await fetch("/api/approvals/create-packet", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title, dealIds: selectedDealIds, approverIds: selectedApprovers }),
+      body: JSON.stringify({
+        title,
+        dealIds: selectedDealIds,
+        approverIds: selectedApprovers,
+      }),
     });
-    router.refresh();
+    startTransition(() => router.refresh());
     setSelectedDealIds([]);
-    setSelectedApprovers([]);
     setShowCreateForm(false);
     setCreating(false);
   }
+
+  async function openPacketPanel(packet: Packet) {
+    setOpenPacket(packet);
+    setLoadingComments(true);
+    const res = await fetch(`/api/approvals/${packet.id}/comments`);
+    const data = await res.json().catch(() => ({ comments: [] }));
+    setComments(data.comments ?? []);
+    setLoadingComments(false);
+  }
+
+  async function postComment(kind: "comment" | "approval" | "rejection" | "revision_request") {
+    if (!openPacket) return;
+    if (kind === "comment" && !commentBody.trim()) return;
+    setPostingComment(true);
+    await fetch(`/api/approvals/${openPacket.id}/comments`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ body: commentBody || kindLabel(kind), kind }),
+    });
+    // Refresh comments
+    const res = await fetch(`/api/approvals/${openPacket.id}/comments`);
+    const data = await res.json().catch(() => ({ comments: [] }));
+    setComments(data.comments ?? []);
+    setCommentBody("");
+    setPostingComment(false);
+    startTransition(() => router.refresh());
+  }
+
+  function kindLabel(kind: string) {
+    if (kind === "approval") return "✓ Approved this packet";
+    if (kind === "rejection") return "✗ Rejected this packet";
+    if (kind === "revision_request") return "⟳ Requested revisions";
+    return "";
+  }
+
+  function kindStyle(kind: string) {
+    if (kind === "approval") return "bg-green-50 border-green-200 text-green-800";
+    if (kind === "rejection") return "bg-red-50 border-red-200 text-red-800";
+    if (kind === "revision_request") return "bg-orange-50 border-orange-200 text-orange-800";
+    return "bg-im8-sand/40 border-im8-stone/30 text-im8-burgundy";
+  }
+
+  const dealsById = Object.fromEntries(agreedDeals.map((d) => [d.id, d]));
 
   return (
     <div className="grid grid-cols-5 gap-6">
       {/* Left: ready deals */}
       <div className="col-span-2 space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="font-semibold text-im8-burgundy">Agreed — ready for approval ({agreedDeals.length})</h2>
+          <h2 className="font-semibold text-im8-burgundy">
+            Ready for approval ({agreedDeals.length})
+          </h2>
           {selectedDealIds.length > 0 && (
-            <button onClick={() => setShowCreateForm(true)}
-              className="px-3 py-1.5 bg-im8-red text-white text-sm rounded-lg hover:bg-im8-burgundy transition-colors">
+            <button
+              onClick={() => setShowCreateForm(true)}
+              className="px-3 py-1.5 bg-im8-red text-white text-sm rounded-lg hover:bg-im8-burgundy transition-colors"
+            >
               Send for approval ({selectedDealIds.length})
             </button>
           )}
@@ -64,98 +162,290 @@ export default function ApprovalsDashboard({ agreedDeals, packets, approvers }: 
 
         {agreedDeals.length === 0 ? (
           <div className="bg-white rounded-xl border border-im8-stone/30 p-8 text-center text-im8-burgundy/40 text-sm">
-            No deals in &quot;agreed&quot; status yet.
+            No deals in &ldquo;agreed&rdquo; status yet.
           </div>
         ) : (
           <div className="space-y-2">
-            {agreedDeals.map(d => (
-              <label key={d.id} className={`flex items-start gap-3 bg-white rounded-xl border p-4 cursor-pointer transition-colors ${
-                selectedDealIds.includes(d.id) ? "border-im8-red bg-im8-sand/30" : "border-im8-stone/30 hover:border-im8-stone"
-              }`}>
-                <input type="checkbox" checked={selectedDealIds.includes(d.id)} onChange={() => toggleDeal(d.id)}
-                  className="mt-0.5 accent-im8-red" />
+            {agreedDeals.map((d) => (
+              <label
+                key={d.id}
+                className={`flex items-start gap-3 bg-white rounded-xl border p-4 cursor-pointer transition-colors ${
+                  selectedDealIds.includes(d.id)
+                    ? "border-im8-red bg-im8-sand/30"
+                    : "border-im8-stone/30 hover:border-im8-stone"
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedDealIds.includes(d.id)}
+                  onChange={() => toggleDeal(d.id)}
+                  className="mt-0.5 accent-im8-red"
+                />
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-im8-burgundy text-sm">{d.influencer_name}</div>
                   <div className="text-xs text-im8-burgundy/50">
-                    {d.platform_primary} · ${d.monthly_rate_cents ? (d.monthly_rate_cents / 100).toFixed(0) : "??"}/mo
-                    · {d.total_months}mo total = ${d.total_rate_cents ? (d.total_rate_cents / 100).toFixed(0) : "??"}
+                    {d.platform_primary}
+                    {d.monthly_rate_cents
+                      ? ` · $${(d.monthly_rate_cents / 100).toFixed(0)}/mo`
+                      : ""}
+                    {d.agency_name ? ` · ${d.agency_name}` : ""}
                   </div>
-                  {d.rationale && <p className="text-xs text-im8-burgundy/60 mt-1 line-clamp-2">{d.rationale}</p>}
+                  {d.rationale && (
+                    <p className="text-xs text-im8-burgundy/60 mt-1 line-clamp-2 italic">
+                      {d.rationale}
+                    </p>
+                  )}
                 </div>
               </label>
             ))}
           </div>
         )}
-      </div>
 
-      {/* Right: packets list */}
-      <div className="col-span-3 space-y-4">
-        <h2 className="font-semibold text-im8-burgundy">Sent for approval</h2>
-
-        {/* Create approval form */}
+        {/* Create packet form */}
         {showCreateForm && (
-          <div className="bg-im8-sand/50 border border-im8-stone/40 rounded-xl p-5 space-y-4">
-            <h3 className="font-medium text-im8-burgundy">Send for approval</h3>
+          <div className="bg-white rounded-xl border border-im8-stone/30 p-5 space-y-4">
+            <h3 className="font-semibold text-im8-burgundy text-sm">New approval batch</h3>
             <div>
-              <label className="block text-sm font-medium text-im8-burgundy mb-1">Title</label>
-              <input type="text" value={title} onChange={e => setTitle(e.target.value)}
-                className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40" />
+              <label className="block text-xs font-medium text-im8-burgundy/60 mb-1 uppercase tracking-wide">
+                Batch title
+              </label>
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40"
+              />
             </div>
             <div>
-              <label className="block text-sm font-medium text-im8-burgundy mb-2">Select approvers *</label>
+              <label className="block text-xs font-medium text-im8-burgundy/60 mb-2 uppercase tracking-wide">
+                Send to approvers
+              </label>
               {approvers.length === 0 ? (
-                <p className="text-xs text-im8-burgundy/50">No approvers configured yet. Add them in <Link href="/admin/settings" className="underline">Settings</Link>.</p>
+                <p className="text-xs text-im8-burgundy/40">No approvers set up yet.</p>
               ) : (
-                <div className="space-y-2">
-                  {approvers.map(a => (
+                <div className="space-y-1">
+                  {approvers.map((a) => (
                     <label key={a.id} className="flex items-center gap-2 cursor-pointer">
-                      <input type="checkbox" checked={selectedApprovers.includes(a.id)} onChange={() => toggleApprover(a.id)}
-                        className="accent-im8-red" />
-                      <span className="text-sm text-im8-burgundy">{a.full_name} <span className="text-im8-burgundy/50">({a.email})</span></span>
+                      <input
+                        type="checkbox"
+                        checked={selectedApprovers.includes(a.id)}
+                        onChange={() => toggleApprover(a.id)}
+                        className="accent-im8-red"
+                      />
+                      <span className="text-sm text-im8-burgundy">{a.full_name}</span>
+                      <span className="text-xs text-im8-burgundy/40">{a.email}</span>
                     </label>
                   ))}
                 </div>
               )}
             </div>
-            <div className="flex gap-2 justify-end">
-              <button onClick={() => setShowCreateForm(false)}
-                className="px-4 py-2 text-sm text-im8-burgundy/60 hover:text-im8-burgundy">
-                Cancel
+            <div className="flex gap-2">
+              <button
+                onClick={createPacket}
+                disabled={creating || !selectedApprovers.length}
+                className="flex-1 py-2 bg-im8-red text-white text-sm rounded-lg hover:bg-im8-burgundy disabled:opacity-50 transition-colors"
+              >
+                {creating ? "Sending…" : `Send ${selectedDealIds.length} creator${selectedDealIds.length !== 1 ? "s" : ""} for approval`}
               </button>
-              <button onClick={createPacket} disabled={creating || !selectedApprovers.length}
-                className="px-4 py-2 bg-im8-red text-white text-sm rounded-lg hover:bg-im8-burgundy disabled:opacity-50 transition-colors">
-                {creating ? "Sending..." : `Send for approval (${selectedDealIds.length} deals)`}
+              <button
+                onClick={() => setShowCreateForm(false)}
+                className="px-3 py-2 text-sm border border-im8-stone/40 rounded-lg text-im8-burgundy/60 hover:text-im8-burgundy"
+              >
+                Cancel
               </button>
             </div>
           </div>
         )}
+      </div>
+
+      {/* Right: existing packets */}
+      <div className="col-span-3 space-y-4">
+        <h2 className="font-semibold text-im8-burgundy">Approval batches ({packets.length})</h2>
 
         {packets.length === 0 ? (
           <div className="bg-white rounded-xl border border-im8-stone/30 p-8 text-center text-im8-burgundy/40 text-sm">
-            No approvals sent yet. Select agreed deals on the left and send them.
+            No approval batches yet. Select creators on the left and send for approval.
           </div>
         ) : (
           <div className="space-y-3">
-            {packets.map(p => (
-              <Link key={p.id} href={`/admin/approvals/${p.id}`}
-                className="block bg-white rounded-xl border border-im8-stone/30 p-5 hover:shadow-sm transition-shadow">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h3 className="font-medium text-im8-burgundy">{p.title}</h3>
-                    <p className="text-xs text-im8-burgundy/50 mt-1">
-                      {p.deal_ids.length} deals · by {(p.created_by as { full_name: string } | null)?.full_name ?? "Admin"}
-                      · {new Date(p.created_at).toLocaleDateString()}
-                    </p>
+            {packets.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => openPacketPanel(p)}
+                className="w-full bg-white rounded-xl border border-im8-stone/30 p-4 text-left hover:border-im8-red/40 transition-colors"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-im8-burgundy text-sm">{p.title}</span>
+                      <span
+                        className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${PACKET_STATUS_COLORS[p.status] ?? ""}`}
+                      >
+                        {p.status.replace("_", " ")}
+                      </span>
+                    </div>
+                    <div className="text-xs text-im8-burgundy/50 mt-1">
+                      {p.deal_ids.length} creator{p.deal_ids.length !== 1 ? "s" : ""} ·{" "}
+                      {p.approved_count} approved · {p.rejected_count} rejected ·{" "}
+                      {p.approver_ids.length} approver{p.approver_ids.length !== 1 ? "s" : ""}
+                    </div>
+                    <div className="text-xs text-im8-burgundy/40 mt-0.5">
+                      Sent {new Date(p.created_at).toLocaleDateString()} by{" "}
+                      {p.created_by?.full_name ?? "—"}
+                    </div>
                   </div>
-                  <span className={`text-xs px-2 py-1 rounded-full font-medium capitalize ${PACKET_STATUS_COLORS[p.status] ?? ""}`}>
-                    {p.status.replace("_", " ")}
-                  </span>
+                  <span className="text-im8-burgundy/30 text-sm shrink-0">→</span>
                 </div>
-              </Link>
+              </button>
             ))}
           </div>
         )}
       </div>
+
+      {/* Side panel — packet thread */}
+      {openPacket && (
+        <div className="fixed inset-0 z-50 flex">
+          <div
+            className="flex-1 bg-black/40"
+            onClick={() => setOpenPacket(null)}
+          />
+          <div className="w-full max-w-lg bg-white shadow-2xl flex flex-col overflow-hidden">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-im8-stone/20 flex items-start justify-between gap-3">
+              <div>
+                <h2 className="font-bold text-im8-burgundy">{openPacket.title}</h2>
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                  <span
+                    className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${PACKET_STATUS_COLORS[openPacket.status] ?? ""}`}
+                  >
+                    {openPacket.status.replace("_", " ")}
+                  </span>
+                  <span className="text-xs text-im8-burgundy/50">
+                    {openPacket.approved_count} approved · {openPacket.rejected_count} rejected
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={() => setOpenPacket(null)}
+                className="text-im8-burgundy/40 hover:text-im8-burgundy text-xl leading-none mt-0.5"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Creators in this packet */}
+            <div className="px-6 py-3 border-b border-im8-stone/20 bg-im8-sand/30">
+              <p className="text-xs font-semibold text-im8-burgundy/50 uppercase tracking-wide mb-2">
+                Creators in this batch
+              </p>
+              <div className="space-y-1">
+                {openPacket.deal_ids.map((dealId) => {
+                  const d = dealsById[dealId];
+                  return d ? (
+                    <div key={dealId} className="flex items-center justify-between">
+                      <Link
+                        href={`/admin/deals/${dealId}`}
+                        className="text-sm font-medium text-im8-red hover:underline"
+                        onClick={() => setOpenPacket(null)}
+                      >
+                        {d.influencer_name}
+                      </Link>
+                      <span className="text-xs text-im8-burgundy/50">
+                        {d.monthly_rate_cents
+                          ? `$${(d.monthly_rate_cents / 100).toFixed(0)}/mo`
+                          : "—"}
+                      </span>
+                    </div>
+                  ) : (
+                    <div key={dealId}>
+                      <Link
+                        href={`/admin/deals/${dealId}`}
+                        className="text-sm text-im8-red hover:underline"
+                        onClick={() => setOpenPacket(null)}
+                      >
+                        View deal →
+                      </Link>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Comment thread */}
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
+              <p className="text-xs font-semibold text-im8-burgundy/50 uppercase tracking-wide">
+                Thread
+              </p>
+              {loadingComments ? (
+                <p className="text-sm text-im8-burgundy/40">Loading…</p>
+              ) : comments.length === 0 ? (
+                <p className="text-sm text-im8-burgundy/40">No comments yet.</p>
+              ) : (
+                comments.map((c) => (
+                  <div
+                    key={c.id}
+                    className={`border rounded-xl px-4 py-3 text-sm ${kindStyle(c.kind)}`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-semibold text-xs">{c.author_display_name || "Admin"}</span>
+                      <span className="text-xs opacity-60">
+                        {new Date(c.created_at).toLocaleString("en-AU", {
+                          day: "numeric",
+                          month: "short",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                    </div>
+                    <p className="leading-relaxed whitespace-pre-wrap">{c.body}</p>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Add comment + actions */}
+            <div className="px-6 py-4 border-t border-im8-stone/20 space-y-3">
+              <textarea
+                value={commentBody}
+                onChange={(e) => setCommentBody(e.target.value)}
+                placeholder="Leave a comment…"
+                rows={2}
+                className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40 resize-none"
+              />
+              <div className="flex gap-2 flex-wrap">
+                <button
+                  onClick={() => postComment("comment")}
+                  disabled={postingComment || !commentBody.trim()}
+                  className="px-4 py-2 bg-im8-sand text-im8-burgundy text-sm rounded-lg hover:bg-im8-stone transition-colors disabled:opacity-40"
+                >
+                  Comment
+                </button>
+                <button
+                  onClick={() => postComment("approval")}
+                  disabled={postingComment}
+                  className="px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors disabled:opacity-40"
+                >
+                  ✓ Approve
+                </button>
+                <button
+                  onClick={() => postComment("revision_request")}
+                  disabled={postingComment}
+                  className="px-4 py-2 bg-orange-500 text-white text-sm rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-40"
+                >
+                  ⟳ Request revisions
+                </button>
+                <button
+                  onClick={() => postComment("rejection")}
+                  disabled={postingComment}
+                  className="px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 transition-colors disabled:opacity-40"
+                >
+                  ✗ Reject
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

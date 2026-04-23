@@ -17,7 +17,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-  const allowed = ["status", "notes", "assigned_to", "ai_score", "proposed_deliverables", "positioning"];
+  const allowed = ["status", "notes", "assigned_to", "ai_score", "proposed_deliverables", "positioning", "negotiation_counter"];
   const updates = Object.fromEntries(Object.entries(body).filter(([k]) => allowed.includes(k)));
 
   const admin = createAdminClient();
