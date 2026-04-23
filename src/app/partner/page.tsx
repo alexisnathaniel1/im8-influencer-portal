@@ -41,6 +41,14 @@ export default async function PartnerPage() {
 
   const email = profile?.email ?? user.email ?? "";
 
+  // Fetch active deals where this user is the linked partner
+  const { data: linkedDeals } = await admin
+    .from("deals")
+    .select("id, influencer_name, status, platform_primary, campaign_start, campaign_end, monthly_rate_cents, total_months, drive_folder_id")
+    .eq("influencer_profile_id", user.id)
+    .not("status", "in", '("declined","completed","rejected")')
+    .order("updated_at", { ascending: false });
+
   // Two separate queries to avoid PostgREST escaping issues with email in .or()
   const SELECT_FIELDS = "id, influencer_name, platform_primary, status, positioning, niche_tags, niche, proposed_rate_cents, proposed_deliverables, negotiation_counter, agency_response, created_at";
 
@@ -84,11 +92,69 @@ export default async function PartnerPage() {
     });
   }
 
+  const DEAL_STATUS_LABELS: Record<string, string> = {
+    contacted: "In review", negotiating: "Negotiating", agreed: "Terms agreed",
+    pending_approval: "Pending approval", approved: "Approved", contracted: "Contracted",
+    live: "Live", completed: "Completed",
+  };
+  const DEAL_STATUS_COLORS: Record<string, string> = {
+    contacted: "bg-gray-100 text-gray-600", negotiating: "bg-blue-100 text-blue-700",
+    agreed: "bg-yellow-100 text-yellow-700", pending_approval: "bg-orange-100 text-orange-700",
+    approved: "bg-green-100 text-green-700", contracted: "bg-purple-100 text-purple-700",
+    live: "bg-emerald-100 text-emerald-700",
+  };
+
   return (
     <div className="space-y-6">
+      {/* Active partnership deals — shown when account is linked */}
+      {linkedDeals && linkedDeals.length > 0 && (
+        <div className="space-y-4">
+          <div>
+            <h1 className="text-3xl font-bold text-im8-burgundy">Your partnerships</h1>
+            <p className="text-im8-burgundy/60 mt-1">Active collaborations with IM8.</p>
+          </div>
+          {linkedDeals.map(deal => (
+            <div key={deal.id} className="bg-white rounded-xl border border-im8-stone/30 p-5 space-y-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <span className="font-semibold text-im8-burgundy text-lg">{deal.influencer_name}</span>
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${DEAL_STATUS_COLORS[deal.status] ?? "bg-gray-100 text-gray-600"}`}>
+                      {DEAL_STATUS_LABELS[deal.status] ?? deal.status}
+                    </span>
+                    <span className="text-xs text-im8-burgundy/50 capitalize">{deal.platform_primary}</span>
+                  </div>
+                  {(deal.campaign_start || deal.campaign_end) && (
+                    <p className="text-sm text-im8-burgundy/60 mt-1">
+                      {deal.campaign_start && new Date(deal.campaign_start).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" })}
+                      {deal.campaign_start && deal.campaign_end && " → "}
+                      {deal.campaign_end && new Date(deal.campaign_end).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" })}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <Link href="/partner/briefs" className="text-sm px-4 py-2 bg-im8-burgundy text-white rounded-lg hover:bg-im8-red transition-colors">
+                  View briefs
+                </Link>
+                <Link href="/partner/submissions" className="text-sm px-4 py-2 border border-im8-stone/40 text-im8-burgundy rounded-lg hover:bg-im8-sand transition-colors">
+                  My submissions
+                </Link>
+                <Link href="/partner/edited-videos" className="text-sm px-4 py-2 border border-im8-stone/40 text-im8-burgundy rounded-lg hover:bg-im8-sand transition-colors">
+                  Edited videos
+                </Link>
+              </div>
+            </div>
+          ))}
+          <hr className="border-im8-stone/20" />
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-im8-burgundy">Your submissions</h1>
+          <h1 className="text-3xl font-bold text-im8-burgundy">
+            {linkedDeals && linkedDeals.length > 0 ? "Submitted profiles" : "Your submissions"}
+          </h1>
           <p className="text-im8-burgundy/60 mt-1">
             {profile?.partner_type === "agency"
               ? "Creators you've submitted to IM8."

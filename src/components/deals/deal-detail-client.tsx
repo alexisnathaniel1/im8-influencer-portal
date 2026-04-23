@@ -229,7 +229,7 @@ export default function DealDetailClient({
               <Field label="Email" value={form.influencerEmail}
                 onChange={v => setForm(f => ({ ...f, influencerEmail: v }))} type="email" />
               {form.influencerEmail && (
-                <InviteButton email={form.influencerEmail} />
+                <InviteButton email={form.influencerEmail} dealId={deal.id as string} />
               )}
             </div>
             <Field label="Agency" value={form.agencyName}
@@ -949,21 +949,18 @@ function StageButton({ status, dealId, onRefresh, onMarkAgreed, needsApproval }:
   return null;
 }
 
-function InviteButton({ email }: { email: string }) {
+function InviteButton({ email, dealId }: { email: string; dealId: string }) {
   const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState("");
 
   async function sendInvite() {
     setStatus("sending");
     setErrorMsg("");
-    const res = await fetch("/api/admin/invite", {
+    const res = await fetch(`/api/deals/${dealId}/invite`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email }),
     });
     if (res.ok) {
       setStatus("sent");
-      setTimeout(() => setStatus("idle"), 3000);
     } else {
       const data = await res.json().catch(() => ({}));
       setErrorMsg(data.error || "Unknown error");
@@ -981,7 +978,7 @@ function InviteButton({ email }: { email: string }) {
             ? "border-red-300 bg-red-50 text-red-600"
             : "border-im8-stone/40 text-im8-burgundy/60 hover:text-im8-burgundy hover:border-im8-stone/70"
         }`}>
-        {status === "sending" ? "Sending..." : status === "sent" ? "Invite sent ✓" : status === "error" ? "Failed — retry" : "Send portal invite"}
+        {status === "sending" ? "Sending..." : status === "sent" ? `Invite sent to ${email} ✓` : status === "error" ? "Failed — retry" : "Send portal invite"}
       </button>
       {status === "error" && errorMsg && (
         <p className="text-xs text-red-500 mt-1">{errorMsg}</p>

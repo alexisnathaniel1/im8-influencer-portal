@@ -60,7 +60,7 @@ export default async function DealsPage({
         </div>
         <Link href="/admin/deals/new"
           className="px-4 py-2 bg-im8-red text-white text-sm rounded-lg hover:bg-im8-burgundy transition-colors">
-          + New deal
+          + New partnership
         </Link>
       </div>
 

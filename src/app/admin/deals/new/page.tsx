@@ -1,13 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-export default function NewDealPage() {
+function NewPartnershipForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const profileId = searchParams.get("profileId");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const [isGifted, setIsGifted] = useState(false);
   const [form, setForm] = useState({
     influencerName: "", influencerEmail: "", agencyName: "",
@@ -37,6 +38,7 @@ export default function NewDealPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
+    setError("");
     const res = await fetch("/api/deals/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -47,17 +49,22 @@ export default function NewDealPage() {
         discoveryProfileId: profileId,
       }),
     });
-    const { id } = await res.json();
-    router.push(`/admin/deals/${id}`);
+    const data = await res.json();
+    if (!res.ok || !data.id) {
+      setError(data.error || "Failed to create partnership. Please try again.");
+      setLoading(false);
+      return;
+    }
+    router.push(`/admin/deals/${data.id}`);
   }
 
   return (
     <div className="max-w-lg animate-fade-in">
-      <h1 className="text-2xl font-bold text-im8-burgundy mb-6">New deal</h1>
+      <h1 className="text-2xl font-bold text-im8-burgundy mb-6">New partnership</h1>
       <div className="bg-white rounded-xl border border-im8-stone/30 p-6">
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-im8-burgundy mb-1">Influencer name *</label>
+            <label className="block text-sm font-medium text-im8-burgundy mb-1">Creator / influencer name *</label>
             <input type="text" required value={form.influencerName}
               onChange={e => setForm(f => ({ ...f, influencerName: e.target.value }))}
               className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40" />
@@ -66,6 +73,7 @@ export default function NewDealPage() {
             <label className="block text-sm font-medium text-im8-burgundy mb-1">Email</label>
             <input type="email" value={form.influencerEmail}
               onChange={e => setForm(f => ({ ...f, influencerEmail: e.target.value }))}
+              placeholder="Used to send portal invite later"
               className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40" />
           </div>
           <div>
@@ -100,7 +108,7 @@ export default function NewDealPage() {
           <label className="flex items-center gap-3 cursor-pointer select-none">
             <input type="checkbox" checked={isGifted} onChange={e => setIsGifted(e.target.checked)}
               className="w-4 h-4 accent-im8-red" />
-            <span className="text-sm text-im8-burgundy font-medium">Gifted deal</span>
+            <span className="text-sm text-im8-burgundy font-medium">Gifted collaboration</span>
             {isGifted && (
               <span className="text-xs text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">
                 Skips approval — starts live
@@ -108,12 +116,24 @@ export default function NewDealPage() {
             )}
           </label>
 
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-sm">{error}</div>
+          )}
+
           <button type="submit" disabled={loading}
             className="w-full py-2.5 bg-im8-red text-white font-semibold rounded-lg hover:bg-im8-burgundy disabled:opacity-50 transition-colors">
-            {loading ? "Creating..." : "Create deal →"}
+            {loading ? "Creating..." : "Create partnership →"}
           </button>
         </form>
       </div>
     </div>
+  );
+}
+
+export default function NewPartnershipPage() {
+  return (
+    <Suspense>
+      <NewPartnershipForm />
+    </Suspense>
   );
 }

@@ -1,19 +1,26 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, Suspense } from "react";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
-export default function LoginPage() {
-  const router = useRouter();
-  const [email, setEmail] = useState("");
+function LoginForm() {
+  const searchParams = useSearchParams();
+  const dealInviteToken = searchParams.get("deal_invite");
+  const prefillEmail = searchParams.get("email") ?? "";
+
+  const [email, setEmail] = useState(prefillEmail);
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [mode, setMode] = useState<"login" | "reset">("login");
   const supabase = createClient();
+
+  useEffect(() => {
+    if (prefillEmail) setEmail(prefillEmail);
+  }, [prefillEmail]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -61,6 +68,22 @@ export default function LoginPage() {
       fullName = profile?.full_name;
     }
 
+    // If logging in via a deal invite, link the account to the deal
+    if (dealInviteToken && accessToken) {
+      try {
+        await fetch("/api/deals/accept-invite", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({ token: dealInviteToken }),
+        });
+      } catch (err) {
+        console.warn("accept-invite failed:", err);
+      }
+    }
+
     const ADMIN_ROLES = ["admin", "management", "support"];
     if (role === "pending") {
       window.location.href = "/auth/pending";
@@ -88,9 +111,19 @@ export default function LoginPage() {
           <div className="text-center">
             <h1 className="text-2xl font-bold text-im8-burgundy">IM8 Influencer Portal</h1>
             <p className="mt-2 text-sm text-im8-burgundy/60">
-              {mode === "login" ? "Sign in to your account" : "Reset your password"}
+              {mode === "login"
+                ? dealInviteToken
+                  ? "Sign in to accept your invitation"
+                  : "Sign in to your account"
+                : "Reset your password"}
             </p>
           </div>
+
+          {dealInviteToken && (
+            <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 text-sm text-green-800">
+              ✓ Sign in to link your account to your collaboration.
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
@@ -143,5 +176,13 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
   );
 }
