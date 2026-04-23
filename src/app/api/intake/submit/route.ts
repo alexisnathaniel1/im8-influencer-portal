@@ -80,6 +80,12 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = createAdminClient();
+
+    // Determine source — admin can pass "admin_manual"; partners always get "inbound_form"
+    const { data: submitterProfile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+    const isAdminUser = ["admin", "management", "support"].includes(submitterProfile?.role ?? "");
+    const requestedSource = (formData.get("source") as string) || "inbound_form";
+    const source = (isAdminUser && requestedSource === "admin_manual") ? "admin_manual" : "inbound_form";
     const inserted: Array<{ id: string; name: string; data: InfluencerEntry }> = [];
     const duplicates: string[] = [];
 
@@ -99,7 +105,7 @@ export async function POST(request: NextRequest) {
       const { data: profile, error } = await supabase
         .from("discovery_profiles")
         .insert({
-          source: "inbound_form",
+          source,
           status: "new",
           submitter_name: submitterName,
           submitter_email: submitterEmail,

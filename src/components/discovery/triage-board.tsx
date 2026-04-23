@@ -246,7 +246,12 @@ export default function DiscoveryBoard({
                       onClick={() => openRow(p)}>
                     <td className="px-4 py-3">
                       <div className="font-medium text-im8-burgundy">{p.influencer_name}</div>
-                      <div className="text-xs text-im8-burgundy/50 capitalize">{p.platform_primary}</div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-xs text-im8-burgundy/50 capitalize">{p.platform_primary}</span>
+                        {p.source === "admin_manual"
+                          ? <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-600 font-medium">Manual</span>
+                          : <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-500 font-medium">Form</span>}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[p.status] ?? ""}`}>
