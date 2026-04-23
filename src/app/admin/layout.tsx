@@ -19,7 +19,6 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     .single();
 
   if (!profile || !ADMIN_ROLES.includes(profile.role)) {
-    if (profile?.role === "approver") redirect("/approver");
     if (profile?.role === "editor") redirect("/editor");
     if (profile?.role === "influencer" || profile?.role === "agency") redirect("/partner");
     redirect("/auth/login");

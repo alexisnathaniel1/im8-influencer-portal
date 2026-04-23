@@ -21,8 +21,7 @@ export default async function PartnerLayout({ children }: { children: React.Reac
     .single();
 
   if (!profile) redirect("/auth/login");
-  if (["admin", "ops", "finance"].includes(profile.role)) redirect("/admin");
-  if (profile.role === "approver") redirect("/approver");
+  if (["admin", "management", "support"].includes(profile.role)) redirect("/admin");
   if (profile.role === "editor") redirect("/editor");
 
   // Check if this user has an active deal (influencer campaign access)

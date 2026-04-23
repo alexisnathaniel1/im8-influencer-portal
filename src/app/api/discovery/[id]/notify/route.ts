@@ -22,7 +22,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     .eq("id", user.id)
     .single();
 
-  if (!profile || !["admin", "ops", "finance"].includes(profile.role)) {
+  if (!profile || !["admin", "management", "support"].includes(profile.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

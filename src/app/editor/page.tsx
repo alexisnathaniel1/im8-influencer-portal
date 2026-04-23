@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import EditorDealCard from "./editor-deal-card";
+import EditorDeliverableCard from "./editor-deliverable-card";
 
 export default async function EditorPage() {
   const supabase = await createClient();
@@ -10,53 +10,57 @@ export default async function EditorPage() {
 
   const admin = createAdminClient();
 
-  // Get deals this editor is assigned to
-  const { data: assignments } = await admin
-    .from("deal_editors")
-    .select("deal_id")
-    .eq("editor_id", user.id);
+  // Only active (not completed) deliverables assigned to this editor
+  const { data: rawDeliverables } = await admin
+    .from("deliverables")
+    .select(`
+      id, deliverable_type, platform, title, status, due_date, is_story,
+      deal:deal_id(id, influencer_name, platform_primary, status)
+    `)
+    .eq("assigned_editor_id", user.id)
+    .not("status", "in", '("completed")')
+    .order("due_date", { ascending: true, nullsFirst: false });
 
-  const dealIds = (assignments ?? []).map(a => a.deal_id);
+  // Flatten Supabase's array-typed FK joins
+  const deliverables = (rawDeliverables ?? []).map(d => ({
+    ...d,
+    deal: Array.isArray(d.deal) ? d.deal[0] ?? null : d.deal,
+  })).filter(d => d.deal);
 
-  const deals = dealIds.length > 0
-    ? (await admin
-        .from("deals")
-        .select("id, influencer_name, platform_primary, status, deliverables")
-        .in("id", dealIds)
-        .in("status", ["contracted", "live"])).data ?? []
-    : [];
-
-  // Fetch edited videos per deal
-  const editedVideosByDeal: Record<string, number> = {};
-  if (dealIds.length > 0) {
+  // Count existing edited-video uploads per deliverable
+  const deliverableIds = deliverables.map(d => d.id);
+  const uploadCounts: Record<string, number> = {};
+  if (deliverableIds.length > 0) {
     const { data: evs } = await admin
       .from("edited_videos")
-      .select("deal_id")
-      .in("deal_id", dealIds)
+      .select("deliverable_id")
+      .in("deliverable_id", deliverableIds)
       .eq("uploaded_by", user.id);
     (evs ?? []).forEach(ev => {
-      editedVideosByDeal[ev.deal_id] = (editedVideosByDeal[ev.deal_id] ?? 0) + 1;
+      if (ev.deliverable_id) {
+        uploadCounts[ev.deliverable_id] = (uploadCounts[ev.deliverable_id] ?? 0) + 1;
+      }
     });
   }
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-im8-burgundy">My deals</h1>
-        <p className="text-im8-burgundy/60 mt-1">Upload edited videos for each collaboration you&apos;re assigned to.</p>
+        <h1 className="text-3xl font-bold text-im8-burgundy">My deliverables</h1>
+        <p className="text-im8-burgundy/60 mt-1">Upload edited videos for each piece of content you&apos;re assigned to.</p>
       </div>
 
-      {deals.length === 0 ? (
+      {deliverables.length === 0 ? (
         <div className="bg-white rounded-xl border border-im8-stone/30 p-12 text-center text-im8-burgundy/40">
-          No active deals assigned to you yet.
+          No active deliverables assigned to you yet.
         </div>
       ) : (
         <div className="space-y-4">
-          {deals.map(deal => (
-            <EditorDealCard
-              key={deal.id}
-              deal={deal}
-              uploadCount={editedVideosByDeal[deal.id] ?? 0}
+          {deliverables.map(d => (
+            <EditorDeliverableCard
+              key={d.id}
+              deliverable={d}
+              uploadCount={uploadCounts[d.id] ?? 0}
             />
           ))}
         </div>

@@ -61,11 +61,9 @@ export default function LoginPage() {
       fullName = profile?.full_name;
     }
 
-    const ADMIN_ROLES = ["owner", "admin", "ops", "finance", "management", "influencer_team", "support"];
+    const ADMIN_ROLES = ["admin", "management", "support"];
     if (role && ADMIN_ROLES.includes(role)) {
       window.location.href = "/admin";
-    } else if (role === "approver") {
-      window.location.href = "/approver";
     } else if (role === "editor") {
       window.location.href = "/editor";
     } else if (!fullName) {

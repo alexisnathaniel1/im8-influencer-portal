@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-
-const ALLOWED_ROLES = ["owner", "admin", "ops", "management", "influencer_team", "finance", "approver", "editor", "influencer", "agency"];
+import { ASSIGNABLE_ROLES } from "@/lib/permissions";
 
 export async function PATCH(
   request: NextRequest,
@@ -13,39 +12,27 @@ export async function PATCH(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-  if (!profile || !["owner", "admin"].includes(profile.role)) {
-    return NextResponse.json({ error: "Forbidden — only Owner or Admin can change roles" }, { status: 403 });
+  if (profile?.role !== "admin") {
+    return NextResponse.json({ error: "Forbidden — only Admin can change roles" }, { status: 403 });
   }
 
   const { userId } = await params;
   const { role } = await request.json();
 
-  if (!role || !ALLOWED_ROLES.includes(role)) {
+  if (!role || !ASSIGNABLE_ROLES.includes(role)) {
     return NextResponse.json({ error: "Invalid role" }, { status: 400 });
   }
 
-  // Prevent demoting the last owner
-  if (profile.role === "owner" || role !== "owner") {
-    const admin = createAdminClient();
-
-    if (role !== "owner") {
-      const { count } = await admin
-        .from("profiles")
-        .select("*", { count: "exact", head: true })
-        .eq("role", "owner");
-      const { data: target } = await admin.from("profiles").select("role").eq("id", userId).single();
-      if (target?.role === "owner" && (count ?? 0) <= 1) {
-        return NextResponse.json({ error: "Cannot remove the last owner" }, { status: 400 });
-      }
-    }
-
-    const { error } = await admin.from("profiles").update({ role }).eq("id", userId);
-    if (error) {
-      console.error("[admin/roles] Failed to update role:", error.message);
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-    return NextResponse.json({ ok: true });
+  // Don't let an admin demote themselves (they'd lock themselves out of Settings)
+  if (userId === user.id && role !== "admin") {
+    return NextResponse.json({ error: "You cannot change your own role away from Admin" }, { status: 400 });
   }
 
-  return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const admin = createAdminClient();
+  const { error } = await admin.from("profiles").update({ role }).eq("id", userId);
+  if (error) {
+    console.error("[admin/roles] Failed to update role:", error.message);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+  return NextResponse.json({ ok: true });
 }

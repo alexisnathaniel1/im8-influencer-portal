@@ -23,7 +23,7 @@ export default function TeamSettings({ members, currentRole }: { members: Member
   const [team, setTeam] = useState<Member[]>(members);
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const canEdit = currentRole === "owner" || currentRole === "admin";
+  const canEdit = currentRole === "admin";
 
   // User lookup state
   const [lookupEmail, setLookupEmail] = useState("");
@@ -221,7 +221,7 @@ export default function TeamSettings({ members, currentRole }: { members: Member
           </table>
         </div>
         {!canEdit && (
-          <p className="text-xs text-im8-burgundy/40 mt-4">Only Owner and Admin roles can change team member roles.</p>
+          <p className="text-xs text-im8-burgundy/40 mt-4">Only Admins can change team member roles.</p>
         )}
       </div>
 
@@ -230,15 +230,11 @@ export default function TeamSettings({ members, currentRole }: { members: Member
         <h2 className="text-base font-semibold text-im8-burgundy mb-3">Role permissions</h2>
         <div className="grid grid-cols-1 gap-3 text-sm">
           {[
-            { role: "Owner", access: "Full access to everything including role management" },
-            { role: "Admin", access: "Full access to all sections" },
-            { role: "Ops", access: "Dashboard, Discovery, Approvals, Partner Tracker, Deliverables, Content Review, Settings" },
+            { role: "Admin", access: "Full access to all sections and role management" },
             { role: "Management", access: "Dashboard, Approvals, Partner Tracker — can see rates" },
-            { role: "Influencer Team", access: "Dashboard, Discovery, Partner Tracker, Deliverables, Content Review — can see rates" },
-            { role: "Finance", access: "Dashboard, Partner Tracker — can see rates" },
             { role: "Support", access: "Dashboard, Discovery, Approvals, Partner Tracker, Deliverables, Content Review — rates hidden" },
-            { role: "Approver", access: "Approval portal only (separate login at /approver)" },
-            { role: "Editor", access: "Editor portal only (separate login at /editor)" },
+            { role: "Editor", access: "Editor portal only — sees assigned deliverables to upload edited videos" },
+            { role: "Influencer / Agency", access: "Partner portal — submit, track own deals and deliverables" },
           ].map(({ role, access }) => (
             <div key={role} className="flex gap-3">
               <span className="font-medium text-im8-burgundy w-36 shrink-0">{role}</span>

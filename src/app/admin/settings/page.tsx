@@ -17,7 +17,7 @@ export default async function AdminSettingsPage() {
   const { data: team } = await admin
     .from("profiles")
     .select("id, full_name, email, role, created_at")
-    .in("role", ["owner", "admin", "ops", "management", "influencer_team", "finance", "approver", "editor"])
+    .in("role", ["admin", "management", "support", "editor"])
     .order("created_at");
 
   return (

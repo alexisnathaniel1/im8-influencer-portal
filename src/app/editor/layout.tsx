@@ -20,8 +20,7 @@ export default async function EditorLayout({ children }: { children: React.React
     .single();
 
   if (!profile) redirect("/auth/login");
-  if (["admin", "ops", "finance"].includes(profile.role)) redirect("/admin");
-  if (profile.role === "approver") redirect("/approver");
+  if (["admin", "management", "support"].includes(profile.role)) redirect("/admin");
   if (!["editor", "influencer"].includes(profile.role)) redirect("/partner");
 
   return (

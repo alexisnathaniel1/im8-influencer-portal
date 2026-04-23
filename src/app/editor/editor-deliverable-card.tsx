@@ -3,15 +3,29 @@
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 
-type Deal = {
+type Deliverable = {
   id: string;
-  influencer_name: string;
-  platform_primary: string;
+  deliverable_type: string;
+  platform: string;
+  title: string | null;
   status: string;
-  deliverables: Array<{ code: string; count: number }> | null;
+  due_date: string | null;
+  is_story: boolean;
+  deal: {
+    id: string;
+    influencer_name: string;
+    platform_primary: string;
+    status: string;
+  } | null;
 };
 
-export default function EditorDealCard({ deal, uploadCount }: { deal: Deal; uploadCount: number }) {
+export default function EditorDeliverableCard({
+  deliverable,
+  uploadCount,
+}: {
+  deliverable: Deliverable;
+  uploadCount: number;
+}) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<File[]>([]);
@@ -19,6 +33,9 @@ export default function EditorDealCard({ deal, uploadCount }: { deal: Deal; uplo
   const [progress, setProgress] = useState<number[]>([]);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
+
+  const deal = deliverable.deal;
+  if (!deal) return null;
 
   function onFilesSelected(selected: FileList | null) {
     if (!selected) return;
@@ -28,7 +45,7 @@ export default function EditorDealCard({ deal, uploadCount }: { deal: Deal; uplo
   }
 
   async function uploadAll() {
-    if (!files.length) return;
+    if (!files.length || !deal) return;
     setUploading(true);
     setError("");
     setProgress(new Array(files.length).fill(0));
@@ -38,14 +55,14 @@ export default function EditorDealCard({ deal, uploadCount }: { deal: Deal; uplo
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       try {
-        // Canonical name: influencer_dealShort_seq.ext
+        // Canonical name: influencer_dealShort_deliverableType_seq.ext
         const ext = file.name.split(".").pop() ?? "mp4";
         const safeName = deal.influencer_name.replace(/\s+/g, "_").toLowerCase();
         const dealShort = deal.id.slice(0, 6);
         const seq = uploadCount + i + 1;
-        const canonicalFileName = `${safeName}_${dealShort}_${String(seq).padStart(3, "0")}.${ext}`;
+        const canonicalFileName = `${safeName}_${dealShort}_${deliverable.deliverable_type}_${String(seq).padStart(3, "0")}.${ext}`;
 
-        // Get upload session
+        // Get upload session — folder resolution is based on the deal
         const sessionRes = await fetch("/api/drive/upload-session", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -77,12 +94,13 @@ export default function EditorDealCard({ deal, uploadCount }: { deal: Deal; uplo
         const infoRes = await fetch(`/api/drive/file-info?fileName=${encodeURIComponent(fileName)}&dealId=${deal.id}`);
         const { fileId, fileUrl } = infoRes.ok ? await infoRes.json() : { fileId: fileName, fileUrl: "" };
 
-        // Record in DB
+        // Record the upload — tied to this specific deliverable
         await fetch("/api/edited-videos", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             dealId: deal.id,
+            deliverableId: deliverable.id,
             driveFileId: fileId || fileName,
             driveUrl: fileUrl || "",
             originalFileName: file.name,
@@ -110,22 +128,26 @@ export default function EditorDealCard({ deal, uploadCount }: { deal: Deal; uplo
       <div className="flex items-start justify-between">
         <div>
           <h2 className="text-lg font-semibold text-im8-burgundy">{deal.influencer_name}</h2>
-          <p className="text-xs text-im8-burgundy/50 capitalize mt-0.5">{deal.platform_primary} · {deal.status}</p>
+          <div className="flex items-center gap-2 mt-1">
+            <span className="font-mono text-xs bg-im8-sand px-2 py-0.5 rounded text-im8-burgundy">
+              {deliverable.deliverable_type}
+            </span>
+            {deliverable.is_story && <span className="text-xs text-im8-burgundy/40">story</span>}
+            <span className="text-xs text-im8-burgundy/50 capitalize">{deliverable.platform}</span>
+            {deliverable.due_date && (
+              <span className="text-xs text-im8-burgundy/50">
+                · due {new Date(deliverable.due_date).toLocaleDateString("en-AU", { day: "numeric", month: "short" })}
+              </span>
+            )}
+          </div>
+          {deliverable.title && (
+            <p className="text-sm text-im8-burgundy/60 mt-1">{deliverable.title}</p>
+          )}
         </div>
-        <span className="text-xs bg-im8-sand text-im8-burgundy px-3 py-1 rounded-full">
+        <span className="text-xs bg-im8-sand text-im8-burgundy px-3 py-1 rounded-full shrink-0">
           {uploadCount} video{uploadCount !== 1 ? "s" : ""} uploaded
         </span>
       </div>
-
-      {deal.deliverables && deal.deliverables.length > 0 && (
-        <div className="flex gap-2 flex-wrap">
-          {deal.deliverables.map((d, i) => (
-            <span key={i} className="text-xs bg-im8-sand text-im8-burgundy px-2 py-0.5 rounded-full">
-              {d.code} ×{d.count}
-            </span>
-          ))}
-        </div>
-      )}
 
       {/* Upload zone */}
       <div

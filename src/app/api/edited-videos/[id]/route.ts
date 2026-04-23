@@ -12,7 +12,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const { data: profile } = await (createAdminClient()).from("profiles").select("role").eq("id", user.id).single();
 
   const allowed: string[] = [];
-  if (["admin", "ops"].includes(profile?.role ?? "")) allowed.push("admin_status");
+  if (["admin", "management", "support"].includes(profile?.role ?? "")) allowed.push("admin_status");
   // Influencer can update their own status
   allowed.push("influencer_status");
 

@@ -19,7 +19,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const allowed = [
     "status", "title", "due_date", "live_date", "post_url",
     "views", "likes", "comments_count", "is_story",
-    "usage_rights_months", "fee_cents", "assigned_pic", "brief_id",
+    "usage_rights_months", "fee_cents", "assigned_pic", "assigned_editor_id", "brief_id",
   ];
   const updates = Object.fromEntries(Object.entries(body).filter(([k]) => allowed.includes(k)));
 

@@ -27,7 +27,8 @@ export default async function DeliverablesPage({
       views_updated_at, created_at,
       deal:deal_id(id, influencer_name, platform_primary),
       brief:brief_id(id, title),
-      pic:assigned_pic(id, full_name)
+      pic:assigned_pic(id, full_name),
+      editor:assigned_editor_id(id, full_name)
     `)
     .order("due_date", { ascending: true, nullsFirst: false });
 
@@ -51,12 +52,13 @@ export default async function DeliverablesPage({
     deal: Array.isArray(d.deal) ? d.deal[0] ?? null : d.deal,
     brief: Array.isArray(d.brief) ? d.brief[0] ?? null : d.brief,
     pic: Array.isArray(d.pic) ? d.pic[0] ?? null : d.pic,
+    editor: Array.isArray(d.editor) ? d.editor[0] ?? null : d.editor,
   }));
 
-  const { data: pics } = await admin
-    .from("profiles")
-    .select("id, full_name")
-    .in("role", ["admin", "ops"]);
+  const [{ data: pics }, { data: editors }] = await Promise.all([
+    admin.from("profiles").select("id, full_name").eq("role", "admin"),
+    admin.from("profiles").select("id, full_name").eq("role", "editor"),
+  ]);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -67,6 +69,7 @@ export default async function DeliverablesPage({
       <DeliverablesTable
         deliverables={deliverables ?? []}
         pics={pics ?? []}
+        editors={editors ?? []}
         currentFilters={filters}
         canViewRates={showRates}
       />

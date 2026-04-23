@@ -22,6 +22,7 @@ type Deliverable = {
   deal: { id: string; influencer_name: string; platform_primary: string } | null;
   brief: { id: string; title: string } | null;
   pic: { id: string; full_name: string } | null;
+  editor: { id: string; full_name: string } | null;
 };
 
 type Profile = { id: string; full_name: string };
@@ -41,11 +42,13 @@ const STATUS_COLORS: Record<string, string> = {
 export default function DeliverablesTable({
   deliverables,
   pics,
+  editors,
   currentFilters,
   canViewRates = true,
 }: {
   deliverables: Deliverable[];
   pics: Profile[];
+  editors: Profile[];
   currentFilters: { status?: string; platform?: string; q?: string; month?: string };
   canViewRates?: boolean;
 }) {
@@ -162,7 +165,7 @@ export default function DeliverablesTable({
       {/* Side panel */}
       {selected && (
         <div className="w-96 shrink-0">
-          <DeliverablePanel deliverable={selected} onClose={() => setSelectedId(null)} />
+          <DeliverablePanel deliverable={selected} editors={editors} onClose={() => setSelectedId(null)} />
         </div>
       )}
     </div>
@@ -311,7 +314,37 @@ function PicSelect({ deliverableId, current, pics }: { deliverableId: string; cu
   );
 }
 
-function DeliverablePanel({ deliverable, onClose }: { deliverable: Deliverable; onClose: () => void }) {
+function EditorSelect({ deliverableId, current, editors }: { deliverableId: string; current: string; editors: Profile[] }) {
+  const router = useRouter();
+  const [value, setValue] = useState(current);
+  const [saving, setSaving] = useState(false);
+
+  async function onChange(next: string) {
+    setSaving(true);
+    setValue(next);
+    await fetch(`/api/deliverables/${deliverableId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ assigned_editor_id: next || null }),
+    });
+    setSaving(false);
+    router.refresh();
+  }
+
+  return (
+    <select
+      value={value}
+      disabled={saving}
+      onChange={e => onChange(e.target.value)}
+      className="w-full text-sm border border-im8-stone/30 rounded-lg px-3 py-2 text-im8-burgundy bg-white focus:outline-none focus:ring-1 focus:ring-im8-red disabled:opacity-50"
+    >
+      <option value="">Unassigned</option>
+      {editors.map(e => <option key={e.id} value={e.id}>{e.full_name}</option>)}
+    </select>
+  );
+}
+
+function DeliverablePanel({ deliverable, editors, onClose }: { deliverable: Deliverable; editors: Profile[]; onClose: () => void }) {
   const [comments, setComments] = useState<{ id: string; author_display_name: string; body: string; created_at: string }[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [newComment, setNewComment] = useState("");
@@ -394,6 +427,23 @@ function DeliverablePanel({ deliverable, onClose }: { deliverable: Deliverable; 
             className="text-im8-red hover:underline text-xs">{deliverable.brief.title}</a>
         </div>
       )}
+
+      {/* Assigned editor */}
+      <div>
+        <label className="block text-xs font-semibold text-im8-burgundy/50 uppercase tracking-wide mb-1">
+          Assigned editor
+        </label>
+        <EditorSelect
+          deliverableId={deliverable.id}
+          current={deliverable.editor?.id ?? ""}
+          editors={editors}
+        />
+        {editors.length === 0 && (
+          <p className="text-xs text-im8-burgundy/40 mt-1">
+            No editors on the team yet — add one in Settings.
+          </p>
+        )}
+      </div>
 
       {/* Comments */}
       <div className="space-y-3 border-t border-im8-stone/20 pt-3">

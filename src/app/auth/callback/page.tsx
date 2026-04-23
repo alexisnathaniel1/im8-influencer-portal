@@ -78,7 +78,7 @@ async function redirectAfterAuth(
   const { data: profile } = await supabase.from("profiles").select("role, full_name").eq("id", user.id).single();
 
   if (!profile?.full_name) { router.push("/auth/onboarding"); return; }
-  if (profile.role === "admin" || profile.role === "ops" || profile.role === "finance") { router.push("/admin"); return; }
-  if (profile.role === "approver") { router.push("/approver"); return; }
-  router.push("/influencer");
+  if (["admin", "management", "support"].includes(profile.role)) { router.push("/admin"); return; }
+  if (profile.role === "editor") { router.push("/editor"); return; }
+  router.push("/partner");
 }

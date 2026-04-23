@@ -26,10 +26,11 @@ export default async function ApprovalsPage() {
     .order("created_at", { ascending: false })
     .limit(20);
 
+  // Pick approvers from staff who should sign off on packets — Admin + Management
   const { data: approvers } = await admin
     .from("profiles")
     .select("id, full_name, email")
-    .eq("role", "approver");
+    .in("role", ["admin", "management"]);
 
   return (
     <div className="space-y-6 animate-fade-in">
