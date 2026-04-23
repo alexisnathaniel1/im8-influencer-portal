@@ -56,7 +56,7 @@ export default function DealsFilterBar({ current }: {
 
         <select value={current.type ?? ""} onChange={e => update({ type: e.target.value })}
           className="px-3 py-2 rounded-lg border border-im8-stone/40 text-sm text-im8-burgundy focus:outline-none bg-white">
-          <option value="">Paid & gifted</option>
+          <option value="">All</option>
           <option value="paid">Paid only</option>
           <option value="gifted">Gifted only</option>
         </select>

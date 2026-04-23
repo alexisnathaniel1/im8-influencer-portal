@@ -8,6 +8,7 @@ export default function NewDealPage() {
   const searchParams = useSearchParams();
   const profileId = searchParams.get("profileId");
   const [loading, setLoading] = useState(false);
+  const [isGifted, setIsGifted] = useState(false);
   const [form, setForm] = useState({
     influencerName: "", influencerEmail: "", agencyName: "",
     platformPrimary: "instagram", status: "contacted",
@@ -39,7 +40,12 @@ export default function NewDealPage() {
     const res = await fetch("/api/deals/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, discoveryProfileId: profileId }),
+      body: JSON.stringify({
+        ...form,
+        isGifted,
+        status: isGifted ? "live" : form.status,
+        discoveryProfileId: profileId,
+      }),
     });
     const { id } = await res.json();
     router.push(`/admin/deals/${id}`);
@@ -91,6 +97,17 @@ export default function NewDealPage() {
               </div>
             ))}
           </div>
+          <label className="flex items-center gap-3 cursor-pointer select-none">
+            <input type="checkbox" checked={isGifted} onChange={e => setIsGifted(e.target.checked)}
+              className="w-4 h-4 accent-im8-red" />
+            <span className="text-sm text-im8-burgundy font-medium">Gifted deal</span>
+            {isGifted && (
+              <span className="text-xs text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">
+                Skips approval — starts live
+              </span>
+            )}
+          </label>
+
           <button type="submit" disabled={loading}
             className="w-full py-2.5 bg-im8-red text-white font-semibold rounded-lg hover:bg-im8-burgundy disabled:opacity-50 transition-colors">
             {loading ? "Creating..." : "Create deal →"}

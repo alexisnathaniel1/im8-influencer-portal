@@ -51,8 +51,8 @@ export default async function DealsPage({
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-im8-burgundy">Deals</h1>
-          <p className="text-im8-burgundy/60 mt-1">{deals?.length ?? 0} deals</p>
+          <h1 className="text-3xl font-bold text-im8-burgundy">Partner Tracker</h1>
+          <p className="text-im8-burgundy/60 mt-1">{deals?.length ?? 0} partners</p>
         </div>
         <Link href="/admin/deals/new"
           className="px-4 py-2 bg-im8-red text-white text-sm rounded-lg hover:bg-im8-burgundy transition-colors">

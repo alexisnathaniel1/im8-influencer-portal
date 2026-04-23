@@ -18,7 +18,8 @@ export async function POST(request: NextRequest) {
     instagram_handle: body.igHandle?.trim().replace(/^@/, "") || null,
     tiktok_handle: body.tiktokHandle?.trim().replace(/^@/, "") || null,
     youtube_handle: body.youtubeHandle?.trim().replace(/^@/, "") || null,
-    status: "contacted",
+    is_gifted: body.isGifted ?? false,
+    status: body.status ?? (body.isGifted ? "live" : "contacted"),
     discovery_profile_id: body.discoveryProfileId || null,
     assigned_to: user.id,
   }).select("id").single();
