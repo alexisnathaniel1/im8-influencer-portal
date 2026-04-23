@@ -17,10 +17,13 @@ export function negotiationCounterTemplate(params: {
   deliverables: Array<{ code: string; count: number }>;
   notes: string | null;
   portalUrl: string | null;
+  loginUrl: string | null;
+  signupUrl: string | null;
 }) {
-  const { influencerName, submitterName, isAgency, rateUsd, totalMonths, deliverables, notes, portalUrl } = params;
+  const { influencerName, submitterName, isAgency, rateUsd, totalMonths, deliverables, notes, portalUrl, loginUrl, signupUrl } = params;
   const totalUsd = rateUsd ? rateUsd * totalMonths : null;
   const recipientLabel = isAgency ? "agency" : "creator";
+  void recipientLabel;
 
   const deliverablesText = deliverables
     .map(d => `  • ${d.count} × ${DELIVERABLE_LABELS[d.code] ?? d.code}`)
@@ -55,9 +58,10 @@ export function negotiationCounterTemplate(params: {
     notes ? `` : null,
     `── NEXT STEPS ──`,
     ``,
-    `Please log in to your IM8 dashboard to accept or decline this proposal:`,
-    portalUrl ? portalUrl : `https://portal.im8health.com/partner`,
+    `Log in to your IM8 dashboard to accept or decline this proposal:`,
+    loginUrl ?? portalUrl ?? `https://portal.im8health.com/auth/login`,
     ``,
+    signupUrl ? `Don't have an account yet? Sign up (we'll automatically link your submission):\n${signupUrl}\n` : null,
     `Do not reply to this email — responses sent here will not be seen. All communication and responses must go through your dashboard.`,
     ``,
     `— IM8 Influencer Team`,
@@ -103,15 +107,21 @@ export function negotiationCounterTemplate(params: {
         </div>
         ` : ""}
 
-        <div style="background:#f0f7f0;border:1px solid #c3e0c3;border-radius:8px;padding:16px;margin:0 0 24px">
+        <div style="background:#f0f7f0;border:1px solid #c3e0c3;border-radius:8px;padding:16px;margin:0 0 16px">
           <p style="margin:0 0 8px;font-size:13px;font-weight:700;color:#2d6a2d">Next steps</p>
-          <p style="margin:0 0 12px;font-size:14px;color:#3a1e1e">Please log in to your IM8 dashboard to <strong>accept or decline</strong> this proposal.</p>
-          ${portalUrl ? `<a href="${portalUrl}" style="display:inline-block;background:#6b1a1a;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Respond on your dashboard →</a>` : ""}
+          <p style="margin:0 0 12px;font-size:14px;color:#3a1e1e">Log in to your IM8 dashboard to <strong>accept or decline</strong> this proposal.</p>
+          ${loginUrl || portalUrl ? `<a href="${loginUrl ?? portalUrl}" style="display:inline-block;background:#6b1a1a;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Log in to respond →</a>` : ""}
         </div>
+
+        ${signupUrl ? `
+        <div style="background:#faf7f4;border:1px solid #e8e0d8;border-radius:8px;padding:12px 16px;margin:0 0 24px;font-size:13px;color:#5a3a3a">
+          Don't have an account yet? <a href="${signupUrl}" style="color:#c13a3a;font-weight:600;text-decoration:none">Sign up here</a> — we'll automatically link your submission to your dashboard, no re-filling required.
+        </div>
+        ` : ""}
 
         <p style="font-size:12px;color:#a08080;border-top:1px solid #e8e0d8;padding-top:16px;margin:0">
           Please do not reply to this email — responses sent here will not be seen by our team.<br>
-          All communication and responses must go through your <a href="${portalUrl ?? "#"}" style="color:#c13a3a">IM8 dashboard</a>.
+          All communication and responses must go through your <a href="${loginUrl ?? portalUrl ?? "#"}" style="color:#c13a3a">IM8 dashboard</a>.
         </p>
       </div>
     </div>

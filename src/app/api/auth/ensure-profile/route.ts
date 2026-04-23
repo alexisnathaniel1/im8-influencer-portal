@@ -59,6 +59,15 @@ export async function POST(request: NextRequest) {
       agency_contact_pic: agencyContactPic,
     });
     if (insertError) return NextResponse.json({ error: insertError.message }, { status: 500 });
+
+    // Link any existing discovery submissions that were filed against this email.
+    // Covers the case where an admin manually added the creator to Discovery
+    // before they had a portal account — on signup, their submissions auto-appear
+    // in /partner and they get full dashboard access without re-filling intake.
+    if (!isStaffDomain && userEmail) {
+      await linkOrphanDiscoveryProfilesToUser(admin, userEmail, userId);
+    }
+
     return NextResponse.json({ role, full_name: fullName, partner_type: partnerType });
   }
 
@@ -77,9 +86,48 @@ export async function POST(request: NextRequest) {
     await admin.from("profiles").update(patch).eq("id", userId);
   }
 
+  // Also link any orphan discovery submissions on login for existing accounts
+  // (catches the case where a profile exists but was created before Discovery entries).
+  if (!isStaffDomain && userEmail) {
+    await linkOrphanDiscoveryProfilesToUser(admin, userEmail, userId);
+  }
+
   return NextResponse.json({
     role: patch.role ?? existing.role,
     full_name: patch.full_name ?? existing.full_name,
     partner_type: patch.partner_type ?? existing.partner_type,
   });
+}
+
+// Link any discovery_profiles rows submitted against this email to the
+// signed-in user, so their manually-added submissions appear on /partner.
+// Only claims rows whose submitted_by_profile_id isn't already a non-staff
+// owner (admin-authored rows are fine to reassign; another creator's rows are not).
+async function linkOrphanDiscoveryProfilesToUser(
+  admin: ReturnType<typeof createAdminClient>,
+  email: string,
+  userId: string,
+) {
+  try {
+    const { data: rows } = await admin
+      .from("discovery_profiles")
+      .select("id, submitted_by_profile_id")
+      .ilike("submitter_email", email);
+
+    if (!rows || rows.length === 0) return;
+
+    const orphanIds = rows
+      .filter(r => r.submitted_by_profile_id !== userId)
+      .map(r => r.id);
+
+    if (orphanIds.length > 0) {
+      await admin
+        .from("discovery_profiles")
+        .update({ submitted_by_profile_id: userId })
+        .in("id", orphanIds);
+    }
+  } catch (err) {
+    console.error("[ensure-profile] Failed to link discovery profiles:", err);
+    // Non-fatal — signup still succeeds
+  }
 }

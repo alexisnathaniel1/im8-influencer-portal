@@ -13,9 +13,14 @@ const NICHES = [
 const PLATFORMS = ["instagram", "tiktok", "youtube", "other"] as const;
 const POSITIONING_LIMIT = 100;
 
-const STANDARD_DELIVERABLES_LABEL = "3 IG Reels · 3 IG Stories · Raw footage · Whitelisting · Paid ad usage rights · Link in bio · 3 UGC Videos for ads — across 3 months";
+const DELIVERABLE_LABELS: Record<string, string> = {
+  IGR: "IG Reels", IGS: "IG Stories", UGC: "UGC Videos",
+  TIKTOK: "TikTok Videos", YT: "YouTube Videos",
+};
+const STANDARD_USAGE_RIGHTS = ["Whitelisting", "Paid ad usage rights", "Link in bio"];
 
 type Platform = typeof PLATFORMS[number];
+type Deliverable = { code: string; count: number };
 
 interface InfluencerEntry {
   key: string;
@@ -26,11 +31,11 @@ interface InfluencerEntry {
   youtubeHandle: string;
   followerCount: string;
   proposedRate: string;
+  totalMonths: string;
   positioning: string;
   niche: string;
   othersNiche: string;
-  useStandardDeliverables: boolean;
-  customDeliverables: string;
+  deliverables: Deliverable[];
 }
 
 function blankInfluencer(): InfluencerEntry {
@@ -43,11 +48,15 @@ function blankInfluencer(): InfluencerEntry {
     youtubeHandle: "",
     followerCount: "",
     proposedRate: "",
+    totalMonths: "3",
     positioning: "",
     niche: "",
     othersNiche: "",
-    useStandardDeliverables: true,
-    customDeliverables: "",
+    deliverables: [
+      { code: "IGR", count: 3 },
+      { code: "IGS", count: 3 },
+      { code: "UGC", count: 3 },
+    ],
   };
 }
 
@@ -108,8 +117,13 @@ export default function IntakeForm({
         setError(`Positioning must be under ${POSITIONING_LIMIT} characters.`);
         return;
       }
-      if (!inf.useStandardDeliverables && !inf.customDeliverables.trim()) {
-        setError("Please describe the proposed deliverables.");
+      if (!inf.deliverables.length) {
+        setError("Add at least one deliverable for each creator.");
+        return;
+      }
+      const months = parseInt(inf.totalMonths);
+      if (!Number.isFinite(months) || months < 1 || months > 24) {
+        setError("Duration must be between 1 and 24 months.");
         return;
       }
     }
@@ -119,14 +133,8 @@ export default function IntakeForm({
     const influencersPayload = influencers.map(inf => ({
       ...inf,
       niche: [inf.niche],
-      proposedDeliverables: inf.useStandardDeliverables
-        ? [
-            { code: "IGR", count: 3 },
-            { code: "IGS", count: 3 },
-            { code: "UGC", count: 3 },
-          ]
-        : [],
-      customDeliverables: inf.useStandardDeliverables ? null : inf.customDeliverables,
+      proposedDeliverables: inf.deliverables,
+      totalMonths: parseInt(inf.totalMonths) || 3,
     }));
 
     const body = new FormData();
@@ -428,53 +436,87 @@ export default function IntakeForm({
                     />
                   </div>
 
-                  {/* Deliverables */}
+                  {/* Deliverables — structured rows */}
                   <div>
-                    <label className="block text-sm font-medium text-im8-burgundy mb-2">Deliverables</label>
-                    {inf.useStandardDeliverables ? (
-                      <div className="bg-im8-sand/60 border border-im8-stone/30 rounded-xl p-4 space-y-3">
-                        <p className="text-xs font-semibold text-im8-burgundy/60 uppercase tracking-wide">Standard deliverables</p>
-                        <p className="text-sm text-im8-burgundy leading-relaxed">{STANDARD_DELIVERABLES_LABEL}</p>
-                        <button type="button"
-                          onClick={() => updateInfluencer(inf.key, { useStandardDeliverables: false })}
-                          className="text-xs text-im8-red hover:underline">
-                          Propose different deliverables instead →
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <textarea
-                          value={inf.customDeliverables}
-                          onChange={e => updateInfluencer(inf.key, { customDeliverables: e.target.value })}
-                          placeholder="Describe the proposed deliverables (e.g. 2 IG Reels, 1 TikTok video, whitelisting...)"
-                          rows={3}
-                          className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40 resize-none"
-                        />
-                        <button type="button"
-                          onClick={() => updateInfluencer(inf.key, { useStandardDeliverables: true, customDeliverables: "" })}
-                          className="text-xs text-im8-burgundy/50 hover:text-im8-burgundy hover:underline">
-                          ← Use standard deliverables instead
-                        </button>
-                      </div>
-                    )}
+                    <label className="block text-sm font-medium text-im8-burgundy mb-2">Proposed deliverables *</label>
+                    <div className="space-y-2">
+                      {inf.deliverables.map((d, idx) => (
+                        <div key={idx} className="flex items-center gap-2">
+                          <select
+                            value={d.code}
+                            onChange={e => updateInfluencer(inf.key, {
+                              deliverables: inf.deliverables.map((x, i) => i === idx ? { ...x, code: e.target.value } : x)
+                            })}
+                            className="flex-1 px-2 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none bg-white"
+                          >
+                            {["IGR","IGS","UGC","TIKTOK","YT"].map(c => (
+                              <option key={c} value={c}>{DELIVERABLE_LABELS[c] ?? c}</option>
+                            ))}
+                          </select>
+                          <input
+                            type="number" min="1" max="20" value={d.count}
+                            onChange={e => updateInfluencer(inf.key, {
+                              deliverables: inf.deliverables.map((x, i) => i === idx ? { ...x, count: parseInt(e.target.value) || 1 } : x)
+                            })}
+                            className="w-16 px-2 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy text-center focus:outline-none"
+                          />
+                          {inf.deliverables.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => updateInfluencer(inf.key, {
+                                deliverables: inf.deliverables.filter((_, i) => i !== idx)
+                              })}
+                              className="text-im8-burgundy/40 hover:text-red-500 text-lg leading-none px-1"
+                              aria-label="Remove deliverable"
+                            >×</button>
+                          )}
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => updateInfluencer(inf.key, {
+                          deliverables: [...inf.deliverables, { code: "IGR", count: 1 }]
+                        })}
+                        className="text-xs text-im8-red hover:text-im8-burgundy font-medium"
+                      >+ Add deliverable</button>
+                    </div>
+                    <div className="mt-3 bg-im8-sand/60 border border-im8-stone/30 rounded-lg px-3 py-2 text-xs text-im8-burgundy/70">
+                      <span className="font-semibold text-im8-burgundy/60">Usage rights included as standard:</span>{" "}
+                      {STANDARD_USAGE_RIGHTS.join(" · ")}
+                    </div>
                   </div>
 
-                  {/* Rates */}
-                  <div className="grid grid-cols-2 gap-4">
+                  {/* Rate + Duration + Total */}
+                  <div className="grid grid-cols-3 gap-3">
                     <div>
-                      <label className="block text-sm font-medium text-im8-burgundy mb-1">Proposed monthly rate (USD)</label>
+                      <label className="block text-sm font-medium text-im8-burgundy mb-1">Monthly rate (USD) *</label>
                       <input
-                        type="number" value={inf.proposedRate} placeholder="2500" min={0}
+                        type="number" value={inf.proposedRate} placeholder="2500" min={0} required
                         onChange={e => updateInfluencer(inf.key, { proposedRate: e.target.value })}
                         className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-im8-burgundy mb-1">Total rate — 3 months (USD)</label>
+                      <label className="block text-sm font-medium text-im8-burgundy mb-1">Duration *</label>
+                      <div className="relative">
+                        <input
+                          type="number" min={1} max={24} value={inf.totalMonths} required
+                          onChange={e => updateInfluencer(inf.key, { totalMonths: e.target.value })}
+                          className="w-full pl-3 pr-14 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-im8-burgundy/50 pointer-events-none">months</span>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-im8-burgundy mb-1">Total (auto)</label>
                       <input
                         type="text" readOnly
-                        value={inf.proposedRate ? `$${(parseFloat(inf.proposedRate) * 3).toLocaleString()}` : ""}
-                        placeholder="Auto-calculated"
+                        value={
+                          inf.proposedRate && inf.totalMonths
+                            ? `$${(parseFloat(inf.proposedRate) * (parseInt(inf.totalMonths) || 1)).toLocaleString()}`
+                            : ""
+                        }
+                        placeholder="—"
                         className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy/60 bg-im8-sand/40 cursor-not-allowed"
                       />
                     </div>

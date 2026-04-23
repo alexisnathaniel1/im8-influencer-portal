@@ -62,9 +62,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     total_months: total_months,
   }).eq("id", id);
 
-  // Send the email
+  // Send the email.
+  // Three URLs passed to the template:
+  //   portalUrl — deep link to /partner (used once logged in)
+  //   loginUrl  — /auth/login pre-filled with email (primary CTA)
+  //   signupUrl — /auth/signup pre-filled with email (shown for creators
+  //               who were manually added and don't have an account yet)
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "";
+  const emailParam = encodeURIComponent(to);
   const portalUrl = siteUrl ? `${siteUrl}/partner` : null;
+  const loginUrl = siteUrl ? `${siteUrl}/auth/login?email=${emailParam}` : null;
+  const signupUrl = siteUrl ? `${siteUrl}/auth/signup?email=${emailParam}` : null;
 
   const { subject, text, html } = negotiationCounterTemplate({
     influencerName: profile.influencer_name,
@@ -75,6 +83,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     deliverables,
     notes: notes || null,
     portalUrl,
+    loginUrl,
+    signupUrl,
   });
 
   try {

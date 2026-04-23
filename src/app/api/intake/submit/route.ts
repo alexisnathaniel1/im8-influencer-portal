@@ -18,6 +18,7 @@ interface InfluencerEntry {
   youtubeHandle: string;
   followerCount: string;
   proposedRate: string;
+  totalMonths?: number;
   positioning: string;
   niche: string[];
   othersNiche: string;
@@ -123,6 +124,7 @@ export async function POST(request: NextRequest) {
           others_niche: inf.niche.includes("Others") ? (inf.othersNiche || null) : null,
           positioning: inf.positioning?.trim() || null,
           proposed_deliverables: inf.proposedDeliverables ?? [],
+          total_months: inf.totalMonths && inf.totalMonths > 0 ? inf.totalMonths : 3,
         })
         .select("id")
         .single();

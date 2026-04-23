@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Suspense } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -152,12 +153,29 @@ function LoginForm() {
             </button>
           </form>
 
-          <div className="text-center space-y-2">
+          <div className="text-center space-y-3">
             {mode === "login" && (
-              <button onClick={() => { setMode("reset"); setError(""); setMessage(""); }}
-                className="text-sm text-im8-burgundy/60 hover:underline block w-full">
-                Forgot your password?
-              </button>
+              <>
+                <button onClick={() => { setMode("reset"); setError(""); setMessage(""); }}
+                  className="text-sm text-im8-burgundy/60 hover:underline block w-full">
+                  Forgot your password?
+                </button>
+                <div className="pt-3 border-t border-im8-stone/20 text-sm text-im8-burgundy/60">
+                  Don&apos;t have an account yet?{" "}
+                  <Link
+                    href={{
+                      pathname: "/auth/signup",
+                      query: {
+                        ...(dealInviteToken ? { deal_invite: dealInviteToken } : {}),
+                        ...(email ? { email } : {}),
+                      },
+                    }}
+                    className="text-im8-red font-semibold hover:underline"
+                  >
+                    Sign up
+                  </Link>
+                </div>
+              </>
             )}
             {mode === "reset" && (
               <button onClick={() => { setMode("login"); setError(""); setMessage(""); }}
