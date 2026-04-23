@@ -32,16 +32,18 @@ type DiscoveryProfile = {
   agency_response: string | null;
 };
 
-const STATUSES = ["new", "negotiation_needed", "approved", "rejected", "converted"];
+// Ordered filter tabs — reflects the actual pipeline, not a linear sequence.
+// "approved" is transient (auto-converts to "converted") so it's not a tab.
+const STATUSES = ["new", "negotiation_needed", "converted", "rejected"];
 const STATUS_LABELS: Record<string, string> = {
   new: "Submitted",
   submitted: "Submitted",
-  reviewing: "Under review",          // legacy — kept for existing rows
-  negotiation_needed: "Negotiation needed",
-  approved: "Approved",
+  reviewing: "Under Review",          // legacy
+  negotiation_needed: "Negotiation Needed",
+  approved: "Approved",               // transient — shown on rows but not a tab
   shortlisted: "Approved",            // legacy alias
-  rejected: "Not a fit",
-  converted: "Pending mgmt approval",
+  rejected: "Rejected",
+  converted: "Pending MGMT Approval",
 };
 const STATUS_COLORS: Record<string, string> = {
   new: "bg-blue-100 text-blue-700",
@@ -298,10 +300,10 @@ export default function DiscoveryBoard({
                         {p.status !== "approved" && p.status !== "converted" && p.status !== "rejected" && (
                           <button onClick={() => updateStatus(p.id, "approved")} disabled={updating === p.id}
                             className="text-xs px-2.5 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200 transition-colors disabled:opacity-50">
-                            Approve
+                            → MGMT
                           </button>
                         )}
-                        {p.status !== "rejected" && (
+                        {p.status !== "rejected" && p.status !== "converted" && (
                           <button onClick={() => updateStatus(p.id, "rejected")} disabled={updating === p.id}
                             className="text-xs px-2.5 py-1 bg-red-50 text-red-600 rounded hover:bg-red-100 transition-colors disabled:opacity-50">
                             Reject
@@ -338,19 +340,51 @@ export default function DiscoveryBoard({
 
             <div className="p-6 space-y-6">
               {/* Status transitions */}
-              <div>
-                <div className="text-xs text-im8-burgundy/50 uppercase tracking-wide mb-2">Status</div>
+              <div className="space-y-2">
+                <div className="text-xs text-im8-burgundy/50 uppercase tracking-wide">Set status</div>
                 <div className="flex flex-wrap gap-2">
-                  {STATUSES.map(s => (
-                    <button key={s} onClick={() => { updateStatus(openProfile.id, s); setOpenProfile(p => p ? { ...p, status: s } : p); }}
-                      disabled={updating === openProfile.id || openProfile.status === s}
-                      className={`text-xs px-3 py-1.5 rounded-full font-medium ${
-                        openProfile.status === s ? "bg-im8-burgundy text-white" : "bg-im8-sand text-im8-burgundy hover:bg-im8-stone"
-                      } disabled:opacity-50`}>
-                      {STATUS_LABELS[s] ?? s}
+                  {/* Approve → triggers deal + packet creation + auto-converts to Pending MGMT Approval */}
+                  {openProfile.status !== "converted" && openProfile.status !== "rejected" && (
+                    <button
+                      onClick={() => updateStatus(openProfile.id, "approved")}
+                      disabled={updating === openProfile.id}
+                      className="text-xs px-3 py-1.5 rounded-full font-medium bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 transition-colors">
+                      ✓ Approve → Send to MGMT
                     </button>
-                  ))}
+                  )}
+                  {/* Negotiation Needed */}
+                  <button
+                    onClick={() => updateStatus(openProfile.id, "negotiation_needed")}
+                    disabled={updating === openProfile.id || openProfile.status === "negotiation_needed"}
+                    className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${
+                      openProfile.status === "negotiation_needed" ? "bg-im8-burgundy text-white" : "bg-im8-sand text-im8-burgundy hover:bg-im8-stone"
+                    } disabled:opacity-50`}>
+                    Negotiation Needed
+                  </button>
+                  {/* Rejected */}
+                  <button
+                    onClick={() => updateStatus(openProfile.id, "rejected")}
+                    disabled={updating === openProfile.id || openProfile.status === "rejected"}
+                    className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${
+                      openProfile.status === "rejected" ? "bg-red-600 text-white" : "bg-red-50 text-red-700 hover:bg-red-100"
+                    } disabled:opacity-50`}>
+                    Rejected
+                  </button>
+                  {/* Revert to Submitted */}
+                  {(openProfile.status === "negotiation_needed" || openProfile.status === "rejected") && (
+                    <button
+                      onClick={() => updateStatus(openProfile.id, "new")}
+                      disabled={updating === openProfile.id}
+                      className="text-xs px-3 py-1.5 rounded-full font-medium bg-im8-sand text-im8-burgundy hover:bg-im8-stone disabled:opacity-50 transition-colors">
+                      ← Back to Submitted
+                    </button>
+                  )}
                 </div>
+                {openProfile.status === "converted" && (
+                  <p className="text-xs text-purple-700 bg-purple-50 rounded-lg px-3 py-2">
+                    This profile has been sent to the MGMT Approvals queue.
+                  </p>
+                )}
               </div>
 
               {/* Profile details */}

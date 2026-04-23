@@ -12,11 +12,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
 const STATUS_LABELS: Record<string, string> = {
   new: "Submitted",
-  reviewing: "Under review",
-  negotiation_needed: "Negotiation needed",
+  reviewing: "Under Review",
+  negotiation_needed: "Negotiation Needed",
   approved: "Approved",
-  rejected: "Not a fit",
-  converted: "Pending mgmt approval",
+  rejected: "Rejected",
+  converted: "Pending MGMT Approval",
   shortlisted: "Approved",
 };
 

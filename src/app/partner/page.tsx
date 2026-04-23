@@ -7,12 +7,12 @@ import NegotiationResponse from "./negotiation-response";
 const STATUS_LABELS: Record<string, string> = {
   new: "Submitted",
   submitted: "Submitted",
-  reviewing: "Under review",
-  negotiation_needed: "Negotiation needed",
+  reviewing: "Under Review",
+  negotiation_needed: "Negotiation Needed",
   approved: "Approved",
-  shortlisted: "Shortlisted",
-  rejected: "Not a fit",
-  converted: "Pending management approval",
+  shortlisted: "Approved",
+  rejected: "Rejected",
+  converted: "Pending MGMT Approval",
 };
 const STATUS_COLORS: Record<string, string> = {
   new: "bg-blue-100 text-blue-700",

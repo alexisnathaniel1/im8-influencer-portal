@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import DiscoveryBoard from "@/components/discovery/triage-board";
 
-const STATUSES = ["new", "negotiation_needed", "approved", "rejected", "converted"];
+const STATUSES = ["new", "negotiation_needed", "converted", "rejected"];
 
 export default async function DiscoveryPage({
   searchParams,
