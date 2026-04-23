@@ -16,6 +16,7 @@ export default function SignupPage() {
   const [agencyWebsite, setAgencyWebsite] = useState("");
   const [agencyContactPic, setAgencyContactPic] = useState("");
   const [email, setEmail] = useState("");
+  const isAdminEmail = ADMIN_DOMAINS.some(d => email.toLowerCase().endsWith(d));
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [loading, setLoading] = useState(false);
@@ -34,7 +35,7 @@ export default function SignupPage() {
     const isAdminEmail = ADMIN_DOMAINS.some(d => email.toLowerCase().endsWith(d));
     const accessToken = signUpData.session?.access_token;
 
-    const displayName = partnerType === "agency" ? agencyName : fullName;
+    const displayName = isAdminEmail ? fullName : partnerType === "agency" ? agencyName : fullName;
 
     const res = await fetch("/api/auth/ensure-profile", {
       method: "POST",
@@ -73,39 +74,50 @@ export default function SignupPage() {
 
           <div className="text-center">
             <h1 className="text-2xl font-bold text-im8-burgundy">Create your account</h1>
-            <p className="mt-2 text-sm text-im8-burgundy/60">Join the IM8 Influencer Portal</p>
+            <p className="mt-2 text-sm text-im8-burgundy/60">
+              {isAdminEmail ? "IM8 team access" : "Join the IM8 Influencer Portal"}
+            </p>
           </div>
 
-          {/* Partner type toggle */}
-          <div className="grid grid-cols-2 gap-2 rounded-lg bg-im8-sand p-1">
-            <button
-              type="button"
-              onClick={() => setPartnerType("creator")}
-              className={`py-2 text-sm font-medium rounded-md transition-colors ${
-                partnerType === "creator" ? "bg-white text-im8-burgundy shadow-sm" : "text-im8-burgundy/60 hover:text-im8-burgundy"
-              }`}
-            >
-              I&apos;m a creator
-            </button>
-            <button
-              type="button"
-              onClick={() => setPartnerType("agency")}
-              className={`py-2 text-sm font-medium rounded-md transition-colors ${
-                partnerType === "agency" ? "bg-white text-im8-burgundy shadow-sm" : "text-im8-burgundy/60 hover:text-im8-burgundy"
-              }`}
-            >
-              I&apos;m an agency
-            </button>
-          </div>
+          {/* Partner type toggle — hidden for team emails */}
+          {!isAdminEmail && (
+            <div className="grid grid-cols-2 gap-2 rounded-lg bg-im8-sand p-1">
+              <button
+                type="button"
+                onClick={() => setPartnerType("creator")}
+                className={`py-2 text-sm font-medium rounded-md transition-colors ${
+                  partnerType === "creator" ? "bg-white text-im8-burgundy shadow-sm" : "text-im8-burgundy/60 hover:text-im8-burgundy"
+                }`}
+              >
+                I&apos;m a creator
+              </button>
+              <button
+                type="button"
+                onClick={() => setPartnerType("agency")}
+                className={`py-2 text-sm font-medium rounded-md transition-colors ${
+                  partnerType === "agency" ? "bg-white text-im8-burgundy shadow-sm" : "text-im8-burgundy/60 hover:text-im8-burgundy"
+                }`}
+              >
+                I&apos;m an agency
+              </button>
+            </div>
+          )}
 
-          {partnerType === "agency" && (
+          {!isAdminEmail && partnerType === "agency" && (
             <div className="bg-im8-sand/60 border border-im8-stone/30 text-im8-burgundy/80 px-4 py-3 rounded-lg text-xs">
               Tip: you&apos;ll be able to submit multiple creator profiles later from your dashboard.
             </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {partnerType === "creator" ? (
+            {isAdminEmail ? (
+              <div>
+                <label className="block text-sm font-medium text-im8-burgundy mb-1">Full name</label>
+                <input type="text" value={fullName} onChange={e => setFullName(e.target.value)}
+                  placeholder="Your full name" required
+                  className="w-full px-4 py-3 rounded-lg border border-im8-stone/40 focus:outline-none focus:ring-2 focus:ring-im8-red/50 focus:border-im8-red text-im8-burgundy transition-colors" />
+              </div>
+            ) : partnerType === "creator" ? (
               <div>
                 <label className="block text-sm font-medium text-im8-burgundy mb-1">Full name</label>
                 <input type="text" value={fullName} onChange={e => setFullName(e.target.value)}
