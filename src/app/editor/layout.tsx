@@ -4,6 +4,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import Image from "next/image";
 import Link from "next/link";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function EditorLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

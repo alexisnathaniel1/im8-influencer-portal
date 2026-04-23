@@ -3,6 +3,9 @@ import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import ApproverNav from "@/components/shared/approver-nav";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function ApproverLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

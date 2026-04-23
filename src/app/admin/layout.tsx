@@ -3,6 +3,10 @@ import { createClient } from "@/lib/supabase/server";
 import AdminNav from "@/components/shared/admin-nav";
 import { ADMIN_ROLES } from "@/lib/permissions";
 
+// Prevent Vercel edge from caching the auth-based redirect
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
