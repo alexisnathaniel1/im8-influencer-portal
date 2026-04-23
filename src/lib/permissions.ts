@@ -26,8 +26,11 @@ export function canViewRates(role: string): boolean {
 // Roles that can enter the /admin section
 export const ADMIN_ROLES: string[] = ["admin", "management", "support"];
 
-// Roles that can be assigned in the Settings UI
+// All roles allowed via the PATCH /api/admin/roles endpoint (includes partner roles for validation)
 export const ASSIGNABLE_ROLES: string[] = ["admin", "management", "support", "editor", "influencer", "agency"];
+
+// Roles shown in the Settings → Team dropdowns (partner roles not managed from admin side)
+export const STAFF_ASSIGNABLE_ROLES: string[] = ["admin", "management", "support", "editor"];
 
 export const ROLE_LABELS: Record<string, string> = {
   admin:      "Admin",
@@ -36,6 +39,7 @@ export const ROLE_LABELS: Record<string, string> = {
   editor:     "Editor",
   influencer: "Influencer",
   agency:     "Agency",
+  pending:    "Pending Activation",
 };
 
 export const ROLE_COLORS: Record<string, string> = {
@@ -45,4 +49,5 @@ export const ROLE_COLORS: Record<string, string> = {
   editor:     "bg-yellow-100 text-yellow-700",
   influencer: "bg-blue-100 text-blue-700",
   agency:     "bg-teal-100 text-teal-700",
+  pending:    "bg-orange-100 text-orange-700",
 };

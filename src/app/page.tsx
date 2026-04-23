@@ -20,6 +20,7 @@ export default async function RootPage() {
 
   if (!profile) redirect("/auth/login");
 
+  if (profile.role === "pending") redirect("/auth/pending");
   if (ADMIN_ROLES.includes(profile.role)) redirect("/admin");
   if (profile.role === "editor") redirect("/editor");
   redirect("/partner");

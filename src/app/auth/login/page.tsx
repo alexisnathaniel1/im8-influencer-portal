@@ -62,7 +62,9 @@ export default function LoginPage() {
     }
 
     const ADMIN_ROLES = ["admin", "management", "support"];
-    if (role && ADMIN_ROLES.includes(role)) {
+    if (role === "pending") {
+      window.location.href = "/auth/pending";
+    } else if (role && ADMIN_ROLES.includes(role)) {
       window.location.href = "/admin";
     } else if (role === "editor") {
       window.location.href = "/editor";

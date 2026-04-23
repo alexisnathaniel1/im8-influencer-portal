@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import Image from "next/image";
 import Link from "next/link";
+import SignOutButton from "@/components/shared/sign-out-button";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -38,9 +39,7 @@ export default async function EditorLayout({ children }: { children: React.React
           </div>
           <nav className="flex items-center gap-5 text-sm">
             <Link href="/editor" className="text-im8-burgundy hover:text-im8-red font-medium">My deals</Link>
-            <form action="/api/auth/signout" method="POST">
-              <button type="submit" className="text-im8-burgundy/50 hover:text-im8-burgundy text-sm">Sign out</button>
-            </form>
+            <SignOutButton className="text-im8-burgundy/50 hover:text-im8-burgundy text-sm" />
           </nav>
         </div>
       </header>

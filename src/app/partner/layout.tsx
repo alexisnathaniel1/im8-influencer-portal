@@ -3,7 +3,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import SignOutButton from "./sign-out-button";
+import SignOutButton from "@/components/shared/sign-out-button";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;

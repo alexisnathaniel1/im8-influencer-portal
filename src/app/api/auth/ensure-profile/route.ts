@@ -33,9 +33,11 @@ export async function POST(request: NextRequest) {
   const agencyWebsite = typeof body.agency_website === "string" ? body.agency_website.trim() : null;
   const agencyContactPic = typeof body.agency_contact_pic === "string" ? body.agency_contact_pic.trim() : null;
 
-  const isAdmin = ADMIN_DOMAINS.some(d => userEmail.toLowerCase().endsWith(d));
-  const role = isAdmin
-    ? "admin"
+  const isStaffDomain = ADMIN_DOMAINS.some(d => userEmail.toLowerCase().endsWith(d));
+  // New staff-domain accounts start as 'pending' — an admin must activate them.
+  // This prevents new hires / editors from immediately getting admin access.
+  const role = isStaffDomain
+    ? "pending"
     : partnerType === "agency"
       ? "agency"
       : "influencer";
@@ -61,10 +63,11 @@ export async function POST(request: NextRequest) {
   }
 
   const patch: Record<string, string | null> = {};
-  // Only promote to admin — never downgrade an already-elevated staff role
-  const NON_STAFF_ROLES = ["influencer", "agency"];
-  if (isAdmin && NON_STAFF_ROLES.includes(existing.role)) patch.role = "admin";
-  if (!isAdmin && partnerType === "agency" && existing.role !== "agency") patch.role = "agency";
+  // Promote partner-role accounts on staff domains to pending (for admin to activate).
+  // Never downgrade an already-elevated staff role.
+  const PARTNER_ROLES = ["influencer", "agency"];
+  if (isStaffDomain && PARTNER_ROLES.includes(existing.role)) patch.role = "pending";
+  if (!isStaffDomain && partnerType === "agency" && existing.role !== "agency") patch.role = "agency";
   if (fullName && !existing.full_name) patch.full_name = fullName;
   if (partnerType && !existing.partner_type) patch.partner_type = partnerType;
   if (agencyWebsite) patch.agency_website = agencyWebsite;
