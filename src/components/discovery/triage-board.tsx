@@ -32,9 +32,8 @@ type DiscoveryProfile = {
   agency_response: string | null;
 };
 
-// Ordered filter tabs — reflects the actual pipeline, not a linear sequence.
-// "approved" is transient (auto-converts to "converted") so it's not a tab.
-const STATUSES = ["new", "negotiation_needed", "converted", "rejected"];
+// Filter tabs ordered to reflect the pipeline stages.
+const STATUSES = ["new", "negotiation_needed", "approved", "converted", "rejected"];
 const STATUS_LABELS: Record<string, string> = {
   new: "Submitted",
   submitted: "Submitted",

@@ -63,8 +63,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   // Log status changes to the activity thread
   if (updates.status && before && before.status !== updates.status) {
+    const newStatus = updates.status as string;
     const fromLabel = STATUS_LABELS[before.status] ?? before.status;
-    const toLabel = STATUS_LABELS[updates.status] ?? updates.status;
+    const toLabel = STATUS_LABELS[newStatus] ?? newStatus;
     await admin.from("discovery_comments").insert({
       discovery_profile_id: id,
       author_id: user.id,
