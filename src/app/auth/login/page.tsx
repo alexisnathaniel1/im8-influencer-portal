@@ -65,10 +65,14 @@ export default function LoginPage() {
       window.location.href = "/admin";
     } else if (role === "approver") {
       window.location.href = "/approver";
+    } else if (role === "agency") {
+      window.location.href = "/partner";
+    } else if (role === "editor") {
+      window.location.href = "/editor";
     } else if (!fullName) {
       window.location.href = "/auth/onboarding";
     } else {
-      window.location.href = "/influencer";
+      window.location.href = "/partner";
     }
   }
 

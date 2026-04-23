@@ -8,13 +8,16 @@ type Profile = Record<string, unknown>;
 
 const STATUS_COLORS: Record<string, string> = {
   new: "bg-blue-100 text-blue-700",
+  submitted: "bg-blue-100 text-blue-700",
   reviewing: "bg-yellow-100 text-yellow-700",
+  negotiation_needed: "bg-orange-100 text-orange-700",
   shortlisted: "bg-green-100 text-green-700",
+  approved: "bg-green-100 text-green-700",
   rejected: "bg-red-100 text-red-700",
   converted: "bg-purple-100 text-purple-700",
 };
 
-const STATUSES = ["new", "reviewing", "shortlisted", "rejected", "converted"];
+const STATUSES = ["new", "reviewing", "negotiation_needed", "approved", "rejected", "converted"];
 
 export default function DiscoveryProfileClient({
   profile,

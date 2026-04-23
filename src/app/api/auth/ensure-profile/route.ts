@@ -27,13 +27,22 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json().catch(() => ({}));
   const fullName = typeof body.full_name === "string" ? body.full_name.trim() : "";
+  const partnerType: "creator" | "agency" | null =
+    body.partner_type === "agency" ? "agency" :
+    body.partner_type === "creator" ? "creator" : null;
+  const agencyWebsite = typeof body.agency_website === "string" ? body.agency_website.trim() : null;
+  const agencyContactPic = typeof body.agency_contact_pic === "string" ? body.agency_contact_pic.trim() : null;
 
   const isAdmin = ADMIN_DOMAINS.some(d => userEmail.toLowerCase().endsWith(d));
-  const role = isAdmin ? "admin" : "influencer";
+  const role = isAdmin
+    ? "admin"
+    : partnerType === "agency"
+      ? "agency"
+      : "influencer";
 
   const { data: existing } = await admin
     .from("profiles")
-    .select("role, full_name")
+    .select("role, full_name, partner_type")
     .eq("id", userId)
     .single();
 
@@ -43,14 +52,21 @@ export async function POST(request: NextRequest) {
       email: userEmail,
       role,
       full_name: fullName,
+      partner_type: partnerType ?? (isAdmin ? null : "creator"),
+      agency_website: agencyWebsite,
+      agency_contact_pic: agencyContactPic,
     });
     if (insertError) return NextResponse.json({ error: insertError.message }, { status: 500 });
-    return NextResponse.json({ role, full_name: fullName });
+    return NextResponse.json({ role, full_name: fullName, partner_type: partnerType });
   }
 
-  const patch: Record<string, string> = {};
+  const patch: Record<string, string | null> = {};
   if (isAdmin && existing.role !== "admin") patch.role = "admin";
+  if (!isAdmin && partnerType === "agency" && existing.role !== "agency") patch.role = "agency";
   if (fullName && !existing.full_name) patch.full_name = fullName;
+  if (partnerType && !existing.partner_type) patch.partner_type = partnerType;
+  if (agencyWebsite) patch.agency_website = agencyWebsite;
+  if (agencyContactPic) patch.agency_contact_pic = agencyContactPic;
 
   if (Object.keys(patch).length > 0) {
     await admin.from("profiles").update(patch).eq("id", userId);
@@ -59,5 +75,6 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({
     role: patch.role ?? existing.role,
     full_name: patch.full_name ?? existing.full_name,
+    partner_type: patch.partner_type ?? existing.partner_type,
   });
 }

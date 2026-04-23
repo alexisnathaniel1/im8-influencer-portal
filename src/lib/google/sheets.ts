@@ -27,6 +27,7 @@ const SPREADSHEET_ID = process.env.GOOGLE_SHEETS_TRACKER_ID || "";
 const TRACKER_SHEET = "Tracker";
 const CONTENT_LOG_SHEET = "Content Log";
 const DEAL_LOG_SHEET = "Deal Log";
+const INTAKE_HISTORY_SHEET = "Intake History";
 
 function fmt(v: string | number | boolean | null | undefined): string | number {
   if (v === null || v === undefined) return "";
@@ -207,6 +208,92 @@ export async function syncContentLogEntry(data: ContentLogEntry): Promise<void> 
   await sheets.spreadsheets.values.batchUpdate({
     spreadsheetId: SPREADSHEET_ID,
     requestBody: { valueInputOption: "USER_ENTERED", data: updates },
+  });
+}
+
+// ─── Intake History (append-only record of every submitted profile) ──────
+// A = Timestamp  B = Submitter Name  C = Submitter Email  D = Agency
+// E = Influencer Name  F = Platform  G = IG Handle  H = TikTok Handle
+// I = YouTube Handle  J = Followers  K = Proposed Rate (USD)  L = Niches
+// M = Others Niche  N = Positioning  O = Proposed Deliverables (JSON)
+// P = Discovery Profile ID
+
+export interface IntakeHistoryEntry {
+  submitterName: string;
+  submitterEmail: string;
+  submitterAgency: string | null;
+  influencerName: string;
+  platform: string;
+  igHandle?: string | null;
+  tiktokHandle?: string | null;
+  youtubeHandle?: string | null;
+  followerCount?: number | null;
+  proposedRateUsd?: number | null;
+  niches: string[];
+  othersNiche?: string | null;
+  positioning?: string | null;
+  proposedDeliverables?: Array<{ code: string; count: number }>;
+  discoveryProfileId: string;
+}
+
+export async function appendIntakeHistory(entry: IntakeHistoryEntry): Promise<void> {
+  if (!SPREADSHEET_ID) return;
+  const sheets = getSheets();
+
+  // Ensure the sheet tab exists (create on first call with header row).
+  try {
+    await sheets.spreadsheets.values.get({
+      spreadsheetId: SPREADSHEET_ID, range: `${INTAKE_HISTORY_SHEET}!A1`,
+    });
+  } catch {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: SPREADSHEET_ID,
+      requestBody: { requests: [{ addSheet: { properties: { title: INTAKE_HISTORY_SHEET } } }] },
+    });
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SPREADSHEET_ID,
+      range: `${INTAKE_HISTORY_SHEET}!A1:P1`,
+      valueInputOption: "RAW",
+      requestBody: {
+        values: [[
+          "Timestamp", "Submitter Name", "Submitter Email", "Agency",
+          "Creator Name", "Platform", "IG Handle", "TikTok Handle",
+          "YouTube Handle", "Followers", "Proposed Rate (USD)", "Niches",
+          "Others Niche", "Positioning", "Proposed Deliverables", "Profile ID",
+        ]],
+      },
+    });
+  }
+
+  const existing = await sheets.spreadsheets.values.get({
+    spreadsheetId: SPREADSHEET_ID, range: `${INTAKE_HISTORY_SHEET}!A:A`,
+  });
+  const nextRow = (existing.data.values || []).length + 1;
+
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: SPREADSHEET_ID,
+    range: `${INTAKE_HISTORY_SHEET}!A${nextRow}:P${nextRow}`,
+    valueInputOption: "USER_ENTERED",
+    requestBody: {
+      values: [[
+        new Date().toISOString(),
+        fmt(entry.submitterName),
+        fmt(entry.submitterEmail),
+        fmt(entry.submitterAgency),
+        fmt(entry.influencerName),
+        fmt(entry.platform),
+        fmt(entry.igHandle),
+        fmt(entry.tiktokHandle),
+        fmt(entry.youtubeHandle),
+        entry.followerCount ?? "",
+        entry.proposedRateUsd ?? "",
+        (entry.niches || []).join(", "),
+        fmt(entry.othersNiche),
+        fmt(entry.positioning),
+        JSON.stringify(entry.proposedDeliverables || []),
+        entry.discoveryProfileId,
+      ]],
+    },
   });
 }
 

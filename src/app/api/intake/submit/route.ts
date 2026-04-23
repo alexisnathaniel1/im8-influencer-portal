@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { after } from "next/server";
 import { scoreProfile } from "@/lib/ai/profile-score";
+import { appendIntakeHistory } from "@/lib/google/sheets";
+
+interface ProposedDeliverable {
+  code: string;
+  count: number;
+}
 
 interface InfluencerEntry {
   influencerName: string;
@@ -11,9 +18,10 @@ interface InfluencerEntry {
   youtubeHandle: string;
   followerCount: string;
   proposedRate: string;
-  portfolioLinks: string;
+  positioning: string;
   niche: string[];
-  notes: string;
+  othersNiche: string;
+  proposedDeliverables: ProposedDeliverable[];
 }
 
 async function isDuplicate(
@@ -21,7 +29,6 @@ async function isDuplicate(
   inf: InfluencerEntry,
   agencyName: string | null,
 ): Promise<boolean> {
-  // Check by handle (most reliable — same person on same platform)
   const handleChecks: Array<{ col: string; val: string }> = [];
   if (inf.igHandle?.trim()) handleChecks.push({ col: "instagram_handle", val: inf.igHandle.trim().replace(/^@/, "") });
   if (inf.tiktokHandle?.trim()) handleChecks.push({ col: "tiktok_handle", val: inf.tiktokHandle.trim().replace(/^@/, "") });
@@ -35,7 +42,6 @@ async function isDuplicate(
     if ((count ?? 0) > 0) return true;
   }
 
-  // Fallback: same name + same agency (case-insensitive)
   if (inf.influencerName?.trim() && agencyName) {
     const { count } = await supabase
       .from("discovery_profiles")
@@ -50,6 +56,13 @@ async function isDuplicate(
 
 export async function POST(request: NextRequest) {
   try {
+    // Require auth — agencies/creators must sign up first
+    const supabaseCookie = await createClient();
+    const { data: { user } } = await supabaseCookie.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Sign in required" }, { status: 401 });
+    }
+
     const formData = await request.formData();
 
     const submitterName = formData.get("submitterName") as string;
@@ -67,7 +80,7 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = createAdminClient();
-    const inserted: Array<{ id: string; name: string }> = [];
+    const inserted: Array<{ id: string; name: string; data: InfluencerEntry }> = [];
     const duplicates: string[] = [];
 
     for (const inf of influencers) {
@@ -90,6 +103,7 @@ export async function POST(request: NextRequest) {
           status: "new",
           submitter_name: submitterName,
           submitter_email: submitterEmail,
+          submitted_by_profile_id: user.id,
           agency_name: submitterAgency,
           influencer_name: inf.influencerName.trim(),
           instagram_handle: igHandle,
@@ -98,9 +112,10 @@ export async function POST(request: NextRequest) {
           platform_primary: inf.platformPrimary || "instagram",
           follower_count: inf.followerCount ? parseInt(inf.followerCount) : null,
           proposed_rate_cents: inf.proposedRate ? Math.round(parseFloat(inf.proposedRate) * 100) : null,
-          portfolio_url: inf.portfolioLinks || null,
           niche_tags: inf.niche ?? [],
-          notes: inf.notes || null,
+          others_niche: inf.niche.includes("Others") ? (inf.othersNiche || null) : null,
+          positioning: inf.positioning?.trim() || null,
+          proposed_deliverables: inf.proposedDeliverables ?? [],
         })
         .select("id")
         .single();
@@ -110,27 +125,51 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      if (profile) inserted.push({ id: profile.id, name: inf.influencerName });
+      if (profile) inserted.push({ id: profile.id, name: inf.influencerName, data: inf });
     }
+
+    // Append each insert to the Intake History sheet (best-effort; non-blocking)
+    after(async () => {
+      for (const row of inserted) {
+        try {
+          await appendIntakeHistory({
+            submitterName,
+            submitterEmail,
+            submitterAgency,
+            influencerName: row.name,
+            platform: row.data.platformPrimary,
+            igHandle: row.data.igHandle,
+            tiktokHandle: row.data.tiktokHandle,
+            youtubeHandle: row.data.youtubeHandle,
+            followerCount: row.data.followerCount ? parseInt(row.data.followerCount) : null,
+            proposedRateUsd: row.data.proposedRate ? parseFloat(row.data.proposedRate) : null,
+            niches: row.data.niche,
+            othersNiche: row.data.othersNiche || null,
+            positioning: row.data.positioning || null,
+            proposedDeliverables: row.data.proposedDeliverables,
+            discoveryProfileId: row.id,
+          });
+        } catch (err) {
+          console.error("[intake/submit] Sheets append failed:", err);
+        }
+      }
+    });
 
     // AI scoring for each inserted profile in background
     after(async () => {
-      for (const { id, name } of inserted) {
-        const inf = influencers.find(i => i.influencerName === name)!;
+      for (const { id, data } of inserted) {
         const score = await scoreProfile({
-          influencerName: name,
-          platform: inf.platformPrimary,
-          igHandle: inf.igHandle?.trim().replace(/^@/, "") || null,
-          tiktokHandle: inf.tiktokHandle?.trim().replace(/^@/, "") || null,
-          youtubeHandle: inf.youtubeHandle?.trim().replace(/^@/, "") || null,
-          followerCount: inf.followerCount ? parseInt(inf.followerCount) : null,
-          niche: inf.niche,
-          proposedRateUsd: inf.proposedRate ? parseFloat(inf.proposedRate) : null,
-          portfolioLinks: inf.portfolioLinks
-            ? inf.portfolioLinks.split(/[\n,]+/).map(s => s.trim()).filter(Boolean)
-            : [],
+          influencerName: data.influencerName,
+          platform: data.platformPrimary,
+          igHandle: data.igHandle?.trim().replace(/^@/, "") || null,
+          tiktokHandle: data.tiktokHandle?.trim().replace(/^@/, "") || null,
+          youtubeHandle: data.youtubeHandle?.trim().replace(/^@/, "") || null,
+          followerCount: data.followerCount ? parseInt(data.followerCount) : null,
+          niche: data.niche,
+          proposedRateUsd: data.proposedRate ? parseFloat(data.proposedRate) : null,
+          portfolioLinks: [],
           agencyName: submitterAgency,
-          pitchSummary: inf.notes || null,
+          pitchSummary: data.positioning || null,
         });
 
         if (score) {

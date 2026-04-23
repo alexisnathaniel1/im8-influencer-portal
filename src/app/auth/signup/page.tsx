@@ -7,8 +7,14 @@ import { createClient } from "@/lib/supabase/client";
 
 const ADMIN_DOMAINS = ["@prenetics.com", "@im8health.com"];
 
+type PartnerType = "creator" | "agency";
+
 export default function SignupPage() {
+  const [partnerType, setPartnerType] = useState<PartnerType>("creator");
   const [fullName, setFullName] = useState("");
+  const [agencyName, setAgencyName] = useState("");
+  const [agencyWebsite, setAgencyWebsite] = useState("");
+  const [agencyContactPic, setAgencyContactPic] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -28,29 +34,37 @@ export default function SignupPage() {
     const isAdminEmail = ADMIN_DOMAINS.some(d => email.toLowerCase().endsWith(d));
     const accessToken = signUpData.session?.access_token;
 
-    // Pass access token directly — cookie may not be propagated yet on first request
+    const displayName = partnerType === "agency" ? agencyName : fullName;
+
     const res = await fetch("/api/auth/ensure-profile", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         ...(accessToken ? { "Authorization": `Bearer ${accessToken}` } : {}),
       },
-      body: JSON.stringify({ full_name: fullName }),
+      body: JSON.stringify({
+        full_name: displayName,
+        partner_type: partnerType,
+        agency_website: agencyWebsite || null,
+        agency_contact_pic: agencyContactPic || null,
+      }),
     });
 
     if (!res.ok) {
-      // Email confirmation may be enabled — profile will be created on first login
       console.warn("ensure-profile failed:", await res.text());
     }
 
-    // Hard redirect forces server to see fresh session cookies
-    window.location.href = isAdminEmail ? "/admin" : "/auth/onboarding";
+    if (isAdminEmail) {
+      window.location.href = "/admin";
+    } else {
+      window.location.href = "/partner";
+    }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-im8-burgundy px-4">
+    <div className="min-h-screen flex items-center justify-center bg-im8-burgundy px-4 py-12">
       <div className="w-full max-w-md">
-        <div className="bg-white rounded-2xl shadow-2xl p-8 space-y-8">
+        <div className="bg-white rounded-2xl shadow-2xl p-8 space-y-6">
           <div className="flex justify-center">
             <div className="bg-im8-burgundy rounded-xl p-4">
               <Image src="/logo-white.svg" alt="IM8" width={80} height={40} priority />
@@ -62,13 +76,65 @@ export default function SignupPage() {
             <p className="mt-2 text-sm text-im8-burgundy/60">Join the IM8 Influencer Portal</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-im8-burgundy mb-1">Full name</label>
-              <input type="text" value={fullName} onChange={e => setFullName(e.target.value)}
-                placeholder="Your full name" required
-                className="w-full px-4 py-3 rounded-lg border border-im8-stone/40 focus:outline-none focus:ring-2 focus:ring-im8-red/50 focus:border-im8-red text-im8-burgundy transition-colors" />
+          {/* Partner type toggle */}
+          <div className="grid grid-cols-2 gap-2 rounded-lg bg-im8-sand p-1">
+            <button
+              type="button"
+              onClick={() => setPartnerType("creator")}
+              className={`py-2 text-sm font-medium rounded-md transition-colors ${
+                partnerType === "creator" ? "bg-white text-im8-burgundy shadow-sm" : "text-im8-burgundy/60 hover:text-im8-burgundy"
+              }`}
+            >
+              I&apos;m a creator
+            </button>
+            <button
+              type="button"
+              onClick={() => setPartnerType("agency")}
+              className={`py-2 text-sm font-medium rounded-md transition-colors ${
+                partnerType === "agency" ? "bg-white text-im8-burgundy shadow-sm" : "text-im8-burgundy/60 hover:text-im8-burgundy"
+              }`}
+            >
+              I&apos;m an agency
+            </button>
+          </div>
+
+          {partnerType === "agency" && (
+            <div className="bg-im8-sand/60 border border-im8-stone/30 text-im8-burgundy/80 px-4 py-3 rounded-lg text-xs">
+              Tip: you&apos;ll be able to submit multiple creator profiles later from your dashboard.
             </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {partnerType === "creator" ? (
+              <div>
+                <label className="block text-sm font-medium text-im8-burgundy mb-1">Full name</label>
+                <input type="text" value={fullName} onChange={e => setFullName(e.target.value)}
+                  placeholder="Your full name" required
+                  className="w-full px-4 py-3 rounded-lg border border-im8-stone/40 focus:outline-none focus:ring-2 focus:ring-im8-red/50 focus:border-im8-red text-im8-burgundy transition-colors" />
+              </div>
+            ) : (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-im8-burgundy mb-1">Agency / company name</label>
+                  <input type="text" value={agencyName} onChange={e => setAgencyName(e.target.value)}
+                    placeholder="Acme Talent" required
+                    className="w-full px-4 py-3 rounded-lg border border-im8-stone/40 focus:outline-none focus:ring-2 focus:ring-im8-red/50 focus:border-im8-red text-im8-burgundy transition-colors" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-im8-burgundy mb-1">Agency website <span className="text-im8-burgundy/40">(optional)</span></label>
+                  <input type="url" value={agencyWebsite} onChange={e => setAgencyWebsite(e.target.value)}
+                    placeholder="https://"
+                    className="w-full px-4 py-3 rounded-lg border border-im8-stone/40 focus:outline-none focus:ring-2 focus:ring-im8-red/50 focus:border-im8-red text-im8-burgundy transition-colors" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-im8-burgundy mb-1">Primary contact PIC</label>
+                  <input type="text" value={agencyContactPic} onChange={e => setAgencyContactPic(e.target.value)}
+                    placeholder="Your name" required
+                    className="w-full px-4 py-3 rounded-lg border border-im8-stone/40 focus:outline-none focus:ring-2 focus:ring-im8-red/50 focus:border-im8-red text-im8-burgundy transition-colors" />
+                </div>
+              </>
+            )}
+
             <div>
               <label className="block text-sm font-medium text-im8-burgundy mb-1">Email address</label>
               <input type="email" value={email} onChange={e => setEmail(e.target.value)}

@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import DiscoveryBoard from "@/components/discovery/triage-board";
 
+const STATUSES = ["new", "reviewing", "negotiation_needed", "approved", "rejected", "converted"];
+
 export default async function DiscoveryPage({
   searchParams,
 }: {
@@ -11,12 +13,10 @@ export default async function DiscoveryPage({
 }) {
   const params = await searchParams;
 
-  // Auth check
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
 
-  // Use admin client for data queries to bypass RLS on server-side admin pages
   const admin = createAdminClient();
 
   let query = admin
@@ -31,8 +31,25 @@ export default async function DiscoveryPage({
   const { data: profiles, error } = await query;
   if (error) console.error("[discovery]", error.message);
 
+  // Count comments per profile in one round trip
+  const profileIds = (profiles ?? []).map(p => p.id);
+  const commentCounts = new Map<string, number>();
+  if (profileIds.length > 0) {
+    const { data: commentRows } = await admin
+      .from("discovery_comments")
+      .select("discovery_profile_id")
+      .in("discovery_profile_id", profileIds);
+    (commentRows ?? []).forEach(r => {
+      commentCounts.set(r.discovery_profile_id, (commentCounts.get(r.discovery_profile_id) ?? 0) + 1);
+    });
+  }
+  const profilesWithCounts = (profiles ?? []).map(p => ({
+    ...p,
+    comments_count: commentCounts.get(p.id) ?? 0,
+  }));
+
   const statusCounts = await Promise.all(
-    ["new", "reviewing", "shortlisted", "rejected", "converted"].map(async s => {
+    STATUSES.map(async s => {
       const { count } = await admin
         .from("discovery_profiles")
         .select("*", { count: "exact", head: true })
@@ -46,12 +63,12 @@ export default async function DiscoveryPage({
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-im8-burgundy">Discovery</h1>
-          <p className="text-im8-burgundy/60 mt-1">Inbound influencer profiles</p>
+          <p className="text-im8-burgundy/60 mt-1">Inbound creator profiles from agencies and self-submissions</p>
         </div>
         <div className="flex gap-3">
           <Link href="/intake" target="_blank"
             className="px-4 py-2 border border-im8-stone text-im8-burgundy text-sm rounded-lg hover:bg-im8-sand transition-colors">
-            Share intake form ↗
+            Open intake form ↗
           </Link>
           <Link href="/admin/deals/new"
             className="px-4 py-2 bg-im8-red text-white text-sm rounded-lg hover:bg-im8-burgundy transition-colors">
@@ -60,7 +77,7 @@ export default async function DiscoveryPage({
         </div>
       </div>
 
-      <DiscoveryBoard profiles={profiles ?? []} statusCounts={statusCounts} currentFilters={params} />
+      <DiscoveryBoard profiles={profilesWithCounts} statusCounts={statusCounts} currentFilters={params} />
     </div>
   );
 }
