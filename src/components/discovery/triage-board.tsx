@@ -32,16 +32,16 @@ type DiscoveryProfile = {
   agency_response: string | null;
 };
 
-const STATUSES = ["new", "reviewing", "negotiation_needed", "approved", "rejected", "converted"];
+const STATUSES = ["new", "negotiation_needed", "approved", "rejected", "converted"];
 const STATUS_LABELS: Record<string, string> = {
   new: "Submitted",
-  reviewing: "Reviewed",
+  submitted: "Submitted",
+  reviewing: "Under review",          // legacy — kept for existing rows
   negotiation_needed: "Negotiation needed",
   approved: "Approved",
-  rejected: "Rejected",
-  converted: "Converted",
-  shortlisted: "Shortlisted",
-  submitted: "Submitted",
+  shortlisted: "Approved",            // legacy alias
+  rejected: "Not a fit",
+  converted: "Pending mgmt approval",
 };
 const STATUS_COLORS: Record<string, string> = {
   new: "bg-blue-100 text-blue-700",
@@ -213,7 +213,7 @@ export default function DiscoveryBoard({
         <select value={currentFilters.platform ?? ""} onChange={e => applyFilter("platform", e.target.value)}
           className="px-3 py-2 rounded-lg border border-im8-stone/40 text-sm text-im8-burgundy focus:outline-none">
           <option value="">All platforms</option>
-          {["instagram", "tiktok", "youtube", "facebook", "other"].map(p => (
+          {["instagram", "tiktok", "youtube", "other"].map(p => (
             <option key={p} value={p} className="capitalize">{p}</option>
           ))}
         </select>
