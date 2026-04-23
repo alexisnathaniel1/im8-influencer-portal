@@ -16,12 +16,13 @@ export default function SignupPage() {
   const [agencyWebsite, setAgencyWebsite] = useState("");
   const [agencyContactPic, setAgencyContactPic] = useState("");
   const [email, setEmail] = useState("");
-  const isAdminEmail = ADMIN_DOMAINS.some(d => email.toLowerCase().endsWith(d));
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const supabase = createClient();
+
+  const isAdminEmail = ADMIN_DOMAINS.some(d => email.toLowerCase().endsWith(d));
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -32,9 +33,7 @@ export default function SignupPage() {
     const { data: signUpData, error: signUpError } = await supabase.auth.signUp({ email, password });
     if (signUpError) { setError(signUpError.message); setLoading(false); return; }
 
-    const isAdminEmail = ADMIN_DOMAINS.some(d => email.toLowerCase().endsWith(d));
     const accessToken = signUpData.session?.access_token;
-
     const displayName = isAdminEmail ? fullName : partnerType === "agency" ? agencyName : fullName;
 
     const res = await fetch("/api/auth/ensure-profile", {
@@ -45,21 +44,15 @@ export default function SignupPage() {
       },
       body: JSON.stringify({
         full_name: displayName,
-        partner_type: partnerType,
+        partner_type: isAdminEmail ? null : partnerType,
         agency_website: agencyWebsite || null,
         agency_contact_pic: agencyContactPic || null,
       }),
     });
 
-    if (!res.ok) {
-      console.warn("ensure-profile failed:", await res.text());
-    }
+    if (!res.ok) console.warn("ensure-profile failed:", await res.text());
 
-    if (isAdminEmail) {
-      window.location.href = "/admin";
-    } else {
-      window.location.href = "/partner";
-    }
+    window.location.href = isAdminEmail ? "/admin" : "/partner";
   }
 
   return (
@@ -79,37 +72,40 @@ export default function SignupPage() {
             </p>
           </div>
 
-          {/* Partner type toggle — hidden for team emails */}
-          {!isAdminEmail && (
-            <div className="grid grid-cols-2 gap-2 rounded-lg bg-im8-sand p-1">
-              <button
-                type="button"
-                onClick={() => setPartnerType("creator")}
-                className={`py-2 text-sm font-medium rounded-md transition-colors ${
-                  partnerType === "creator" ? "bg-white text-im8-burgundy shadow-sm" : "text-im8-burgundy/60 hover:text-im8-burgundy"
-                }`}
-              >
-                I&apos;m a creator
-              </button>
-              <button
-                type="button"
-                onClick={() => setPartnerType("agency")}
-                className={`py-2 text-sm font-medium rounded-md transition-colors ${
-                  partnerType === "agency" ? "bg-white text-im8-burgundy shadow-sm" : "text-im8-burgundy/60 hover:text-im8-burgundy"
-                }`}
-              >
-                I&apos;m an agency
-              </button>
-            </div>
-          )}
-
-          {!isAdminEmail && partnerType === "agency" && (
-            <div className="bg-im8-sand/60 border border-im8-stone/30 text-im8-burgundy/80 px-4 py-3 rounded-lg text-xs">
-              Tip: you&apos;ll be able to submit multiple creator profiles later from your dashboard.
-            </div>
-          )}
-
           <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Email first — determines what fields show below */}
+            <div>
+              <label className="block text-sm font-medium text-im8-burgundy mb-1">Email address</label>
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+                placeholder="you@example.com" required autoFocus
+                className="w-full px-4 py-3 rounded-lg border border-im8-stone/40 focus:outline-none focus:ring-2 focus:ring-im8-red/50 focus:border-im8-red text-im8-burgundy transition-colors" />
+            </div>
+
+            {/* Partner type toggle — only for external partners */}
+            {!isAdminEmail && email && (
+              <div className="grid grid-cols-2 gap-2 rounded-lg bg-im8-sand p-1">
+                <button type="button" onClick={() => setPartnerType("creator")}
+                  className={`py-2 text-sm font-medium rounded-md transition-colors ${
+                    partnerType === "creator" ? "bg-white text-im8-burgundy shadow-sm" : "text-im8-burgundy/60 hover:text-im8-burgundy"
+                  }`}>
+                  I&apos;m a creator
+                </button>
+                <button type="button" onClick={() => setPartnerType("agency")}
+                  className={`py-2 text-sm font-medium rounded-md transition-colors ${
+                    partnerType === "agency" ? "bg-white text-im8-burgundy shadow-sm" : "text-im8-burgundy/60 hover:text-im8-burgundy"
+                  }`}>
+                  I&apos;m an agency
+                </button>
+              </div>
+            )}
+
+            {!isAdminEmail && partnerType === "agency" && email && (
+              <div className="bg-im8-sand/60 border border-im8-stone/30 text-im8-burgundy/80 px-4 py-3 rounded-lg text-xs">
+                Tip: you&apos;ll be able to submit multiple creator profiles later from your dashboard.
+              </div>
+            )}
+
+            {/* Name fields — adapt to role */}
             {isAdminEmail ? (
               <div>
                 <label className="block text-sm font-medium text-im8-burgundy mb-1">Full name</label>
@@ -139,7 +135,7 @@ export default function SignupPage() {
                     className="w-full px-4 py-3 rounded-lg border border-im8-stone/40 focus:outline-none focus:ring-2 focus:ring-im8-red/50 focus:border-im8-red text-im8-burgundy transition-colors" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-im8-burgundy mb-1">Primary contact PIC</label>
+                  <label className="block text-sm font-medium text-im8-burgundy mb-1">Primary contact name</label>
                   <input type="text" value={agencyContactPic} onChange={e => setAgencyContactPic(e.target.value)}
                     placeholder="Your name" required
                     className="w-full px-4 py-3 rounded-lg border border-im8-stone/40 focus:outline-none focus:ring-2 focus:ring-im8-red/50 focus:border-im8-red text-im8-burgundy transition-colors" />
@@ -147,12 +143,6 @@ export default function SignupPage() {
               </>
             )}
 
-            <div>
-              <label className="block text-sm font-medium text-im8-burgundy mb-1">Email address</label>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-                placeholder="you@example.com" required
-                className="w-full px-4 py-3 rounded-lg border border-im8-stone/40 focus:outline-none focus:ring-2 focus:ring-im8-red/50 focus:border-im8-red text-im8-burgundy transition-colors" />
-            </div>
             <div>
               <label className="block text-sm font-medium text-im8-burgundy mb-1">Password</label>
               <input type="password" value={password} onChange={e => setPassword(e.target.value)}
@@ -165,6 +155,11 @@ export default function SignupPage() {
                 placeholder="Repeat your password" required minLength={6}
                 className="w-full px-4 py-3 rounded-lg border border-im8-stone/40 focus:outline-none focus:ring-2 focus:ring-im8-red/50 focus:border-im8-red text-im8-burgundy transition-colors" />
             </div>
+
+            {error && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm text-center">{error}</div>
+            )}
+
             <button type="submit" disabled={loading}
               className="w-full py-3 px-4 bg-im8-red text-white font-semibold rounded-lg hover:bg-im8-burgundy disabled:opacity-50 transition-colors">
               {loading ? "Creating account..." : "Create Account"}
@@ -176,10 +171,6 @@ export default function SignupPage() {
               Already have an account? Sign in
             </Link>
           </div>
-
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm text-center">{error}</div>
-          )}
         </div>
       </div>
     </div>

@@ -13,20 +13,9 @@ const NICHES = [
 const PLATFORMS = ["instagram", "tiktok", "youtube", "facebook", "other"] as const;
 const POSITIONING_LIMIT = 100;
 
+const STANDARD_DELIVERABLES_LABEL = "3 IG Reels · 3 IG Stories · Raw footage · Whitelisting · Paid ad usage rights · Link in bio · 3 UGC Videos for ads — across 3 months";
+
 type Platform = typeof PLATFORMS[number];
-
-interface DeliverableOption {
-  id: string;
-  code: string;
-  label: string;
-  platform: string;
-  default_rate_cents: number | null;
-}
-
-interface ProposedDeliverable {
-  code: string;
-  count: number;
-}
 
 interface InfluencerEntry {
   key: string;
@@ -38,9 +27,10 @@ interface InfluencerEntry {
   followerCount: string;
   proposedRate: string;
   positioning: string;
-  niche: string[];
+  niche: string;
   othersNiche: string;
-  proposedDeliverables: ProposedDeliverable[];
+  useStandardDeliverables: boolean;
+  customDeliverables: string;
 }
 
 function blankInfluencer(): InfluencerEntry {
@@ -54,9 +44,10 @@ function blankInfluencer(): InfluencerEntry {
     followerCount: "",
     proposedRate: "",
     positioning: "",
-    niche: [],
+    niche: "",
     othersNiche: "",
-    proposedDeliverables: [],
+    useStandardDeliverables: true,
+    customDeliverables: "",
   };
 }
 
@@ -65,7 +56,7 @@ interface Props {
   submitterEmail: string;
   submitterAgency: string;
   partnerType: "creator" | "agency";
-  deliverables: DeliverableOption[];
+  deliverables: unknown[];
 }
 
 export default function IntakeForm({
@@ -73,50 +64,17 @@ export default function IntakeForm({
   submitterEmail: initialSubmitterEmail,
   submitterAgency: initialSubmitterAgency,
   partnerType,
-  deliverables,
 }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [submitterName, setSubmitterName] = useState(initialSubmitterName);
-  const [submitterEmail] = useState(initialSubmitterEmail); // locked to account email
+  const [submitterEmail] = useState(initialSubmitterEmail);
   const [submitterAgency, setSubmitterAgency] = useState(initialSubmitterAgency);
   const [influencers, setInfluencers] = useState<InfluencerEntry[]>([blankInfluencer()]);
-  const [attachment, setAttachment] = useState<File | null>(null);
 
   function updateInfluencer(key: string, patch: Partial<InfluencerEntry>) {
     setInfluencers(prev => prev.map(e => e.key === key ? { ...e, ...patch } : e));
-  }
-
-  function toggleNiche(key: string, n: string) {
-    setInfluencers(prev => prev.map(e =>
-      e.key === key
-        ? { ...e, niche: e.niche.includes(n) ? e.niche.filter(x => x !== n) : [...e.niche, n] }
-        : e
-    ));
-  }
-
-  function toggleDeliverable(key: string, code: string) {
-    setInfluencers(prev => prev.map(e => {
-      if (e.key !== key) return e;
-      const existing = e.proposedDeliverables.find(d => d.code === code);
-      if (existing) {
-        return { ...e, proposedDeliverables: e.proposedDeliverables.filter(d => d.code !== code) };
-      }
-      return { ...e, proposedDeliverables: [...e.proposedDeliverables, { code, count: 1 }] };
-    }));
-  }
-
-  function setDeliverableCount(key: string, code: string, count: number) {
-    setInfluencers(prev => prev.map(e => {
-      if (e.key !== key) return e;
-      return {
-        ...e,
-        proposedDeliverables: e.proposedDeliverables.map(d =>
-          d.code === code ? { ...d, count: Math.max(1, count) } : d
-        ),
-      };
-    }));
   }
 
   function addInfluencer() {
@@ -130,23 +88,44 @@ export default function IntakeForm({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     for (const inf of influencers) {
-      if (inf.niche.length === 0) { setError("Select at least one niche for each creator."); return; }
-      if (inf.niche.includes("Others") && !inf.othersNiche.trim()) {
-        setError("Please specify when selecting 'Others' niche.");
+      if (!inf.niche) { setError("Select a content niche for each creator."); return; }
+      if (inf.niche === "Others" && !inf.othersNiche.trim()) {
+        setError("Please specify the niche when selecting 'Others'.");
         return;
       }
       if (!inf.positioning.trim()) { setError("Add a short positioning for each creator."); return; }
-      if (inf.positioning.length > POSITIONING_LIMIT) { setError(`Positioning must be under ${POSITIONING_LIMIT} characters.`); return; }
+      if (inf.positioning.length > POSITIONING_LIMIT) {
+        setError(`Positioning must be under ${POSITIONING_LIMIT} characters.`);
+        return;
+      }
+      if (!inf.useStandardDeliverables && !inf.customDeliverables.trim()) {
+        setError("Please describe the proposed deliverables.");
+        return;
+      }
     }
     setLoading(true);
     setError("");
+
+    // Map to the shape the API expects
+    const influencersPayload = influencers.map(inf => ({
+      ...inf,
+      niche: [inf.niche],
+      proposedDeliverables: inf.useStandardDeliverables
+        ? [
+            { code: "IGR", count: 3 },
+            { code: "IGS", count: 3 },
+            { code: "UGC", count: 3 },
+            { code: "WHITELIST", count: 1 },
+          ]
+        : [],
+      customDeliverables: inf.useStandardDeliverables ? null : inf.customDeliverables,
+    }));
 
     const body = new FormData();
     body.append("submitterName", submitterName);
     body.append("submitterEmail", submitterEmail);
     body.append("submitterAgency", submitterAgency);
-    body.append("influencers", JSON.stringify(influencers));
-    if (attachment) body.append("attachment", attachment);
+    body.append("influencers", JSON.stringify(influencersPayload));
 
     const res = await fetch("/api/intake/submit", { method: "POST", body });
     if (!res.ok) {
@@ -185,6 +164,7 @@ export default function IntakeForm({
 
         <div className="bg-white rounded-2xl shadow-2xl p-8 space-y-6">
           <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Submitter details */}
             <div>
               <h2 className="text-lg font-semibold text-im8-burgundy mb-4">Your details</h2>
               <div className="grid grid-cols-2 gap-4">
@@ -211,15 +191,16 @@ export default function IntakeForm({
 
             <hr className="border-im8-stone/30" />
 
+            {/* Creator profiles */}
             <div className="space-y-6">
               <h2 className="text-lg font-semibold text-im8-burgundy">
                 {partnerType === "agency" ? `Creators (${influencers.length})` : "Your profile"}
               </h2>
 
               {influencers.map((inf, idx) => (
-                <div key={inf.key} className="border border-im8-stone/30 rounded-xl p-5 space-y-4">
+                <div key={inf.key} className="border border-im8-stone/30 rounded-xl p-5 space-y-5">
                   {partnerType === "agency" && (
-                    <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center justify-between">
                       <span className="text-sm font-semibold text-im8-burgundy/60 uppercase tracking-wide">
                         Creator {influencers.length > 1 ? idx + 1 : ""}
                       </span>
@@ -232,6 +213,7 @@ export default function IntakeForm({
                     </div>
                   )}
 
+                  {/* Name */}
                   <div>
                     <label className="block text-sm font-medium text-im8-burgundy mb-1">Creator name *</label>
                     <input type="text" required value={inf.influencerName}
@@ -239,6 +221,7 @@ export default function IntakeForm({
                       className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40" />
                   </div>
 
+                  {/* Platform */}
                   <div>
                     <label className="block text-sm font-medium text-im8-burgundy mb-2">Primary platform *</label>
                     <div className="flex gap-2 flex-wrap">
@@ -254,55 +237,45 @@ export default function IntakeForm({
                     </div>
                   </div>
 
+                  {/* Handles */}
                   <div className="grid grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-im8-burgundy mb-1">Instagram</label>
-                      <input type="text" value={inf.igHandle} placeholder="@handle"
-                        onChange={e => updateInfluencer(inf.key, { igHandle: e.target.value })}
-                        className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40" />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-im8-burgundy mb-1">TikTok</label>
-                      <input type="text" value={inf.tiktokHandle} placeholder="@handle"
-                        onChange={e => updateInfluencer(inf.key, { tiktokHandle: e.target.value })}
-                        className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40" />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-im8-burgundy mb-1">YouTube</label>
-                      <input type="text" value={inf.youtubeHandle} placeholder="@handle"
-                        onChange={e => updateInfluencer(inf.key, { youtubeHandle: e.target.value })}
-                        className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40" />
-                    </div>
+                    {[
+                      { label: "Instagram", key: "igHandle" as const },
+                      { label: "TikTok", key: "tiktokHandle" as const },
+                      { label: "YouTube", key: "youtubeHandle" as const },
+                    ].map(({ label, key }) => (
+                      <div key={key}>
+                        <label className="block text-sm font-medium text-im8-burgundy mb-1">{label}</label>
+                        <input type="text" value={inf[key]} placeholder="@handle"
+                          onChange={e => updateInfluencer(inf.key, { [key]: e.target.value })}
+                          className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40" />
+                      </div>
+                    ))}
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-im8-burgundy mb-1">Followers (approx)</label>
-                      <input type="number" value={inf.followerCount} placeholder="50000"
-                        onChange={e => updateInfluencer(inf.key, { followerCount: e.target.value })}
-                        className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40" />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-im8-burgundy mb-1">Proposed monthly rate (USD)</label>
-                      <input type="number" value={inf.proposedRate} placeholder="2500"
-                        onChange={e => updateInfluencer(inf.key, { proposedRate: e.target.value })}
-                        className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40" />
-                    </div>
-                  </div>
-
+                  {/* Followers */}
                   <div>
-                    <label className="block text-sm font-medium text-im8-burgundy mb-2">Niche / content category *</label>
+                    <label className="block text-sm font-medium text-im8-burgundy mb-1">Followers (approx)</label>
+                    <input type="number" value={inf.followerCount} placeholder="50000"
+                      onChange={e => updateInfluencer(inf.key, { followerCount: e.target.value })}
+                      className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40" />
+                  </div>
+
+                  {/* Niche — single select */}
+                  <div>
+                    <label className="block text-sm font-medium text-im8-burgundy mb-2">Content niche *</label>
                     <div className="flex flex-wrap gap-2">
                       {NICHES.map(n => (
-                        <button key={n} type="button" onClick={() => toggleNiche(inf.key, n)}
+                        <button key={n} type="button"
+                          onClick={() => updateInfluencer(inf.key, { niche: inf.niche === n ? "" : n })}
                           className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                            inf.niche.includes(n) ? "bg-im8-red text-white" : "bg-im8-sand text-im8-burgundy hover:bg-im8-stone"
+                            inf.niche === n ? "bg-im8-red text-white" : "bg-im8-sand text-im8-burgundy hover:bg-im8-stone"
                           }`}>
                           {n}
                         </button>
                       ))}
                     </div>
-                    {inf.niche.includes("Others") && (
+                    {inf.niche === "Others" && (
                       <input type="text" value={inf.othersNiche}
                         onChange={e => updateInfluencer(inf.key, { othersNiche: e.target.value })}
                         placeholder="Please specify"
@@ -310,9 +283,10 @@ export default function IntakeForm({
                     )}
                   </div>
 
+                  {/* Positioning */}
                   <div>
                     <label className="block text-sm font-medium text-im8-burgundy mb-1">
-                      Positioning * <span className="text-im8-burgundy/40 font-normal">({inf.positioning.length}/{POSITIONING_LIMIT})</span>
+                      Creator positioning * <span className="text-im8-burgundy/40 font-normal">({inf.positioning.length}/{POSITIONING_LIMIT})</span>
                     </label>
                     <textarea value={inf.positioning}
                       onChange={e => updateInfluencer(inf.key, { positioning: e.target.value.slice(0, POSITIONING_LIMIT) })}
@@ -321,28 +295,50 @@ export default function IntakeForm({
                       className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40 resize-none" />
                   </div>
 
+                  {/* Standard deliverables */}
                   <div>
-                    <label className="block text-sm font-medium text-im8-burgundy mb-2">Proposed deliverables</label>
-                    <div className="space-y-2">
-                      {deliverables.map(d => {
-                        const selected = inf.proposedDeliverables.find(pd => pd.code === d.code);
-                        return (
-                          <div key={d.code} className="flex items-center gap-3">
-                            <button type="button" onClick={() => toggleDeliverable(inf.key, d.code)}
-                              className={`flex-1 px-3 py-2 rounded-lg text-sm text-left transition-colors ${
-                                selected ? "bg-im8-red/10 border-im8-red text-im8-burgundy border" : "bg-im8-sand border border-transparent text-im8-burgundy/70 hover:bg-im8-stone"
-                              }`}>
-                              <span className="font-medium">{d.label}</span>
-                              <span className="ml-2 text-xs text-im8-burgundy/40 capitalize">{d.platform}</span>
-                            </button>
-                            {selected && (
-                              <input type="number" min={1} value={selected.count}
-                                onChange={e => setDeliverableCount(inf.key, d.code, parseInt(e.target.value) || 1)}
-                                className="w-16 px-2 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40" />
-                            )}
-                          </div>
-                        );
-                      })}
+                    <label className="block text-sm font-medium text-im8-burgundy mb-2">Deliverables</label>
+
+                    {inf.useStandardDeliverables ? (
+                      <div className="bg-im8-sand/60 border border-im8-stone/30 rounded-xl p-4 space-y-3">
+                        <p className="text-xs font-semibold text-im8-burgundy/60 uppercase tracking-wide">Standard deliverables</p>
+                        <p className="text-sm text-im8-burgundy leading-relaxed">{STANDARD_DELIVERABLES_LABEL}</p>
+                        <button type="button"
+                          onClick={() => updateInfluencer(inf.key, { useStandardDeliverables: false })}
+                          className="text-xs text-im8-red hover:underline">
+                          Propose different deliverables instead →
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <textarea value={inf.customDeliverables}
+                          onChange={e => updateInfluencer(inf.key, { customDeliverables: e.target.value })}
+                          placeholder="Describe your proposed deliverables (e.g. 2 IG Reels, 1 TikTok video, whitelisting...)"
+                          rows={3}
+                          className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40 resize-none" />
+                        <button type="button"
+                          onClick={() => updateInfluencer(inf.key, { useStandardDeliverables: true, customDeliverables: "" })}
+                          className="text-xs text-im8-burgundy/50 hover:text-im8-burgundy hover:underline">
+                          ← Use standard deliverables instead
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Rates */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-im8-burgundy mb-1">Proposed monthly rate (USD)</label>
+                      <input type="number" value={inf.proposedRate} placeholder="2500" min={0}
+                        onChange={e => updateInfluencer(inf.key, { proposedRate: e.target.value })}
+                        className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-im8-burgundy mb-1">Total rate — 3 months (USD)</label>
+                      <input type="text" readOnly
+                        value={inf.proposedRate ? `$${(parseFloat(inf.proposedRate) * 3).toLocaleString()}` : ""}
+                        placeholder="Auto-calculated"
+                        className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy/60 bg-im8-sand/40 cursor-not-allowed" />
                     </div>
                   </div>
                 </div>
@@ -357,13 +353,6 @@ export default function IntakeForm({
             </div>
 
             <hr className="border-im8-stone/30" />
-
-            <div>
-              <label className="block text-sm font-medium text-im8-burgundy mb-1">Pitch deck or media kit (optional)</label>
-              <input type="file" accept=".pdf,.ppt,.pptx,.doc,.docx"
-                onChange={e => setAttachment(e.target.files?.[0] ?? null)}
-                className="w-full text-sm text-im8-burgundy/70 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-im8-sand file:text-im8-burgundy file:font-medium hover:file:bg-im8-stone" />
-            </div>
 
             {error && (
               <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>
