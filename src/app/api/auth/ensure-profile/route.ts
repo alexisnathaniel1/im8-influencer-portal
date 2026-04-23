@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
       email: userEmail,
       role,
       full_name: fullName,
-      partner_type: partnerType ?? (isAdmin ? null : "creator"),
+      partner_type: partnerType ?? (isStaffDomain ? null : "creator"),
       agency_website: agencyWebsite,
       agency_contact_pic: agencyContactPic,
     });
