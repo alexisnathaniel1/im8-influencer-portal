@@ -61,12 +61,11 @@ export default function LoginPage() {
       fullName = profile?.full_name;
     }
 
-    if (role === "admin" || role === "ops" || role === "finance") {
+    const ADMIN_ROLES = ["owner", "admin", "ops", "finance", "management", "influencer_team", "support"];
+    if (role && ADMIN_ROLES.includes(role)) {
       window.location.href = "/admin";
     } else if (role === "approver") {
       window.location.href = "/approver";
-    } else if (role === "agency") {
-      window.location.href = "/partner";
     } else if (role === "editor") {
       window.location.href = "/editor";
     } else if (!fullName) {
