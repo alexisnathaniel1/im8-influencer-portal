@@ -5,8 +5,8 @@ const config = {
   framework: "nextjs",
   buildCommand: "npm run build",
   crons: [
-    // Reminder nudge: ping pending approval packets every morning at 9am UTC
     { path: "/api/crons/approval-reminders", schedule: "0 9 * * *" },
+    { path: "/api/cron/poll-metrics", schedule: "0 * * * *" },
   ],
 };
 

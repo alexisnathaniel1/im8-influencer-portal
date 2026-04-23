@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import DealsFilterBar from "@/components/deals/deals-filter-bar";
+import { canViewRates } from "@/lib/permissions";
 
 const STATUS_COLORS: Record<string, string> = {
   contacted: "bg-gray-100 text-gray-600",
@@ -27,6 +28,9 @@ export default async function DealsPage({
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
+
+  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+  const showRates = canViewRates(profile?.role ?? "");
 
   const admin = createAdminClient();
 
@@ -69,7 +73,7 @@ export default async function DealsPage({
           <table className="w-full text-sm">
             <thead className="bg-im8-sand/50 border-b border-im8-stone/30">
               <tr>
-                {["Influencer", "Platform", "Status", "Type", "Rate/mo", "Contract start", "Owner", "Updated"].map(h => (
+                {["Influencer", "Platform", "Status", "Type", ...(showRates ? ["Rate/mo"] : []), "Contract start", "Owner", "Updated"].map(h => (
                   <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-im8-burgundy/60 uppercase tracking-wide">{h}</th>
                 ))}
               </tr>
@@ -94,9 +98,11 @@ export default async function DealsPage({
                       ? <span className="text-xs px-2 py-1 rounded-full bg-amber-50 text-amber-700 font-medium">Gifted</span>
                       : <span className="text-xs text-im8-burgundy/40">Paid</span>}
                   </td>
-                  <td className="px-4 py-3 text-im8-burgundy">
-                    {d.is_gifted ? "—" : d.monthly_rate_cents ? `$${(d.monthly_rate_cents / 100).toFixed(0)}` : "—"}
-                  </td>
+                  {showRates && (
+                    <td className="px-4 py-3 text-im8-burgundy">
+                      {d.is_gifted ? "—" : d.monthly_rate_cents ? `$${(d.monthly_rate_cents / 100).toFixed(0)}` : "—"}
+                    </td>
+                  )}
                   <td className="px-4 py-3 text-im8-burgundy/60 text-xs">
                     {d.campaign_start ? new Date(d.campaign_start).toLocaleDateString() : "—"}
                   </td>

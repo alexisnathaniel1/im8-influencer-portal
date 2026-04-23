@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 
 type Deal = { id: string; influencer_name: string; platform_primary: string; status: string };
+type Deliverable = { id: string; deliverable_type: string; title: string | null; deal_id: string };
 
 function SubmitForm() {
   const searchParams = useSearchParams();
@@ -13,7 +14,9 @@ function SubmitForm() {
   const prefillBriefId = searchParams.get("briefId") || "";
 
   const [deals, setDeals] = useState<Deal[]>([]);
+  const [deliverables, setDeliverables] = useState<Deliverable[]>([]);
   const [selectedDealId, setSelectedDealId] = useState(prefillDealId);
+  const [selectedDeliverableId, setSelectedDeliverableId] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -25,6 +28,13 @@ function SubmitForm() {
       .then(r => r.json())
       .then(d => setDeals(d.deals ?? []));
   }, []);
+
+  useEffect(() => {
+    if (!selectedDealId) { setDeliverables([]); return; }
+    fetch(`/api/influencer/deliverables?dealId=${selectedDealId}`)
+      .then(r => r.json())
+      .then(d => setDeliverables(d.deliverables ?? []));
+  }, [selectedDealId]);
 
   async function computeHash(f: File): Promise<string> {
     const buf = await f.arrayBuffer();
@@ -78,6 +88,7 @@ function SubmitForm() {
         body: JSON.stringify({
           briefId: prefillBriefId || undefined,
           dealId: selectedDealId || undefined,
+          deliverableId: selectedDeliverableId || undefined,
           fileName,
           fileHash,
         }),
@@ -114,17 +125,36 @@ function SubmitForm() {
           </label>
           <select
             value={selectedDealId}
-            onChange={e => setSelectedDealId(e.target.value)}
+            onChange={e => { setSelectedDealId(e.target.value); setSelectedDeliverableId(""); }}
             className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40 bg-white"
           >
             <option value="">No specific collaboration (general upload)</option>
             {deals.map(d => (
-              <option key={d.id} value={d.id}>
-                {d.influencer_name} — {d.platform_primary}
-              </option>
+              <option key={d.id} value={d.id}>{d.influencer_name} — {d.platform_primary}</option>
             ))}
           </select>
         </div>
+
+        {/* Deliverable selector */}
+        {deliverables.length > 0 && (
+          <div>
+            <label className="block text-sm font-medium text-im8-burgundy mb-1">
+              Which deliverable is this for? <span className="text-im8-burgundy/40 font-normal">(optional)</span>
+            </label>
+            <select
+              value={selectedDeliverableId}
+              onChange={e => setSelectedDeliverableId(e.target.value)}
+              className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40 bg-white"
+            >
+              <option value="">Not tied to a specific deliverable</option>
+              {deliverables.map(d => (
+                <option key={d.id} value={d.id}>
+                  {d.deliverable_type}{d.title ? ` — ${d.title}` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* File drop zone */}
         <div

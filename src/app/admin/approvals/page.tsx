@@ -2,11 +2,15 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
 import ApprovalsDashboard from "@/components/approvals/approvals-dashboard";
+import { canViewRates } from "@/lib/permissions";
 
 export default async function ApprovalsPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
+
+  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+  const showRates = canViewRates(profile?.role ?? "");
 
   const admin = createAdminClient();
 
@@ -33,7 +37,7 @@ export default async function ApprovalsPage() {
         <h1 className="text-3xl font-bold text-im8-burgundy">Approvals</h1>
         <p className="text-im8-burgundy/60 mt-1">Bundle agreed deals for management sign-off</p>
       </div>
-      <ApprovalsDashboard agreedDeals={agreedDeals ?? []} packets={packets ?? []} approvers={approvers ?? []} />
+      <ApprovalsDashboard agreedDeals={agreedDeals ?? []} packets={packets ?? []} approvers={approvers ?? []} canViewRates={showRates} />
     </div>
   );
 }

@@ -56,11 +56,13 @@ export default async function PartnerLayout({ children }: { children: React.Reac
                 <Link href="/partner/briefs" className="text-im8-burgundy/70 hover:text-im8-red">Briefs</Link>
                 <Link href="/partner/submissions" className="text-im8-burgundy/70 hover:text-im8-red">My submissions</Link>
                 <Link href="/partner/submit" className="text-im8-burgundy/70 hover:text-im8-red">Upload content</Link>
+                <Link href="/partner/edited-videos" className="text-im8-burgundy/70 hover:text-im8-red">Edited videos</Link>
               </>
             )}
             {!hasDeal && (
               <Link href="/intake" className="text-im8-burgundy/70 hover:text-im8-red">+ New submission</Link>
             )}
+            <Link href="/partner/settings" className="text-im8-burgundy/70 hover:text-im8-red">Settings</Link>
             <SignOutButton />
           </nav>
         </div>

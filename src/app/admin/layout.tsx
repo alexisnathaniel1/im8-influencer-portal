@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import AdminNav from "@/components/shared/admin-nav";
+import { ADMIN_ROLES } from "@/lib/permissions";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
@@ -13,9 +14,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     .eq("id", user.id)
     .single();
 
-  if (!profile || !["admin", "ops", "finance"].includes(profile.role)) {
+  if (!profile || !ADMIN_ROLES.includes(profile.role)) {
     if (profile?.role === "approver") redirect("/approver");
-    if (profile?.role === "influencer") redirect("/influencer");
+    if (profile?.role === "editor") redirect("/editor");
+    if (profile?.role === "influencer" || profile?.role === "agency") redirect("/partner");
     redirect("/auth/login");
   }
 

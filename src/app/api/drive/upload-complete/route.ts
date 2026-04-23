@@ -12,7 +12,7 @@ export async function POST(request: Request) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { briefId, dealId, fileName, fileHash } = await request.json();
+    const { briefId, dealId, deliverableId, fileName, fileHash } = await request.json();
 
     if (!fileName) {
       return NextResponse.json({ error: "fileName is required" }, { status: 400 });
@@ -61,6 +61,7 @@ export async function POST(request: Request) {
       .insert({
         deal_id: dealId || null,
         brief_id: briefId || null,
+        deliverable_id: deliverableId || null,
         influencer_id: user.id,
         drive_file_id: file.id,
         drive_url: file.webViewLink,

@@ -4,12 +4,14 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { getAllowedNav } from "@/lib/permissions";
 
 const NAV = [
   { href: "/admin", label: "Dashboard", icon: "⬛" },
   { href: "/admin/discovery", label: "Discovery", icon: "🔍" },
   { href: "/admin/approvals", label: "Approvals", icon: "✅" },
   { href: "/admin/deals", label: "Partner Tracker", icon: "🤝" },
+  { href: "/admin/deliverables", label: "Deliverables", icon: "📋" },
   { href: "/admin/review", label: "Content Review", icon: "🎬" },
   { href: "/admin/settings", label: "Settings", icon: "⚙️" },
 ];
@@ -18,11 +20,14 @@ export default function AdminNav({ profile }: { profile: { full_name: string; ro
   const pathname = usePathname();
   const router = useRouter();
   const supabase = createClient();
+  const allowed = getAllowedNav(profile.role);
 
   async function signOut() {
     await supabase.auth.signOut();
     router.push("/auth/login");
   }
+
+  const visibleNav = NAV.filter(item => allowed.includes(item.href));
 
   return (
     <nav className="fixed left-0 top-0 h-full w-64 bg-im8-burgundy text-white flex flex-col">
@@ -32,7 +37,7 @@ export default function AdminNav({ profile }: { profile: { full_name: string; ro
       </div>
 
       <div className="flex-1 py-4 overflow-y-auto">
-        {NAV.map(item => {
+        {visibleNav.map(item => {
           const active = pathname === item.href || (item.href !== "/admin" && pathname.startsWith(item.href));
           return (
             <Link key={item.href} href={item.href}
@@ -48,7 +53,7 @@ export default function AdminNav({ profile }: { profile: { full_name: string; ro
 
       <div className="p-4 border-t border-white/10">
         <div className="text-xs text-white/50 mb-1 truncate">{profile.full_name}</div>
-        <div className="text-xs text-white/30 mb-3 capitalize">{profile.role}</div>
+        <div className="text-xs text-white/30 mb-3 capitalize">{profile.role.replace("_", " ")}</div>
         <button onClick={signOut}
           className="w-full text-xs text-white/50 hover:text-white py-1 text-left transition-colors">
           Sign out →

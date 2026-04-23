@@ -45,10 +45,12 @@ export default function ApprovalsDashboard({
   agreedDeals,
   packets,
   approvers,
+  canViewRates = true,
 }: {
   agreedDeals: Deal[];
   packets: Packet[];
   approvers: Approver[];
+  canViewRates?: boolean;
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -185,7 +187,7 @@ export default function ApprovalsDashboard({
                   <div className="font-medium text-im8-burgundy text-sm">{d.influencer_name}</div>
                   <div className="text-xs text-im8-burgundy/50">
                     {d.platform_primary}
-                    {d.monthly_rate_cents
+                    {canViewRates && d.monthly_rate_cents
                       ? ` · $${(d.monthly_rate_cents / 100).toFixed(0)}/mo`
                       : ""}
                     {d.agency_name ? ` · ${d.agency_name}` : ""}
@@ -350,11 +352,13 @@ export default function ApprovalsDashboard({
                       >
                         {d.influencer_name}
                       </Link>
-                      <span className="text-xs text-im8-burgundy/50">
-                        {d.monthly_rate_cents
-                          ? `$${(d.monthly_rate_cents / 100).toFixed(0)}/mo`
-                          : "—"}
-                      </span>
+                      {canViewRates && (
+                        <span className="text-xs text-im8-burgundy/50">
+                          {d.monthly_rate_cents
+                            ? `$${(d.monthly_rate_cents / 100).toFixed(0)}/mo`
+                            : "—"}
+                        </span>
+                      )}
                     </div>
                   ) : (
                     <div key={dealId}>

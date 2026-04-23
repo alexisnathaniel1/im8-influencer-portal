@@ -12,7 +12,7 @@ const STATUS_LABELS: Record<string, string> = {
   approved: "Approved",
   shortlisted: "Shortlisted",
   rejected: "Not a fit",
-  converted: "Moving forward",
+  converted: "Pending management approval",
 };
 const STATUS_COLORS: Record<string, string> = {
   new: "bg-blue-100 text-blue-700",
@@ -41,11 +41,31 @@ export default async function PartnerPage() {
 
   const email = profile?.email ?? user.email ?? "";
 
-  const { data: submissions } = await admin
-    .from("discovery_profiles")
-    .select("id, influencer_name, platform_primary, status, positioning, niche_tags, niche, proposed_rate_cents, proposed_deliverables, negotiation_counter, agency_response, created_at")
-    .or(`submitted_by_profile_id.eq.${user.id},submitter_email.eq.${email}`)
-    .order("created_at", { ascending: false });
+  // Two separate queries to avoid PostgREST escaping issues with email in .or()
+  const SELECT_FIELDS = "id, influencer_name, platform_primary, status, positioning, niche_tags, niche, proposed_rate_cents, proposed_deliverables, negotiation_counter, agency_response, created_at";
+
+  const [{ data: byProfileId }, { data: byEmail }] = await Promise.all([
+    admin
+      .from("discovery_profiles")
+      .select(SELECT_FIELDS)
+      .eq("submitted_by_profile_id", user.id)
+      .order("created_at", { ascending: false }),
+    email
+      ? admin
+          .from("discovery_profiles")
+          .select(SELECT_FIELDS)
+          .ilike("submitter_email", email)
+          .order("created_at", { ascending: false })
+      : ({ data: [] } as { data: { id: string; [k: string]: unknown }[] }),
+  ]);
+
+  // Merge and deduplicate by id
+  const seen = new Set<string>();
+  const submissions = [...(byProfileId ?? []), ...(byEmail ?? [])].filter(s => {
+    if (seen.has(s.id)) return false;
+    seen.add(s.id);
+    return true;
+  });
 
   const submissionIds = (submissions ?? []).map(s => s.id);
 
