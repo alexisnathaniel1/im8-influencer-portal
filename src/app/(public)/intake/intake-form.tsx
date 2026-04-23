@@ -306,7 +306,7 @@ export default function IntakeForm({
 
               {influencers.map((inf, idx) => (
                 <div key={inf.key} className="border border-im8-stone/30 rounded-xl p-5 space-y-5">
-                  {(isMulti || (isAdmin && influencers.length > 1)) && (
+                  {isMulti && (
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-semibold text-im8-burgundy/60 uppercase tracking-wide">
                         Creator {influencers.length > 1 ? idx + 1 : ""}
@@ -476,8 +476,8 @@ export default function IntakeForm({
                 </div>
               ))}
 
-              {/* Add another — always shown for agency mode; admin can always add more */}
-              {(isMulti || isAdmin) && (
+              {/* Add another — only shown in agency mode */}
+              {isMulti && (
                 <button
                   type="button"
                   onClick={addInfluencer}
