@@ -10,6 +10,22 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   return NextResponse.json({ profile });
 }
 
+const STATUS_LABELS: Record<string, string> = {
+  new: "Submitted",
+  reviewing: "Under review",
+  negotiation_needed: "Negotiation needed",
+  approved: "Approved",
+  rejected: "Not a fit",
+  converted: "Pending mgmt approval",
+  shortlisted: "Approved",
+};
+
+const ROLE_LABELS: Record<string, string> = {
+  admin: "Admin",
+  management: "Management",
+  support: "Support",
+};
+
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
@@ -21,6 +37,22 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const updates = Object.fromEntries(Object.entries(body).filter(([k]) => allowed.includes(k)));
 
   const admin = createAdminClient();
+
+  // Fetch admin's profile for attribution
+  const { data: actorProfile } = await admin
+    .from("profiles")
+    .select("full_name, role")
+    .eq("id", user.id)
+    .single();
+
+  if (!actorProfile || !["admin", "management", "support"].includes(actorProfile.role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const actorName = actorProfile.full_name || user.email || "Admin";
+  const actorRole = ROLE_LABELS[actorProfile.role] ?? actorProfile.role;
+  const actorDisplay = `${actorName} · ${actorRole}`;
+
   const { data: before } = await admin
     .from("discovery_profiles")
     .select("*")
@@ -28,6 +60,20 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     .single();
 
   await admin.from("discovery_profiles").update(updates).eq("id", id);
+
+  // Log status changes to the activity thread
+  if (updates.status && before && before.status !== updates.status) {
+    const fromLabel = STATUS_LABELS[before.status] ?? before.status;
+    const toLabel = STATUS_LABELS[updates.status] ?? updates.status;
+    await admin.from("discovery_comments").insert({
+      discovery_profile_id: id,
+      author_id: user.id,
+      author_display_name: actorDisplay,
+      body: `Status changed from "${fromLabel}" → "${toLabel}"`,
+      kind: "status_change",
+      visible_to_partner: false,
+    });
+  }
 
   // When the admin approves a discovery profile, auto-create an approval packet
   // seeded from the profile so management review can begin.
@@ -72,12 +118,6 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       }
 
       if (dealId) {
-        const { data: profileRow } = await admin
-          .from("profiles")
-          .select("id, full_name")
-          .eq("id", user.id)
-          .single();
-
         await admin.from("approval_packets").insert({
           created_by: user.id,
           title: `${before.influencer_name} — discovery approval`,
@@ -95,8 +135,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         await admin.from("discovery_comments").insert({
           discovery_profile_id: id,
           author_id: user.id,
-          author_display_name: profileRow?.full_name ?? "System",
-          body: `Approved and moved to Approvals queue.`,
+          author_display_name: actorDisplay,
+          body: `Approved and moved to the Approvals queue.`,
           kind: "status_change",
           visible_to_partner: false,
         });

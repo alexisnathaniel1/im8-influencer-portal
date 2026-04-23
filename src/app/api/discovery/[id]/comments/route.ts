@@ -36,16 +36,21 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     .eq("id", user.id)
     .single();
 
+  const ROLE_LABELS: Record<string, string> = { admin: "Admin", management: "Management", support: "Support" };
+
   if (!profile || !["admin", "management", "support"].includes(profile.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+
+  const authorName = profile.full_name || user.email || "Admin";
+  const authorDisplay = `${authorName} · ${ROLE_LABELS[profile.role] ?? profile.role}`;
 
   const { data: comment, error } = await admin
     .from("discovery_comments")
     .insert({
       discovery_profile_id: id,
       author_id: user.id,
-      author_display_name: profile.full_name || user.email || "Admin",
+      author_display_name: authorDisplay,
       body: commentBody,
       visible_to_partner: visibleToPartner,
       kind: "comment",

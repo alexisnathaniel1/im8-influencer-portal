@@ -22,9 +22,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     .eq("id", user.id)
     .single();
 
+  const ROLE_LABELS: Record<string, string> = { admin: "Admin", management: "Management", support: "Support" };
+
   if (!profile || !["admin", "management", "support"].includes(profile.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+
+  const authorDisplay = `${profile.full_name || "Admin"} · ${ROLE_LABELS[profile.role] ?? profile.role}`;
 
   const { data: discovery } = await admin
     .from("discovery_profiles")
@@ -62,8 +66,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     .insert({
       discovery_profile_id: id,
       author_id: user.id,
-      author_display_name: profile.full_name || "Admin",
-      body: `Notified ${to}${message ? `:\n\n${message}` : ""}`,
+      author_display_name: authorDisplay,
+      body: `Emailed ${to}${message ? `:\n\n${message}` : ""}`,
       visible_to_partner: true,
       kind: "notify",
     })

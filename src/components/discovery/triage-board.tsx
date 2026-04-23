@@ -60,6 +60,13 @@ function ScoreBadge({ score }: { score: number | null }) {
   return <span className={`text-sm font-bold ${color}`}>{score}/100</span>;
 }
 
+const STANDARD_USAGE_RIGHTS = ["Whitelisting", "Paid ad usage rights", "Link in bio"];
+
+const DELIVERABLE_LABELS: Record<string, string> = {
+  IGR: "IG Reels", IGS: "IG Stories", UGC: "UGC Videos",
+  TIKTOK: "TikTok Videos", YT: "YouTube Videos",
+};
+
 type Comment = {
   id: string;
   author_display_name: string;
@@ -68,6 +75,9 @@ type Comment = {
   kind: string;
   created_at: string;
 };
+
+// mode for the unified activity composer
+type NoteMode = "internal" | "visible" | "email";
 
 export default function DiscoveryBoard({
   profiles,
@@ -84,11 +94,10 @@ export default function DiscoveryBoard({
   const [openProfile, setOpenProfile] = useState<DiscoveryProfile | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
   const [commentsLoading, setCommentsLoading] = useState(false);
-  const [commentBody, setCommentBody] = useState("");
-  const [commentVisibleToPartner, setCommentVisibleToPartner] = useState(false);
-  const [notifyEmail, setNotifyEmail] = useState("");
-  const [notifyMessage, setNotifyMessage] = useState("");
-  const [notifying, setNotifying] = useState(false);
+  const [noteBody, setNoteBody] = useState("");
+  const [noteMode, setNoteMode] = useState<NoteMode>("internal");
+  const [noteEmail, setNoteEmail] = useState("");
+  const [noteSubmitting, setNoteSubmitting] = useState(false);
   const [counterOffer, setCounterOffer] = useState("");
   const [savingCounter, setSavingCounter] = useState(false);
 
@@ -99,27 +108,9 @@ export default function DiscoveryBoard({
     router.push(`/admin/discovery?${params.toString()}`);
   }
 
-  async function updateStatus(profileId: string, newStatus: string) {
-    setUpdating(profileId);
-    const res = await fetch(`/api/discovery/${profileId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: newStatus }),
-    });
-    if (!res.ok) {
-      alert("Failed to update status");
-    }
-    router.refresh();
-    setUpdating(null);
-  }
-
-  async function openRow(profile: DiscoveryProfile) {
-    setOpenProfile(profile);
-    setNotifyEmail(profile.submitter_email ?? "");
-    setNotifyMessage("");
-    setCounterOffer(profile.negotiation_counter ?? "");
+  async function loadComments(profileId: string) {
     setCommentsLoading(true);
-    const res = await fetch(`/api/discovery/${profile.id}/comments`);
+    const res = await fetch(`/api/discovery/${profileId}/comments`);
     if (res.ok) {
       const data = await res.json();
       setComments(data.comments ?? []);
@@ -127,44 +118,72 @@ export default function DiscoveryBoard({
     setCommentsLoading(false);
   }
 
+  async function openRow(profile: DiscoveryProfile) {
+    setOpenProfile(profile);
+    setNoteEmail(profile.submitter_email ?? "");
+    setNoteBody("");
+    setNoteMode("internal");
+    setCounterOffer(profile.negotiation_counter ?? "");
+    await loadComments(profile.id);
+  }
+
   function closeRow() {
     setOpenProfile(null);
     setComments([]);
-    setCommentBody("");
+    setNoteBody("");
   }
 
-  async function postComment() {
-    if (!openProfile || !commentBody.trim()) return;
-    const res = await fetch(`/api/discovery/${openProfile.id}/comments`, {
-      method: "POST",
+  async function updateStatus(profileId: string, newStatus: string) {
+    setUpdating(profileId);
+    const res = await fetch(`/api/discovery/${profileId}`, {
+      method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ body: commentBody, visible_to_partner: commentVisibleToPartner }),
+      body: JSON.stringify({ status: newStatus }),
     });
-    if (res.ok) {
-      const data = await res.json();
-      setComments(prev => [...prev, data.comment]);
-      setCommentBody("");
-    } else {
-      alert("Failed to post comment");
+    if (!res.ok) alert("Failed to update status");
+    // Refresh activity feed if panel is open
+    if (openProfile?.id === profileId) {
+      setOpenProfile(p => p ? { ...p, status: newStatus } : p);
+      await loadComments(profileId);
     }
+    router.refresh();
+    setUpdating(null);
   }
 
-  async function sendNotify() {
-    if (!openProfile || !notifyEmail.trim()) return;
-    setNotifying(true);
-    const res = await fetch(`/api/discovery/${openProfile.id}/notify`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ to: notifyEmail, message: notifyMessage }),
-    });
-    setNotifying(false);
-    if (res.ok) {
-      setNotifyMessage("");
-      const data = await res.json();
-      if (data.comment) setComments(prev => [...prev, data.comment]);
+  async function submitNote() {
+    if (!openProfile || !noteBody.trim()) return;
+    setNoteSubmitting(true);
+
+    if (noteMode === "email") {
+      if (!noteEmail.trim()) { setNoteSubmitting(false); return; }
+      const res = await fetch(`/api/discovery/${openProfile.id}/notify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to: noteEmail, message: noteBody }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.comment) setComments(prev => [...prev, data.comment]);
+        setNoteBody("");
+      } else {
+        alert("Failed to send email");
+      }
     } else {
-      alert("Failed to send notification");
+      const res = await fetch(`/api/discovery/${openProfile.id}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body: noteBody, visible_to_partner: noteMode === "visible" }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setComments(prev => [...prev, data.comment]);
+        setNoteBody("");
+      } else {
+        alert("Failed to post note");
+      }
     }
+
+    setNoteSubmitting(false);
   }
 
   async function saveCounterOffer() {
@@ -368,14 +387,23 @@ export default function DiscoveryBoard({
                 </div>
               )}
 
+              {/* Deliverables + Usage rights */}
               {openProfile.proposed_deliverables && openProfile.proposed_deliverables.length > 0 && (
                 <div>
                   <div className="text-xs text-im8-burgundy/50 uppercase tracking-wide mb-2">Proposed deliverables</div>
+                  <div className="flex flex-wrap gap-1 mb-3">
+                    {openProfile.proposed_deliverables
+                      .filter(d => d.code !== "WHITELIST")
+                      .map(d => (
+                        <span key={d.code} className="text-xs bg-im8-red/10 text-im8-burgundy px-2 py-0.5 rounded-full">
+                          {d.count} × {DELIVERABLE_LABELS[d.code] ?? d.code}
+                        </span>
+                      ))}
+                  </div>
+                  <div className="text-xs text-im8-burgundy/50 uppercase tracking-wide mb-1">Usage rights (standard)</div>
                   <div className="flex flex-wrap gap-1">
-                    {openProfile.proposed_deliverables.map(d => (
-                      <span key={d.code} className="text-xs bg-im8-red/10 text-im8-burgundy px-2 py-0.5 rounded-full">
-                        {d.count} × {d.code}
-                      </span>
+                    {STANDARD_USAGE_RIGHTS.map(r => (
+                      <span key={r} className="text-xs bg-im8-sand text-im8-burgundy/70 px-2 py-0.5 rounded-full">{r}</span>
                     ))}
                   </div>
                 </div>
@@ -416,59 +444,85 @@ export default function DiscoveryBoard({
                 </div>
               )}
 
-              {/* Notify */}
-              <div className="border-t border-im8-stone/30 pt-5">
-                <div className="text-xs text-im8-burgundy/50 uppercase tracking-wide mb-2">Notify submitter</div>
-                <div className="space-y-2">
-                  <input type="email" value={notifyEmail} onChange={e => setNotifyEmail(e.target.value)}
-                    placeholder="email@example.com"
-                    className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy" />
-                  <textarea value={notifyMessage} onChange={e => setNotifyMessage(e.target.value)}
-                    placeholder="Optional message to include in the email"
-                    rows={2}
-                    className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy resize-none" />
-                  <button onClick={sendNotify} disabled={notifying || !notifyEmail.trim()}
-                    className="w-full py-2 bg-im8-red text-white text-sm font-medium rounded-lg hover:bg-im8-burgundy disabled:opacity-50 transition-colors">
-                    {notifying ? "Sending..." : "Send notification"}
-                  </button>
-                </div>
-              </div>
+              {/* Unified activity feed */}
+              <div className="border-t border-im8-stone/30 pt-5 space-y-4">
+                <div className="text-xs text-im8-burgundy/50 uppercase tracking-wide">Activity</div>
 
-              {/* Comments */}
-              <div className="border-t border-im8-stone/30 pt-5">
-                <div className="text-xs text-im8-burgundy/50 uppercase tracking-wide mb-3">Comments</div>
+                {/* Feed */}
                 {commentsLoading ? (
                   <p className="text-xs text-im8-burgundy/40">Loading…</p>
                 ) : comments.length === 0 ? (
-                  <p className="text-xs text-im8-burgundy/40">No comments yet.</p>
+                  <p className="text-xs text-im8-burgundy/40 italic">No activity yet.</p>
                 ) : (
-                  <div className="space-y-3 mb-4">
-                    {comments.map(c => (
-                      <div key={c.id} className="bg-im8-sand/40 rounded-lg p-3">
-                        <div className="flex items-center justify-between text-xs text-im8-burgundy/60 mb-1">
-                          <span className="font-medium">{c.author_display_name || "System"}</span>
-                          <span>{new Date(c.created_at).toLocaleString()}</span>
+                  <div className="space-y-2">
+                    {comments.map(c => {
+                      const isSystem = c.kind === "status_change";
+                      const isEmail = c.kind === "notify";
+                      return (
+                        <div key={c.id} className={`rounded-lg p-3 text-sm ${
+                          isSystem ? "bg-gray-50 border border-gray-200" :
+                          isEmail  ? "bg-blue-50 border border-blue-200" :
+                          c.visible_to_partner ? "bg-green-50 border border-green-200" :
+                          "bg-im8-sand/40 border border-im8-stone/20"
+                        }`}>
+                          <div className="flex items-start justify-between gap-2 mb-1">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-xs font-semibold text-im8-burgundy">
+                                {c.author_display_name || "System"}
+                              </span>
+                              {isSystem && <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-200 text-gray-600 font-medium">Status change</span>}
+                              {isEmail  && <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-200 text-blue-700 font-medium">Email sent</span>}
+                              {!isSystem && !isEmail && c.visible_to_partner && <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-200 text-green-700 font-medium">Visible to submitter</span>}
+                              {!isSystem && !isEmail && !c.visible_to_partner && <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 font-medium">Internal</span>}
+                            </div>
+                            <span className="text-[10px] text-im8-burgundy/40 shrink-0 whitespace-nowrap">
+                              {new Date(c.created_at).toLocaleString("en-AU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                            </span>
+                          </div>
+                          <p className="text-im8-burgundy/80 whitespace-pre-wrap">{c.body}</p>
                         </div>
-                        <p className="text-sm text-im8-burgundy whitespace-pre-wrap">{c.body}</p>
-                        {c.visible_to_partner && (
-                          <div className="text-xs text-green-700 mt-1">Visible to agency/creator</div>
-                        )}
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
-                <textarea value={commentBody} onChange={e => setCommentBody(e.target.value)}
-                  placeholder="Add a comment…"
-                  rows={3}
-                  className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy resize-none" />
-                <div className="flex items-center justify-between mt-2">
-                  <label className="flex items-center gap-2 text-xs text-im8-burgundy/70">
-                    <input type="checkbox" checked={commentVisibleToPartner} onChange={e => setCommentVisibleToPartner(e.target.checked)} />
-                    Share with submitter
-                  </label>
-                  <button onClick={postComment} disabled={!commentBody.trim()}
-                    className="px-3 py-1.5 bg-im8-burgundy text-white text-sm rounded-lg hover:bg-im8-red transition-colors disabled:opacity-50">
-                    Post comment
+
+                {/* Composer */}
+                <div className="space-y-2">
+                  {/* Mode selector */}
+                  <div className="flex rounded-lg overflow-hidden border border-im8-stone/40 text-xs font-medium">
+                    {(["internal", "visible", "email"] as NoteMode[]).map((m) => {
+                      const labels = { internal: "Internal note", visible: "Share with submitter", email: "Email submitter" };
+                      return (
+                        <button key={m} type="button"
+                          onClick={() => setNoteMode(m)}
+                          className={`flex-1 py-1.5 transition-colors ${noteMode === m ? "bg-im8-burgundy text-white" : "bg-white text-im8-burgundy/60 hover:bg-im8-sand"}`}>
+                          {labels[m]}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Email recipient (shown only in email mode) */}
+                  {noteMode === "email" && (
+                    <input type="email" value={noteEmail} onChange={e => setNoteEmail(e.target.value)}
+                      placeholder="Recipient email"
+                      className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40" />
+                  )}
+
+                  <textarea value={noteBody} onChange={e => setNoteBody(e.target.value)}
+                    placeholder={
+                      noteMode === "internal" ? "Add an internal note (only visible to the team)…" :
+                      noteMode === "visible"  ? "Write a note — the submitter will see this on their dashboard…" :
+                      "Write your message — this will be sent by email and logged here…"
+                    }
+                    rows={3}
+                    className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40 resize-none"
+                  />
+                  <button
+                    onClick={submitNote}
+                    disabled={noteSubmitting || !noteBody.trim() || (noteMode === "email" && !noteEmail.trim())}
+                    className="w-full py-2 bg-im8-burgundy text-white text-sm font-medium rounded-lg hover:bg-im8-red disabled:opacity-50 transition-colors">
+                    {noteSubmitting ? "Posting…" : noteMode === "email" ? "Send email & log" : "Post note"}
                   </button>
                 </div>
               </div>

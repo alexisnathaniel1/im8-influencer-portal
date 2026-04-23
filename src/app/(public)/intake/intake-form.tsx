@@ -124,7 +124,6 @@ export default function IntakeForm({
             { code: "IGR", count: 3 },
             { code: "IGS", count: 3 },
             { code: "UGC", count: 3 },
-            { code: "WHITELIST", count: 1 },
           ]
         : [],
       customDeliverables: inf.useStandardDeliverables ? null : inf.customDeliverables,
