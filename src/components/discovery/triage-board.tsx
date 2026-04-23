@@ -99,8 +99,13 @@ export default function DiscoveryBoard({
   const [noteMode, setNoteMode] = useState<NoteMode>("internal");
   const [noteEmail, setNoteEmail] = useState("");
   const [noteSubmitting, setNoteSubmitting] = useState(false);
-  const [counterOffer, setCounterOffer] = useState("");
-  const [savingCounter, setSavingCounter] = useState(false);
+
+  // Counter-proposal fields
+  const [counterRate, setCounterRate] = useState("");
+  const [counterDeliverables, setCounterDeliverables] = useState<Array<{ code: string; count: number }>>([]);
+  const [counterNotes, setCounterNotes] = useState("");
+  const [counterEmail, setCounterEmail] = useState("");
+  const [sendingCounter, setSendingCounter] = useState(false);
 
   function applyFilter(key: string, value: string) {
     const params = new URLSearchParams(currentFilters as Record<string, string>);
@@ -124,7 +129,13 @@ export default function DiscoveryBoard({
     setNoteEmail(profile.submitter_email ?? "");
     setNoteBody("");
     setNoteMode("internal");
-    setCounterOffer(profile.negotiation_counter ?? "");
+    // Initialise counter-proposal from existing profile values
+    setCounterRate(profile.proposed_rate_cents ? String(profile.proposed_rate_cents / 100) : "");
+    setCounterDeliverables(
+      (profile.proposed_deliverables ?? []).filter(d => d.code !== "WHITELIST")
+    );
+    setCounterNotes(profile.negotiation_counter ?? "");
+    setCounterEmail(profile.submitter_email ?? "");
     await loadComments(profile.id);
   }
 
@@ -187,16 +198,28 @@ export default function DiscoveryBoard({
     setNoteSubmitting(false);
   }
 
-  async function saveCounterOffer() {
-    if (!openProfile) return;
-    setSavingCounter(true);
-    await fetch(`/api/discovery/${openProfile.id}`, {
-      method: "PATCH",
+  async function sendCounterProposal() {
+    if (!openProfile || !counterEmail.trim()) return;
+    setSendingCounter(true);
+    const res = await fetch(`/api/discovery/${openProfile.id}/counter`, {
+      method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ negotiation_counter: counterOffer }),
+      body: JSON.stringify({
+        to: counterEmail,
+        rate_usd: counterRate ? parseFloat(counterRate) : null,
+        deliverables: counterDeliverables,
+        notes: counterNotes || null,
+        total_months: 3,
+      }),
     });
-    setSavingCounter(false);
-    router.refresh();
+    setSendingCounter(false);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.comment) setComments(prev => [...prev, data.comment]);
+      router.refresh();
+    } else {
+      alert("Failed to send counter-proposal. Please try again.");
+    }
   }
 
   return (
@@ -454,25 +477,101 @@ export default function DiscoveryBoard({
                 </div>
               )}
 
-              {/* Counter-offer (negotiation_needed only) */}
+              {/* Counter-proposal (negotiation_needed only) */}
               {openProfile.status === "negotiation_needed" && (
-                <div className="border-t border-im8-stone/30 pt-5">
-                  <div className="text-xs text-orange-600 uppercase tracking-wide mb-2 font-semibold">Counter-proposal to agency</div>
-                  {openProfile.agency_response && (
-                    <div className={`mb-3 text-xs px-3 py-2 rounded-lg font-medium ${openProfile.agency_response === "accepted" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
-                      Agency {openProfile.agency_response === "accepted" ? "accepted" : "declined"} this proposal
+                <div className="border border-orange-200 bg-orange-50 rounded-xl p-4 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold text-orange-700 uppercase tracking-wide">
+                      Counter-proposal to {openProfile.agency_name ? "agency" : "creator"}
+                    </p>
+                    {openProfile.agency_response && (
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${openProfile.agency_response === "accepted" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
+                        {openProfile.agency_response === "accepted" ? "✓ Accepted" : "✗ Declined"}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Rate */}
+                  <div>
+                    <label className="block text-xs font-semibold text-orange-700 mb-1">Monthly rate (USD)</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-im8-burgundy/50">$</span>
+                      <input
+                        type="number" min="0" value={counterRate}
+                        onChange={e => setCounterRate(e.target.value)}
+                        placeholder="e.g. 3000"
+                        className="w-full pl-7 pr-3 py-2 border border-orange-300 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-orange-400/40"
+                      />
                     </div>
-                  )}
-                  <textarea
-                    value={counterOffer}
-                    onChange={e => setCounterOffer(e.target.value)}
-                    placeholder="Write your counter-proposal here — rates, revised deliverables, terms... This will be visible to the agency on their dashboard."
-                    rows={4}
-                    className="w-full px-3 py-2 border border-orange-300 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-orange-400/40 resize-none"
-                  />
-                  <button onClick={saveCounterOffer} disabled={savingCounter}
-                    className="mt-2 w-full py-2 bg-orange-500 text-white text-sm font-medium rounded-lg hover:bg-orange-600 disabled:opacity-50 transition-colors">
-                    {savingCounter ? "Saving..." : "Save counter-proposal"}
+                    {counterRate && (
+                      <p className="text-xs text-orange-600 mt-1">${(parseFloat(counterRate) * 3).toLocaleString()} total over 3 months</p>
+                    )}
+                  </div>
+
+                  {/* Deliverables */}
+                  <div>
+                    <label className="block text-xs font-semibold text-orange-700 mb-2">Deliverables</label>
+                    <div className="space-y-2">
+                      {counterDeliverables.map((d, idx) => (
+                        <div key={d.code} className="flex items-center gap-2">
+                          <select
+                            value={d.code}
+                            onChange={e => setCounterDeliverables(prev => prev.map((x, i) => i === idx ? { ...x, code: e.target.value } : x))}
+                            className="flex-1 px-2 py-1.5 border border-orange-300 rounded-lg text-sm text-im8-burgundy focus:outline-none bg-white"
+                          >
+                            {["IGR","IGS","UGC","TIKTOK","YT"].map(c => (
+                              <option key={c} value={c}>{DELIVERABLE_LABELS[c] ?? c}</option>
+                            ))}
+                          </select>
+                          <input
+                            type="number" min="1" max="20" value={d.count}
+                            onChange={e => setCounterDeliverables(prev => prev.map((x, i) => i === idx ? { ...x, count: parseInt(e.target.value) || 1 } : x))}
+                            className="w-16 px-2 py-1.5 border border-orange-300 rounded-lg text-sm text-im8-burgundy text-center focus:outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setCounterDeliverables(prev => prev.filter((_, i) => i !== idx))}
+                            className="text-orange-400 hover:text-red-500 text-lg leading-none px-1"
+                          >×</button>
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => setCounterDeliverables(prev => [...prev, { code: "IGR", count: 1 }])}
+                        className="text-xs text-orange-600 hover:text-orange-800 font-medium"
+                      >+ Add deliverable</button>
+                    </div>
+                  </div>
+
+                  {/* Notes */}
+                  <div>
+                    <label className="block text-xs font-semibold text-orange-700 mb-1">Additional notes <span className="font-normal text-orange-500">(optional)</span></label>
+                    <textarea
+                      value={counterNotes}
+                      onChange={e => setCounterNotes(e.target.value)}
+                      placeholder="Any additional context, conditions, or terms to include in the email…"
+                      rows={3}
+                      className="w-full px-3 py-2 border border-orange-300 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-orange-400/40 resize-none"
+                    />
+                  </div>
+
+                  {/* Recipient */}
+                  <div>
+                    <label className="block text-xs font-semibold text-orange-700 mb-1">Send to</label>
+                    <input
+                      type="email" value={counterEmail}
+                      onChange={e => setCounterEmail(e.target.value)}
+                      placeholder="recipient@example.com"
+                      className="w-full px-3 py-2 border border-orange-300 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-orange-400/40"
+                    />
+                  </div>
+
+                  <button
+                    onClick={sendCounterProposal}
+                    disabled={sendingCounter || !counterEmail.trim()}
+                    className="w-full py-2 bg-orange-500 text-white text-sm font-semibold rounded-lg hover:bg-orange-600 disabled:opacity-50 transition-colors"
+                  >
+                    {sendingCounter ? "Sending…" : "Send counter-proposal email"}
                   </button>
                 </div>
               )}

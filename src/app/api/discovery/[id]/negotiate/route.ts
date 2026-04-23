@@ -26,11 +26,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   // Log a partner-visible comment recording the response
   const { data: profile } = await admin.from("profiles").select("full_name, email").eq("id", user.id).single();
+  const { data: discovery } = await admin.from("discovery_profiles").select("agency_name").eq("id", id).single();
+  const submitterLabel = discovery?.agency_name ? "Agency" : "Creator";
   await admin.from("discovery_comments").insert({
     discovery_profile_id: id,
     author_id: user.id,
-    author_display_name: profile?.full_name ?? profile?.email ?? "Agency",
-    body: response === "accepted" ? "Agency accepted the counter-proposal." : "Agency declined the counter-proposal.",
+    author_display_name: profile?.full_name ?? profile?.email ?? submitterLabel,
+    body: response === "accepted"
+      ? `${submitterLabel} accepted the counter-proposal.`
+      : `${submitterLabel} declined the counter-proposal.`,
     visible_to_partner: true,
     kind: "agency_response",
   });
