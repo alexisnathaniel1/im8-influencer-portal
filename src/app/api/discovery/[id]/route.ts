@@ -104,9 +104,11 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
             niche_tags: before.niche_tags ?? before.niche ?? [],
             deliverables: before.proposed_deliverables ?? [],
             monthly_rate_cents: before.proposed_rate_cents ?? null,
-            total_months: 3,
+            total_months: before.total_months ?? 3,
             rationale: before.positioning ?? null,
             assigned_to: user.id,
+            contract_sequence: 1,
+            previous_deal_id: null,
           })
           .select("id")
           .single();
@@ -121,7 +123,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       if (dealId) {
         await admin.from("approval_packets").insert({
           created_by: user.id,
-          title: `${before.influencer_name} — discovery approval`,
+          title: `${before.influencer_name} — Contract 1`,
           status: "pending",
           deal_ids: [dealId],
           approver_ids: [],

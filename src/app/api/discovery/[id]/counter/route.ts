@@ -59,6 +59,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     proposed_rate_cents: rate_cents ?? undefined,
     proposed_deliverables: deliverables,
     negotiation_counter: notes ?? null,
+    total_months: total_months,
   }).eq("id", id);
 
   // Send the email
@@ -93,7 +94,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     discovery_profile_id: id,
     author_id: user.id,
     author_display_name: actorDisplay,
-    body: `Counter-proposal sent to ${to}.\nRate: ${rateNote} · Deliverables: ${deliverablesSummary}${notes ? `\nNotes: ${notes}` : ""}`,
+    body: `Counter-proposal sent to ${to}.\nRate: ${rateNote} · Duration: ${total_months}mo · Deliverables: ${deliverablesSummary}${notes ? `\nNotes: ${notes}` : ""}`,
     visible_to_partner: true,
     kind: "notify",
   }).select("*").single();

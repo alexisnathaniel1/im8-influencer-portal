@@ -30,6 +30,7 @@ type DiscoveryProfile = {
   created_at: string;
   negotiation_counter: string | null;
   agency_response: string | null;
+  total_months: number | null;
 };
 
 // Filter tabs ordered to reflect the pipeline stages.
@@ -102,6 +103,7 @@ export default function DiscoveryBoard({
 
   // Counter-proposal fields
   const [counterRate, setCounterRate] = useState("");
+  const [counterMonths, setCounterMonths] = useState("3");
   const [counterDeliverables, setCounterDeliverables] = useState<Array<{ code: string; count: number }>>([]);
   const [counterNotes, setCounterNotes] = useState("");
   const [counterEmail, setCounterEmail] = useState("");
@@ -131,6 +133,7 @@ export default function DiscoveryBoard({
     setNoteMode("internal");
     // Initialise counter-proposal from existing profile values
     setCounterRate(profile.proposed_rate_cents ? String(profile.proposed_rate_cents / 100) : "");
+    setCounterMonths(profile.total_months ? String(profile.total_months) : "3");
     setCounterDeliverables(
       (profile.proposed_deliverables ?? []).filter(d => d.code !== "WHITELIST")
     );
@@ -201,6 +204,8 @@ export default function DiscoveryBoard({
   async function sendCounterProposal() {
     if (!openProfile || !counterEmail.trim()) return;
     setSendingCounter(true);
+    const parsedMonths = parseInt(counterMonths);
+    const months = Number.isFinite(parsedMonths) && parsedMonths > 0 ? parsedMonths : 3;
     const res = await fetch(`/api/discovery/${openProfile.id}/counter`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -209,7 +214,7 @@ export default function DiscoveryBoard({
         rate_usd: counterRate ? parseFloat(counterRate) : null,
         deliverables: counterDeliverables,
         notes: counterNotes || null,
-        total_months: 3,
+        total_months: months,
       }),
     });
     setSendingCounter(false);
@@ -491,22 +496,38 @@ export default function DiscoveryBoard({
                     )}
                   </div>
 
-                  {/* Rate */}
-                  <div>
-                    <label className="block text-xs font-semibold text-orange-700 mb-1">Monthly rate (USD)</label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-im8-burgundy/50">$</span>
-                      <input
-                        type="number" min="0" value={counterRate}
-                        onChange={e => setCounterRate(e.target.value)}
-                        placeholder="e.g. 3000"
-                        className="w-full pl-7 pr-3 py-2 border border-orange-300 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-orange-400/40"
-                      />
+                  {/* Rate + Duration */}
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="col-span-2">
+                      <label className="block text-xs font-semibold text-orange-700 mb-1">Monthly rate (USD)</label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-im8-burgundy/50">$</span>
+                        <input
+                          type="number" min="0" value={counterRate}
+                          onChange={e => setCounterRate(e.target.value)}
+                          placeholder="e.g. 3000"
+                          className="w-full pl-7 pr-3 py-2 border border-orange-300 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-orange-400/40"
+                        />
+                      </div>
                     </div>
-                    {counterRate && (
-                      <p className="text-xs text-orange-600 mt-1">${(parseFloat(counterRate) * 3).toLocaleString()} total over 3 months</p>
-                    )}
+                    <div>
+                      <label className="block text-xs font-semibold text-orange-700 mb-1">Duration</label>
+                      <div className="relative">
+                        <input
+                          type="number" min="1" max="24" value={counterMonths}
+                          onChange={e => setCounterMonths(e.target.value)}
+                          placeholder="3"
+                          className="w-full pl-3 pr-12 py-2 border border-orange-300 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-orange-400/40"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-im8-burgundy/50 pointer-events-none">months</span>
+                      </div>
+                    </div>
                   </div>
+                  {counterRate && (
+                    <p className="text-xs text-orange-600 -mt-2">
+                      ${(parseFloat(counterRate) * (parseInt(counterMonths) || 3)).toLocaleString()} total over {parseInt(counterMonths) || 3} month{(parseInt(counterMonths) || 3) === 1 ? "" : "s"}
+                    </p>
+                  )}
 
                   {/* Deliverables */}
                   <div>

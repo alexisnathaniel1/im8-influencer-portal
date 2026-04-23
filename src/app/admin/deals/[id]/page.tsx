@@ -50,12 +50,36 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
     partnerShippingAddress = (partnerProfile?.shipping_address_json as Record<string, string>) ?? null;
   }
 
+  // Lookup previous contract for the breadcrumb link
+  const contractSeq = (deal.contract_sequence as number | null) ?? 1;
+  const prevDealId = deal.previous_deal_id as string | null;
+  let prevContract: { id: string; contract_sequence: number | null; status: string } | null = null;
+  if (prevDealId) {
+    const { data: prev } = await admin
+      .from("deals")
+      .select("id, contract_sequence, status")
+      .eq("id", prevDealId)
+      .single();
+    prevContract = prev ?? null;
+  }
+
   return (
     <div className="space-y-6 animate-fade-in max-w-4xl">
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 flex-wrap">
         <Link href="/admin/deals" className="text-im8-burgundy/50 hover:text-im8-burgundy text-sm">← Partner Tracker</Link>
         <span className="text-im8-burgundy/30">/</span>
         <h1 className="text-2xl font-bold text-im8-burgundy">{deal.influencer_name}</h1>
+        <span className="text-xs px-2.5 py-1 rounded-full bg-purple-100 text-purple-700 font-semibold">
+          Contract {contractSeq}
+        </span>
+        {prevContract && (
+          <Link
+            href={`/admin/deals/${prevContract.id}`}
+            className="text-xs text-im8-burgundy/50 hover:text-im8-red hover:underline"
+          >
+            ← Contract {prevContract.contract_sequence ?? 1} ({prevContract.status.replace("_", " ")})
+          </Link>
+        )}
       </div>
 
       <DealDetailClient

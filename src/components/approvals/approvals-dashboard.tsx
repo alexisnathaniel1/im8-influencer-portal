@@ -13,6 +13,7 @@ type Deal = {
   total_months: number | null;
   total_rate_cents: number | null;
   rationale: string | null;
+  contract_sequence: number | null;
 };
 type Packet = {
   id: string;
@@ -184,12 +185,18 @@ export default function ApprovalsDashboard({
                   className="mt-0.5 accent-im8-red"
                 />
                 <div className="flex-1 min-w-0">
-                  <div className="font-medium text-im8-burgundy text-sm">{d.influencer_name}</div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-medium text-im8-burgundy text-sm">{d.influencer_name}</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700 font-semibold">
+                      Contract {d.contract_sequence ?? 1}
+                    </span>
+                  </div>
                   <div className="text-xs text-im8-burgundy/50">
                     {d.platform_primary}
                     {canViewRates && d.monthly_rate_cents
                       ? ` · $${(d.monthly_rate_cents / 100).toFixed(0)}/mo`
                       : ""}
+                    {d.total_months ? ` · ${d.total_months}mo` : ""}
                     {d.agency_name ? ` · ${d.agency_name}` : ""}
                   </div>
                   {d.rationale && (
@@ -344,18 +351,23 @@ export default function ApprovalsDashboard({
                 {openPacket.deal_ids.map((dealId) => {
                   const d = dealsById[dealId];
                   return d ? (
-                    <div key={dealId} className="flex items-center justify-between">
-                      <Link
-                        href={`/admin/deals/${dealId}`}
-                        className="text-sm font-medium text-im8-red hover:underline"
-                        onClick={() => setOpenPacket(null)}
-                      >
-                        {d.influencer_name}
-                      </Link>
+                    <div key={dealId} className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Link
+                          href={`/admin/deals/${dealId}`}
+                          className="text-sm font-medium text-im8-red hover:underline truncate"
+                          onClick={() => setOpenPacket(null)}
+                        >
+                          {d.influencer_name}
+                        </Link>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700 font-semibold shrink-0">
+                          Contract {d.contract_sequence ?? 1}
+                        </span>
+                      </div>
                       {canViewRates && (
-                        <span className="text-xs text-im8-burgundy/50">
+                        <span className="text-xs text-im8-burgundy/50 shrink-0">
                           {d.monthly_rate_cents
-                            ? `$${(d.monthly_rate_cents / 100).toFixed(0)}/mo`
+                            ? `$${(d.monthly_rate_cents / 100).toFixed(0)}/mo${d.total_months ? ` × ${d.total_months}mo` : ""}`
                             : "—"}
                         </span>
                       )}
