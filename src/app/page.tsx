@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { ADMIN_ROLES } from "@/lib/permissions";
 
 export default async function RootPage() {
   const supabase = await createClient();
@@ -15,9 +16,8 @@ export default async function RootPage() {
 
   if (!profile) redirect("/auth/login");
 
-  if (profile.role === "admin" || profile.role === "ops" || profile.role === "finance") {
-    redirect("/admin");
-  }
+  if (ADMIN_ROLES.includes(profile.role)) redirect("/admin");
   if (profile.role === "approver") redirect("/approver");
-  redirect("/influencer");
+  if (profile.role === "editor") redirect("/editor");
+  redirect("/partner");
 }

@@ -61,7 +61,9 @@ export async function POST(request: NextRequest) {
   }
 
   const patch: Record<string, string | null> = {};
-  if (isAdmin && existing.role !== "admin") patch.role = "admin";
+  // Only promote to admin — never downgrade an already-elevated staff role
+  const NON_STAFF_ROLES = ["influencer", "agency"];
+  if (isAdmin && NON_STAFF_ROLES.includes(existing.role)) patch.role = "admin";
   if (!isAdmin && partnerType === "agency" && existing.role !== "agency") patch.role = "agency";
   if (fullName && !existing.full_name) patch.full_name = fullName;
   if (partnerType && !existing.partner_type) patch.partner_type = partnerType;
