@@ -18,14 +18,23 @@ export default async function PartnerLayout({ children }: { children: React.Reac
     .single();
 
   if (!profile) redirect("/auth/login");
-
   if (["admin", "ops", "finance"].includes(profile.role)) redirect("/admin");
   if (profile.role === "approver") redirect("/approver");
   if (profile.role === "editor") redirect("/editor");
 
+  // Check if this user has an active deal (influencer campaign access)
+  const { data: activeDeals } = await admin
+    .from("deals")
+    .select("id")
+    .eq("influencer_profile_id", user.id)
+    .in("status", ["approved", "contracted", "live"])
+    .limit(1);
+
+  const hasDeal = (activeDeals ?? []).length > 0;
+
   return (
     <div className="min-h-screen bg-im8-offwhite">
-      <header className="bg-white border-b border-im8-stone/30">
+      <header className="bg-white border-b border-im8-stone/30 sticky top-0 z-10">
         <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="bg-im8-burgundy rounded-lg p-2">
@@ -33,12 +42,25 @@ export default async function PartnerLayout({ children }: { children: React.Reac
             </div>
             <div>
               <div className="text-sm font-semibold text-im8-burgundy">{profile.full_name || profile.email}</div>
-              <div className="text-xs text-im8-burgundy/50 capitalize">{profile.partner_type ?? "creator"}</div>
+              <div className="text-xs text-im8-burgundy/50 capitalize">
+                {profile.role === "influencer" ? "Creator" : (profile.partner_type ?? "creator")}
+              </div>
             </div>
           </div>
-          <nav className="flex items-center gap-4 text-sm">
-            <Link href="/partner" className="text-im8-burgundy hover:text-im8-red">Submissions</Link>
-            <Link href="/intake" className="text-im8-burgundy hover:text-im8-red">+ New submission</Link>
+          <nav className="flex items-center gap-5 text-sm">
+            <Link href="/partner" className="text-im8-burgundy hover:text-im8-red font-medium">
+              {hasDeal ? "Dashboard" : "Submissions"}
+            </Link>
+            {hasDeal && (
+              <>
+                <Link href="/partner/briefs" className="text-im8-burgundy/70 hover:text-im8-red">Briefs</Link>
+                <Link href="/partner/submissions" className="text-im8-burgundy/70 hover:text-im8-red">My submissions</Link>
+                <Link href="/partner/submit" className="text-im8-burgundy/70 hover:text-im8-red">Upload content</Link>
+              </>
+            )}
+            {!hasDeal && (
+              <Link href="/intake" className="text-im8-burgundy/70 hover:text-im8-red">+ New submission</Link>
+            )}
             <SignOutButton />
           </nav>
         </div>
