@@ -20,10 +20,12 @@ type Deliverable = {
   fee_cents: number | null;
   views_updated_at: string | null;
   sequence: number | null;
-  deal: { id: string; influencer_name: string; platform_primary: string } | null;
+  brief_doc_url?: string | null;
+  deal: { id: string; influencer_name: string; platform_primary: string; niche_tags?: string[] | null } | null;
   brief: { id: string; title: string } | null;
   pic: { id: string; full_name: string } | null;
   editor: { id: string; full_name: string } | null;
+  approved_submission?: { id: string; drive_url: string | null; file_name: string | null } | null;
 };
 
 type Profile = { id: string; full_name: string };
@@ -45,12 +47,16 @@ export default function DeliverablesTable({
   pics,
   editors,
   currentFilters,
+  availableNiches = [],
+  availableTypes = [],
   canViewRates = true,
 }: {
   deliverables: Deliverable[];
   pics: Profile[];
   editors: Profile[];
-  currentFilters: { status?: string; platform?: string; q?: string; month?: string };
+  currentFilters: { status?: string; platform?: string; q?: string; month?: string; niche?: string; type?: string };
+  availableNiches?: string[];
+  availableTypes?: string[];
   canViewRates?: boolean;
 }) {
   const router = useRouter();
@@ -75,11 +81,11 @@ export default function DeliverablesTable({
         <div className="flex flex-wrap gap-3 bg-white rounded-xl border border-im8-stone/30 p-4">
           <input
             type="text"
-            placeholder="Search title..."
+            placeholder="Search influencer or title..."
             defaultValue={currentFilters.q ?? ""}
             onBlur={e => setFilter("q", e.target.value)}
             onKeyDown={e => e.key === "Enter" && setFilter("q", (e.target as HTMLInputElement).value)}
-            className="px-3 py-1.5 text-sm border border-im8-stone/40 rounded-lg text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40 w-48"
+            className="px-3 py-1.5 text-sm border border-im8-stone/40 rounded-lg text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40 w-56"
           />
           <input
             type="month"
@@ -103,6 +109,24 @@ export default function DeliverablesTable({
             <option value="">All platforms</option>
             {PLATFORM_OPTIONS.map(p => <option key={p} value={p} className="capitalize">{p}</option>)}
           </select>
+          <select
+            value={currentFilters.type ?? ""}
+            onChange={e => setFilter("type", e.target.value)}
+            className="px-3 py-1.5 text-sm border border-im8-stone/40 rounded-lg text-im8-burgundy focus:outline-none bg-white"
+          >
+            <option value="">All content types</option>
+            {availableTypes.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+          {availableNiches.length > 0 && (
+            <select
+              value={currentFilters.niche ?? ""}
+              onChange={e => setFilter("niche", e.target.value)}
+              className="px-3 py-1.5 text-sm border border-im8-stone/40 rounded-lg text-im8-burgundy focus:outline-none bg-white"
+            >
+              <option value="">All niches</option>
+              {availableNiches.map(n => <option key={n} value={n}>{n}</option>)}
+            </select>
+          )}
           <div className="ml-auto text-xs text-im8-burgundy/50 self-center">{deliverables.length} rows</div>
         </div>
 
@@ -111,14 +135,14 @@ export default function DeliverablesTable({
           <table className="w-full text-sm">
             <thead className="bg-im8-sand/50 border-b border-im8-stone/20">
               <tr>
-                {["Influencer", "Type", "Status", "Due", "Post URL", "Views", "PIC"].map(h => (
+                {["Influencer", "Type", "Status", "Due", "Draft", "Post URL", "Views", "PIC"].map(h => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-im8-burgundy/60 uppercase tracking-wide">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-im8-stone/10">
               {deliverables.length === 0 && (
-                <tr><td colSpan={7} className="px-4 py-12 text-center text-im8-burgundy/40">No deliverables yet. They&rsquo;ll appear here automatically once a deal is approved and deliverables are saved on the contract.</td></tr>
+                <tr><td colSpan={8} className="px-4 py-12 text-center text-im8-burgundy/40">No deliverables yet. They&rsquo;ll appear here automatically once a deal is approved and deliverables are saved on the contract.</td></tr>
               )}
               {deliverables.map(d => (
                 <tr
@@ -144,8 +168,20 @@ export default function DeliverablesTable({
                   <td className="px-4 py-3">
                     <StatusSelect deliverableId={d.id} current={d.status} />
                   </td>
-                  <td className="px-4 py-3 text-xs text-im8-burgundy/70">
-                    {d.due_date ? new Date(d.due_date).toLocaleDateString("en-AU", { day: "numeric", month: "short" }) : "—"}
+                  <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                    <DueDateCell deliverableId={d.id} current={d.due_date} />
+                  </td>
+                  <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                    {d.approved_submission?.drive_url ? (
+                      <a href={d.approved_submission.drive_url} target="_blank" rel="noopener noreferrer"
+                        className="text-xs text-im8-red hover:underline inline-flex items-center gap-1">
+                        <span className="inline-block w-2 h-2 rounded-full bg-green-500" />
+                        {d.approved_submission.file_name ?? "Approved draft"}
+                        <span className="text-im8-burgundy/30">↗</span>
+                      </a>
+                    ) : (
+                      <span className="text-xs text-im8-burgundy/30">—</span>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <PostUrlCell deliverableId={d.id} current={d.post_url} isStory={d.is_story} />
@@ -198,6 +234,43 @@ function StatusSelect({ deliverableId, current }: { deliverableId: string; curre
         <option key={s} value={s} className="capitalize bg-white text-im8-burgundy">{s.replace("_", " ")}</option>
       ))}
     </select>
+  );
+}
+
+// Editable due date cell. Click the date (or "+ Set") to open a date picker;
+// saves on change. Shows current value as short AU date.
+function DueDateCell({ deliverableId, current }: { deliverableId: string; current: string | null }) {
+  const router = useRouter();
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(current ?? "");
+
+  async function save(next: string) {
+    setEditing(false);
+    setVal(next);
+    await fetch(`/api/deliverables/${deliverableId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ due_date: next || null }),
+    });
+    router.refresh();
+  }
+
+  if (editing) return (
+    <input
+      type="date"
+      autoFocus
+      value={val}
+      onChange={e => save(e.target.value)}
+      onBlur={() => setEditing(false)}
+      className="px-2 py-1 text-xs border border-im8-stone/40 rounded focus:outline-none focus:ring-2 focus:ring-im8-red/30"
+    />
+  );
+
+  return (
+    <button onClick={() => setEditing(true)}
+      className="text-xs text-im8-burgundy/70 hover:text-im8-red hover:underline">
+      {current ? new Date(current).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "2-digit" }) : "+ Set"}
+    </button>
   );
 }
 
