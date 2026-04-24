@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
 import NegotiationResponse from "./negotiation-response";
+import ShippingPrompt, { type MissingCreator } from "@/components/partner/shipping-prompt";
 
 const STATUS_LABELS: Record<string, string> = {
   new: "Submitted",
@@ -105,8 +106,85 @@ export default async function PartnerPage() {
     live: "bg-emerald-100 text-emerald-700",
   };
 
+  // ── Compute the "missing shipping address" list for the modal prompt ──────
+  // Rules:
+  //   - Only prompt for creators with an active deal (approved/contracted/live).
+  //   - For individual creator: check the user's own profile-level addresses.
+  //   - For agency: find all deals where the linked creator was submitted by
+  //     this agency (via discovery_profiles.submitted_by_profile_id) and check
+  //     each creator's addresses. Skip creators who haven't signed up yet
+  //     (no influencer_profile_id on the deal) — those are handled by the
+  //     admin side for now.
+  const ACTIVE_STATUSES = ["approved", "contracted", "live"];
+
+  // Start with the creators we need to check: for individuals, it's just user;
+  // for agencies, it's the unique influencer_profile_ids across their submitted deals.
+  type CandidateCreator = { profileId: string; name: string };
+  const candidates = new Map<string, CandidateCreator>();
+
+  // Individual creator path: if they themselves have any active deal, they're a candidate.
+  if ((linkedDeals ?? []).some(d => ACTIVE_STATUSES.includes(d.status))) {
+    candidates.set(user.id, {
+      profileId: user.id,
+      name: profile?.full_name ?? linkedDeals?.[0]?.influencer_name ?? "You",
+    });
+  }
+
+  // Agency path: follow submitted_by_profile_id → discovery_profile_id → deals.
+  if (profile?.partner_type === "agency" && submissionIds.length > 0) {
+    const { data: agencyDeals } = await admin
+      .from("deals")
+      .select("id, status, influencer_profile_id, influencer_name")
+      .in("discovery_profile_id", submissionIds)
+      .in("status", ACTIVE_STATUSES);
+    for (const d of agencyDeals ?? []) {
+      if (d.influencer_profile_id && !candidates.has(d.influencer_profile_id)) {
+        candidates.set(d.influencer_profile_id, {
+          profileId: d.influencer_profile_id,
+          name: d.influencer_name,
+        });
+      }
+    }
+  }
+
+  // For each candidate, check if they have a profile-level primary shipping address
+  // or a legacy JSON address on their profile.
+  const missingCreators: MissingCreator[] = [];
+  if (candidates.size > 0) {
+    const candidateIds = Array.from(candidates.keys());
+    const [{ data: rows }, { data: legacyProfiles }] = await Promise.all([
+      admin
+        .from("shipping_addresses")
+        .select("profile_id")
+        .in("profile_id", candidateIds)
+        .is("deal_id", null),
+      admin
+        .from("profiles")
+        .select("id, shipping_address_json")
+        .in("id", candidateIds),
+    ]);
+    const haveNew = new Set((rows ?? []).map(r => r.profile_id));
+    const haveLegacy = new Set(
+      (legacyProfiles ?? [])
+        .filter(p => {
+          const json = p.shipping_address_json as Record<string, unknown> | null;
+          return json && typeof json.address_line1 === "string" && json.address_line1.length > 0;
+        })
+        .map(p => p.id),
+    );
+    for (const c of candidates.values()) {
+      if (!haveNew.has(c.profileId) && !haveLegacy.has(c.profileId)) {
+        missingCreators.push(c);
+      }
+    }
+  }
+
   return (
     <div className="space-y-6">
+      {missingCreators.length > 0 && (
+        <ShippingPrompt creators={missingCreators} />
+      )}
+
       {/* Active partnership deals — shown when account is linked */}
       {linkedDeals && linkedDeals.length > 0 && (
         <div className="space-y-4">

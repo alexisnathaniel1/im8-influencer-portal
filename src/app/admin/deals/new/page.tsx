@@ -244,6 +244,25 @@ function NewPartnershipForm() {
             <div className="space-y-2">
               {DELIVERABLE_OPTIONS.map(({ code, label }) => {
                 const count = deliverableCounts[code] ?? 0;
+                // Whitelisting is a Yes/No rights grant, not a repeatable post.
+                if (code === "WHITELIST") {
+                  const on = count > 0;
+                  return (
+                    <div key={code} className="flex items-center justify-between gap-3">
+                      <span className="text-sm text-im8-burgundy">{label}</span>
+                      <button
+                        type="button"
+                        onClick={() => setDeliverableCount(code, on ? 0 : 1)}
+                        className="flex items-center gap-2.5"
+                      >
+                        <span className={`relative w-9 h-5 rounded-full transition-colors ${on ? "bg-im8-red" : "bg-im8-stone/40"}`}>
+                          <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${on ? "left-4" : "left-0.5"}`} />
+                        </span>
+                        <span className="text-sm font-medium text-im8-burgundy">{on ? "Yes" : "No"}</span>
+                      </button>
+                    </div>
+                  );
+                }
                 return (
                   <div key={code} className="flex items-center gap-3">
                     <span className="text-sm text-im8-burgundy flex-1">{label}</span>

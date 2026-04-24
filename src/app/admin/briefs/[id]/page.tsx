@@ -175,14 +175,27 @@ export default function BriefEditorPage({ params }: { params: Promise<{ id: stri
                 </p>
               ) : (
                 <ul className="space-y-1">
-                  {deliverables.map((d, i) => (
-                    <li key={i} className="text-sm text-im8-burgundy flex items-center gap-2">
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-im8-red/10 text-im8-red font-semibold w-10 text-center">
-                        {d.count}×
-                      </span>
-                      {DELIVERABLE_LABELS[d.code] ?? d.code}
-                    </li>
-                  ))}
+                  {deliverables.map((d, i) => {
+                    if (d.code === "WHITELIST") {
+                      if (!d.count) return null;
+                      return (
+                        <li key={i} className="text-sm text-im8-burgundy flex items-center gap-2">
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-semibold w-10 text-center">
+                            Yes
+                          </span>
+                          Whitelisting
+                        </li>
+                      );
+                    }
+                    return (
+                      <li key={i} className="text-sm text-im8-burgundy flex items-center gap-2">
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-im8-red/10 text-im8-red font-semibold w-10 text-center">
+                          {d.count}×
+                        </span>
+                        {DELIVERABLE_LABELS[d.code] ?? d.code}
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </div>

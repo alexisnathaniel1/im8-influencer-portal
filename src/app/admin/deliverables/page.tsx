@@ -65,6 +65,9 @@ export default async function DeliverablesPage({
       <div>
         <h1 className="text-3xl font-bold text-im8-burgundy">Deliverables</h1>
         <p className="text-im8-burgundy/60 mt-1">Track every content piece across all active partnerships.</p>
+        <p className="text-xs text-im8-burgundy/40 mt-1">
+          This tracker mirrors every deliverable set on an approved contract. Edit live dates / view counts here; edit scope on the contract.
+        </p>
       </div>
       <DeliverablesTable
         deliverables={deliverables ?? []}

@@ -986,6 +986,22 @@ export const DELIVERABLE_LABELS: Record<string, string> = {
   WHITELIST: "Whitelisting",
 };
 
+// Format a single deliverable for display. Whitelisting is a binary rights grant
+// (Yes/No), not a repeatable post count, so we render it differently.
+export function formatDeliverable(item: { code: string; count: number }): string | null {
+  if (!item || !item.code) return null;
+  if (item.code === "WHITELIST") {
+    return item.count > 0 ? "Whitelisting" : null;
+  }
+  if (item.count <= 0) return null;
+  return `${item.count}× ${DELIVERABLE_LABELS[item.code] ?? item.code}`;
+}
+
+export function formatDeliverables(items: Array<{ code: string; count: number }>): string {
+  const parts = items.map(formatDeliverable).filter((s): s is string => !!s);
+  return parts.length ? parts.join(", ") : "No deliverables set";
+}
+
 // Editable contract accordion — rate, months, gifted toggle, deliverables picker + save.
 function EditableContractSection({
   dealId, contractSequence, initialRate, initialMonths, initialIsGifted,
@@ -1026,9 +1042,7 @@ function EditableContractSection({
       ? `$${rateNum.toLocaleString()}/mo × ${monthsNum}mo`
       : `${monthsNum} months`;
 
-  const deliverablesSummary = activeDeliverables.length
-    ? activeDeliverables.map(d => `${d.count}× ${d.code}`).join(", ")
-    : "No deliverables set";
+  const deliverablesSummary = formatDeliverables(activeDeliverables);
 
   function setCount(code: string, count: number) {
     setDeliverableCounts(prev => {
@@ -1131,6 +1145,16 @@ function EditableContractSection({
             <div className="space-y-2.5">
               {Object.entries(DELIVERABLE_LABELS).map(([code, label]) => {
                 const count = deliverableCounts[code] ?? 0;
+                // Whitelisting is a rights grant (Yes/No), not a repeatable deliverable.
+                if (code === "WHITELIST") {
+                  const on = count > 0;
+                  return (
+                    <div key={code} className="flex items-center justify-between gap-3">
+                      <span className="text-sm text-im8-burgundy">{label}</span>
+                      <Toggle on={on} onChange={v => setCount(code, v ? 1 : 0)} label={on ? "Yes" : "No"} />
+                    </div>
+                  );
+                }
                 return (
                   <div key={code} className="flex items-center gap-3">
                     <span className="text-sm text-im8-burgundy flex-1">{label}</span>
@@ -1454,12 +1478,35 @@ function ShippingAddressManager({
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [requesting, setRequesting] = useState(false);
+  const [requested, setRequested] = useState(false);
+  const [requestError, setRequestError] = useState("");
   const [newAddr, setNewAddr] = useState({
     label: "Home", recipient_name: "", phone: "",
     address_line1: "", address_line2: "", city: "",
     state: "", postal_code: "", country: "Singapore",
     is_primary: true,
   });
+
+  async function requestFromCreator() {
+    setRequestError("");
+    setRequesting(true);
+    try {
+      const res = await fetch(`/api/deals/${dealId}/request-shipping`, { method: "POST" });
+      if (!res.ok) {
+        const { error } = await res.json().catch(() => ({ error: "" }));
+        setRequestError(error || "Failed to send email");
+      } else {
+        setRequested(true);
+        setTimeout(() => setRequested(false), 5000);
+      }
+    } catch (err) {
+      console.error(err);
+      setRequestError("Network error");
+    } finally {
+      setRequesting(false);
+    }
+  }
 
   async function load() {
     const res = await fetch(`/api/shipping-addresses?dealId=${dealId}`);
@@ -1534,8 +1581,23 @@ function ShippingAddressManager({
       </div>
 
       {loaded && addresses.length === 0 && !showForm && (
-        <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
-          No shipping address saved yet. Add one below or the creator can add theirs via their portal.
+        <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 space-y-2">
+          <p className="text-sm text-amber-800">
+            No shipping address saved yet. Add one below, or ask the creator to add theirs via their portal.
+          </p>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={requestFromCreator}
+              disabled={requesting || requested}
+              className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-colors ${requested ? "bg-green-600 text-white" : "bg-im8-burgundy text-white hover:bg-im8-red disabled:opacity-50"}`}
+            >
+              {requesting ? "Sending…" : requested ? "✓ Email sent" : "✉ Email creator to collect address"}
+            </button>
+            {requestError && (
+              <span className="text-xs text-red-600">{requestError}</span>
+            )}
+          </div>
         </div>
       )}
 

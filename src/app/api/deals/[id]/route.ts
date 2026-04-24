@@ -30,18 +30,29 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const { error } = await admin.from("deals").update(updates).eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
-  // Auto-populate deliverables when a deal moves to contracted for the first time
-  if (updates.status === "contracted" && before?.status !== "contracted") {
-    const deliverableItems = (before?.deliverables ?? updates.deliverables ?? []) as Array<{ code: string; count: number }>;
-    if (deliverableItems.length > 0) {
-      // Check if deliverables already exist for this deal
-      const { count } = await admin.from("deliverables").select("*", { count: "exact", head: true }).eq("deal_id", id);
+  // Auto-populate deliverables as soon as a deal is approved/contracted/live AND
+  // deliverables have been saved. No manual "Move to contracted" click required —
+  // the tracker mirrors the contract state automatically.
+  // WHITELIST is a rights grant, not a schedulable post, so we skip it here.
+  {
+    const effectiveStatus = (updates.status as string | undefined) ?? before?.status ?? "";
+    const effectiveDeliverables =
+      ((updates.deliverables as Array<{ code: string; count: number }> | undefined) ??
+       (before?.deliverables as Array<{ code: string; count: number }> | undefined) ?? [])
+        .filter(item => item && item.code && item.count > 0 && item.code !== "WHITELIST");
+
+    const statusReady = ["approved", "contracted", "live"].includes(effectiveStatus);
+
+    if (statusReady && effectiveDeliverables.length > 0) {
+      const { count } = await admin.from("deliverables")
+        .select("*", { count: "exact", head: true }).eq("deal_id", id);
       if ((count ?? 0) === 0) {
         const PLATFORM_MAP: Record<string, string> = {
-          IGR: "instagram", IGS: "instagram", WHITELIST: "instagram",
-          TIKTOK_VIDEO: "tiktok", UGC: "other",
+          IGR: "instagram", IGS: "instagram",
+          TIKTOK: "tiktok", TIKTOK_VIDEO: "tiktok",
+          YT: "youtube", UGC: "other",
         };
-        const rows = deliverableItems.flatMap(item =>
+        const rows = effectiveDeliverables.flatMap(item =>
           Array.from({ length: item.count }, () => ({
             deal_id: id,
             deliverable_type: item.code,
@@ -50,7 +61,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
             title: `${before?.influencer_name ?? ""} — ${item.code}`,
           }))
         );
-        await admin.from("deliverables").insert(rows);
+        if (rows.length > 0) await admin.from("deliverables").insert(rows);
       }
     }
   }

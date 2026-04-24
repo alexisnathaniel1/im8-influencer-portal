@@ -56,6 +56,14 @@ export default function ShippingAddressForm({ profileId, defaultName }: { profil
 
   useEffect(() => { load(); }, []);
 
+  // Deep-link support: ?openAddress=1 auto-opens the add-form accordion (used
+  // by the "request shipping" email CTA and the dashboard shipping prompt).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const sp = new URLSearchParams(window.location.search);
+    if (sp.get("openAddress") === "1") setShowForm(true);
+  }, []);
+
   async function setPrimary(id: string) {
     setSettingPrimary(id);
     await fetch(`/api/shipping-addresses/${id}`, {

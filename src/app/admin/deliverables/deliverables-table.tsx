@@ -117,7 +117,7 @@ export default function DeliverablesTable({
             </thead>
             <tbody className="divide-y divide-im8-stone/10">
               {deliverables.length === 0 && (
-                <tr><td colSpan={7} className="px-4 py-12 text-center text-im8-burgundy/40">No deliverables yet. They auto-appear when a deal moves to Contracted.</td></tr>
+                <tr><td colSpan={7} className="px-4 py-12 text-center text-im8-burgundy/40">No deliverables yet. They&rsquo;ll appear here automatically once a deal is approved and deliverables are saved on the contract.</td></tr>
               )}
               {deliverables.map(d => (
                 <tr
