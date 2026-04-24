@@ -205,20 +205,6 @@ export default function DealDetailClient({
       {/* Overview tab */}
       {tab === "overview" && (
         <div className="bg-white rounded-xl border border-im8-stone/30 p-6 space-y-5">
-          {/* Toggles */}
-          <div className="flex flex-wrap gap-6 pb-1 border-b border-im8-stone/20">
-            <Toggle
-              on={form.isGifted}
-              onChange={v => setForm(f => ({ ...f, isGifted: v }))}
-              label="Gifted collaboration (no payment)"
-            />
-            <Toggle
-              on={!form.needsApproval}
-              onChange={v => setForm(f => ({ ...f, needsApproval: !v }))}
-              label="No approval needed"
-            />
-          </div>
-
           <div className="grid grid-cols-2 gap-5">
             <Field label="Influencer name *" value={form.influencerName}
               onChange={v => setForm(f => ({ ...f, influencerName: v }))} />
@@ -240,12 +226,38 @@ export default function DealDetailClient({
                 ))}
               </select>
             </div>
-            {!form.isGifted && canViewRates && <>
-              <Field label="Monthly rate (USD) *" value={form.monthlyRateCents}
-                onChange={v => setForm(f => ({ ...f, monthlyRateCents: v }))} type="number" />
-              <Field label="Total months *" value={form.totalMonths}
-                onChange={v => setForm(f => ({ ...f, totalMonths: v }))} type="number" />
-            </>}
+            {canViewRates && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-im8-burgundy mb-1">
+                    Monthly rate (USD) {!form.isGifted && "*"}
+                  </label>
+                  <input
+                    type="number" value={form.monthlyRateCents}
+                    onChange={e => setForm(f => ({ ...f, monthlyRateCents: e.target.value }))}
+                    disabled={form.isGifted}
+                    placeholder={form.isGifted ? "N/A (gifted)" : ""}
+                    className={`w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40 ${form.isGifted ? "bg-im8-sand/40 text-im8-burgundy/40" : ""}`}
+                  />
+                </div>
+                <Field label="Total months *" value={form.totalMonths}
+                  onChange={v => setForm(f => ({ ...f, totalMonths: v }))} type="number" />
+              </>
+            )}
+          </div>
+
+          {/* Gifted Collaboration — lives below the rate row so rate/months are still visible */}
+          <div className="flex items-center gap-3 px-4 py-3 bg-im8-sand/40 rounded-xl border border-im8-stone/20">
+            <Toggle
+              on={form.isGifted}
+              onChange={v => setForm(f => ({ ...f, isGifted: v }))}
+              label="Gifted Collaboration"
+            />
+            {form.isGifted && (
+              <span className="text-xs text-im8-burgundy/60">
+                No monthly payment — product only. Shipping lives on the Gifting tab.
+              </span>
+            )}
           </div>
 
           {/* Contract & Deliverables — collapsible summary */}
