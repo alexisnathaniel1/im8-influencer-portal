@@ -66,7 +66,19 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         if (rows.length > 0) {
           const { error: insertErr } = await admin.from("deliverables").insert(rows);
           if (insertErr) {
-            console.error("[deals/patch] deliverables auto-populate failed:", insertErr.message, "deal_id:", id, "rows:", rows.length);
+            if (insertErr.message.includes("sequence")) {
+              // sequence column not migrated yet — retry without it
+              console.warn("[deals/patch] sequence column absent, retrying without it");
+              const rowsNoSeq = rows.map(({ sequence: _seq, ...rest }) => rest);
+              const { error: insertErr2 } = await admin.from("deliverables").insert(rowsNoSeq);
+              if (insertErr2) {
+                console.error("[deals/patch] auto-populate retry failed:", insertErr2.message);
+              } else {
+                console.log("[deals/patch] auto-populated", rowsNoSeq.length, "deliverable rows (no sequence) for deal", id);
+              }
+            } else {
+              console.error("[deals/patch] deliverables auto-populate failed:", insertErr.message, "deal_id:", id, "rows:", rows.length);
+            }
           } else {
             console.log("[deals/patch] auto-populated", rows.length, "deliverable rows for deal", id);
           }

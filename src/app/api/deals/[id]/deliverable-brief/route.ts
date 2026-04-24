@@ -17,6 +17,10 @@ const PLATFORM_MAP: Record<string, string> = {
  * Ensures a tracker row exists for this deal/code/sequence (creates it if absent),
  * then saves the brief_doc_url. Returns the row id so the client can use it for
  * subsequent PATCH calls.
+ *
+ * Resilient to the `sequence` column being absent from the schema cache —
+ * falls back to title-based lookup and omits sequence from the insert if the
+ * column doesn't exist yet (migration 039 pending).
  */
 export async function POST(
   request: NextRequest,
@@ -47,34 +51,67 @@ export async function POST(
     .select("influencer_name, platform_primary")
     .eq("id", id).single();
 
-  // Find existing tracker row
-  const { data: existing } = await admin.from("deliverables")
+  const expectedTitle = `${deal?.influencer_name ?? ""} — ${code} #${sequence}`;
+
+  // Try to find existing tracker row by sequence (preferred), falling back to title
+  let rowId: string | null = null;
+
+  // Attempt 1: filter by sequence column (requires migration 039)
+  const { data: bySeq, error: seqErr } = await admin.from("deliverables")
     .select("id")
     .eq("deal_id", id)
     .eq("deliverable_type", code)
     .eq("sequence", sequence)
     .maybeSingle();
 
-  let rowId: string;
+  if (!seqErr && bySeq) {
+    rowId = bySeq.id;
+  } else if (seqErr) {
+    // sequence column may not exist yet — fall back to title match
+    console.warn("[deliverable-brief] sequence column unavailable, falling back to title lookup:", seqErr.message);
+    const { data: byTitle } = await admin.from("deliverables")
+      .select("id")
+      .eq("deal_id", id)
+      .eq("deliverable_type", code)
+      .eq("title", expectedTitle)
+      .maybeSingle();
+    if (byTitle) rowId = byTitle.id;
+  }
 
-  if (existing) {
-    rowId = existing.id;
-  } else {
-    // Create the tracker row on-demand
-    const { data: inserted, error: insertErr } = await admin.from("deliverables").insert({
+  if (!rowId) {
+    // Create the tracker row on-demand.
+    // Try with sequence first; if that fails (column absent), insert without it.
+    const baseRow = {
       deal_id: id,
       deliverable_type: code,
       platform: PLATFORM_MAP[code] ?? (deal?.platform_primary ?? "instagram"),
       is_story: code === "IGS",
-      sequence,
-      title: `${deal?.influencer_name ?? ""} — ${code} #${sequence}`,
-    }).select("id").single();
+      title: expectedTitle,
+    };
 
-    if (insertErr || !inserted) {
-      console.error("[deliverable-brief] create row failed:", insertErr?.message);
-      return NextResponse.json({ error: insertErr?.message ?? "Could not create tracker row" }, { status: 500 });
+    const { data: inserted, error: insertErr } = await admin.from("deliverables")
+      .insert({ ...baseRow, sequence })
+      .select("id").single();
+
+    if (insertErr) {
+      if (insertErr.message.includes("sequence")) {
+        // Column doesn't exist yet — insert without it
+        console.warn("[deliverable-brief] inserting without sequence column:", insertErr.message);
+        const { data: inserted2, error: insertErr2 } = await admin.from("deliverables")
+          .insert(baseRow)
+          .select("id").single();
+        if (insertErr2 || !inserted2) {
+          console.error("[deliverable-brief] create row failed:", insertErr2?.message);
+          return NextResponse.json({ error: insertErr2?.message ?? "Could not create tracker row" }, { status: 500 });
+        }
+        rowId = inserted2.id;
+      } else {
+        console.error("[deliverable-brief] create row failed:", insertErr.message);
+        return NextResponse.json({ error: insertErr.message }, { status: 500 });
+      }
+    } else {
+      rowId = inserted!.id;
     }
-    rowId = inserted.id;
   }
 
   // Save the brief_doc_url
