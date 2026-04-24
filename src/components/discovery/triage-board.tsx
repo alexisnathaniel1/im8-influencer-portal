@@ -108,6 +108,7 @@ export default function DiscoveryBoard({
   const [counterNotes, setCounterNotes] = useState("");
   const [counterEmail, setCounterEmail] = useState("");
   const [sendingCounter, setSendingCounter] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   function applyFilter(key: string, value: string) {
     const params = new URLSearchParams(currentFilters as Record<string, string>);
@@ -227,6 +228,19 @@ export default function DiscoveryBoard({
     }
   }
 
+  async function deleteProfile(profileId: string, name: string) {
+    if (!confirm(`Delete "${name}" from Discovery? This cannot be undone.`)) return;
+    setDeletingId(profileId);
+    const res = await fetch(`/api/discovery/${profileId}`, { method: "DELETE" });
+    if (!res.ok) {
+      alert("Failed to delete profile.");
+    } else {
+      if (openProfile?.id === profileId) closeRow();
+      router.refresh();
+    }
+    setDeletingId(null);
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex gap-2 flex-wrap">
@@ -323,7 +337,7 @@ export default function DiscoveryBoard({
                       {p.comments_count ? `${p.comments_count} 💬` : <span className="text-im8-burgundy/30">—</span>}
                     </td>
                     <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
-                      <div className="inline-flex gap-1">
+                      <div className="inline-flex gap-1 items-center">
                         {p.status !== "approved" && p.status !== "converted" && p.status !== "rejected" && (
                           <button onClick={() => updateStatus(p.id, "approved")} disabled={updating === p.id}
                             className="text-xs px-2.5 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200 transition-colors disabled:opacity-50">
@@ -336,6 +350,14 @@ export default function DiscoveryBoard({
                             Reject
                           </button>
                         )}
+                        <button
+                          onClick={() => deleteProfile(p.id, p.influencer_name)}
+                          disabled={deletingId === p.id}
+                          title="Delete profile"
+                          className="text-xs px-2 py-1 text-im8-burgundy/30 hover:text-red-600 hover:bg-red-50 rounded transition-colors disabled:opacity-50"
+                        >
+                          🗑
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -362,7 +384,17 @@ export default function DiscoveryBoard({
                   {openProfile.agency_name && <span>· {openProfile.agency_name}</span>}
                 </div>
               </div>
-              <button onClick={closeRow} className="text-im8-burgundy/40 hover:text-im8-burgundy text-2xl leading-none">×</button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => deleteProfile(openProfile.id, openProfile.influencer_name)}
+                  disabled={deletingId === openProfile.id}
+                  title="Delete this profile"
+                  className="text-sm text-im8-burgundy/30 hover:text-red-600 hover:bg-red-50 px-2 py-1 rounded transition-colors disabled:opacity-50"
+                >
+                  🗑 Delete
+                </button>
+                <button onClick={closeRow} className="text-im8-burgundy/40 hover:text-im8-burgundy text-2xl leading-none">×</button>
+              </div>
             </div>
 
             <div className="p-6 space-y-6">

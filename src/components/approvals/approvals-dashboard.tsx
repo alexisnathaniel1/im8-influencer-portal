@@ -64,6 +64,7 @@ export default function ApprovalsDashboard({
   );
   const [creating, setCreating] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [deletingPacketId, setDeletingPacketId] = useState<string | null>(null);
 
   // Side panel state
   const [openPacket, setOpenPacket] = useState<Packet | null>(null);
@@ -127,6 +128,20 @@ export default function ApprovalsDashboard({
     setCommentBody("");
     setPostingComment(false);
     startTransition(() => router.refresh());
+  }
+
+  async function deletePacket(packet: Packet, e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!confirm(`Delete approval batch "${packet.title}"? This cannot be undone.`)) return;
+    setDeletingPacketId(packet.id);
+    const res = await fetch(`/api/approvals/${packet.id}`, { method: "DELETE" });
+    if (!res.ok) {
+      alert("Failed to delete approval batch.");
+    } else {
+      if (openPacket?.id === packet.id) setOpenPacket(null);
+      startTransition(() => router.refresh());
+    }
+    setDeletingPacketId(null);
   }
 
   function kindLabel(kind: string) {
@@ -303,7 +318,17 @@ export default function ApprovalsDashboard({
                       {p.created_by?.full_name ?? "—"}
                     </div>
                   </div>
-                  <span className="text-im8-burgundy/30 text-sm shrink-0">→</span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={(e) => deletePacket(p, e)}
+                      disabled={deletingPacketId === p.id}
+                      title="Delete batch"
+                      className="text-im8-burgundy/25 hover:text-red-600 hover:bg-red-50 text-sm px-2 py-1 rounded transition-colors disabled:opacity-50"
+                    >
+                      🗑
+                    </button>
+                    <span className="text-im8-burgundy/30 text-sm">→</span>
+                  </div>
                 </div>
               </button>
             ))}
@@ -334,12 +359,22 @@ export default function ApprovalsDashboard({
                   </span>
                 </div>
               </div>
-              <button
-                onClick={() => setOpenPacket(null)}
-                className="text-im8-burgundy/40 hover:text-im8-burgundy text-xl leading-none mt-0.5"
-              >
-                ×
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={(e) => deletePacket(openPacket, e)}
+                  disabled={deletingPacketId === openPacket.id}
+                  title="Delete this batch"
+                  className="text-sm text-im8-burgundy/30 hover:text-red-600 hover:bg-red-50 px-2 py-1 rounded transition-colors disabled:opacity-50"
+                >
+                  🗑 Delete
+                </button>
+                <button
+                  onClick={() => setOpenPacket(null)}
+                  className="text-im8-burgundy/40 hover:text-im8-burgundy text-xl leading-none mt-0.5"
+                >
+                  ×
+                </button>
+              </div>
             </div>
 
             {/* Creators in this packet */}

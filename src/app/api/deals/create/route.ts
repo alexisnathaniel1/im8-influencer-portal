@@ -10,6 +10,17 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
   const admin = createAdminClient();
 
+  // Auth: admin/management/support only
+  const { data: actorProfile } = await admin
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  if (!actorProfile || !["admin", "management", "support"].includes(actorProfile.role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const { data, error } = await admin.from("deals").insert({
     influencer_name: body.influencerName,
     influencer_email: body.influencerEmail || "",
@@ -18,8 +29,10 @@ export async function POST(request: NextRequest) {
     instagram_handle: body.igHandle?.trim().replace(/^@/, "") || null,
     tiktok_handle: body.tiktokHandle?.trim().replace(/^@/, "") || null,
     youtube_handle: body.youtubeHandle?.trim().replace(/^@/, "") || null,
-    is_gifted: body.isGifted ?? false,
-    status: body.status ?? (body.isGifted ? "live" : "contacted"),
+    status: body.status ?? "live",
+    monthly_rate_cents: body.monthlyRateCents ?? null,
+    total_months: body.totalMonths ?? 3,
+    contract_sequence: 1,
     discovery_profile_id: body.discoveryProfileId || null,
     assigned_to: user.id,
   }).select("id").single();

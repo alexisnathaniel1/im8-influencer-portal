@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import DealsFilterBar from "@/components/deals/deals-filter-bar";
+import DealDeleteButton from "@/components/deals/deal-delete-button";
 import { canViewRates } from "@/lib/permissions";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -155,7 +156,7 @@ export default async function DealsPage({
                 <table className="w-full text-sm">
                   <thead className="bg-white border-b border-im8-stone/20">
                     <tr>
-                      {["Contract", "Platform", "Status", "Type", ...(showRates ? ["Rate/mo"] : []), "Duration", "Start", "Owner", "Updated"].map(h => (
+                      {["Contract", "Platform", "Status", "Type", ...(showRates ? ["Rate/mo"] : []), "Duration", "Start", "Owner", "Updated", ""].map(h => (
                         <th key={h} className="text-left px-4 py-2 text-[10px] font-semibold text-im8-burgundy/50 uppercase tracking-wide">{h}</th>
                       ))}
                     </tr>
@@ -200,6 +201,12 @@ export default async function DealsPage({
                         </td>
                         <td className="px-4 py-3 text-im8-burgundy/40 text-xs">
                           {new Date(d.updated_at).toLocaleDateString()}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <DealDeleteButton
+                            dealId={d.id}
+                            contractLabel={`Contract ${d.contract_sequence ?? 1} (${g.label})`}
+                          />
                         </td>
                       </tr>
                     ))}
