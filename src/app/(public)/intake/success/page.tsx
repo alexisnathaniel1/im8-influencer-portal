@@ -34,7 +34,7 @@ export default async function IntakeSuccessPage({
             </div>
           )}
           <p className="text-xs text-im8-burgundy/50">
-            Questions? <a href="mailto:creators@im8health.com" className="underline">creators@im8health.com</a>
+            Questions? <a href="mailto:partners@im8health.com" className="underline">partners@im8health.com</a>
           </p>
           <Link
             href="/partner"
