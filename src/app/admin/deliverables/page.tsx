@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
@@ -9,7 +10,7 @@ export default async function DeliverablesPage({
 }: {
   searchParams: Promise<{
     status?: string; platform?: string; q?: string; month?: string;
-    niche?: string; type?: string;
+    niche?: string; type?: string; view?: string;
   }>;
 }) {
   const supabase = await createClient();
@@ -29,7 +30,9 @@ export default async function DeliverablesPage({
       post_url, views, likes, comments_count, is_story, fee_cents,
       views_updated_at, created_at, sequence, brief_doc_url,
       edited_video_url, qa_status, qa_comments,
-      deal:deal_id(id, influencer_name, platform_primary, niche_tags),
+      scheduled_for_ads, ad_usage_rights_status, whitelisting_granted,
+      whitelisted_start_date, whitelisted_end_date,
+      deal:deal_id(id, influencer_name, platform_primary, niche_tags, deliverables),
       brief:brief_id(id, title),
       pic:assigned_pic(id, full_name),
       editor:assigned_editor_id(id, full_name)
@@ -60,12 +63,21 @@ export default async function DeliverablesPage({
   let deliverables = (rawDeliverables ?? []).map(d => ({
     ...d,
     deal: (Array.isArray(d.deal) ? d.deal[0] : d.deal) as
-      | { id: string; influencer_name: string; platform_primary: string; niche_tags: string[] | null }
+      | { id: string; influencer_name: string; platform_primary: string; niche_tags: string[] | null; deliverables: Array<{ code: string; count: number }> | null }
       | null,
     brief: Array.isArray(d.brief) ? d.brief[0] ?? null : d.brief,
     pic: Array.isArray(d.pic) ? d.pic[0] ?? null : d.pic,
     editor: Array.isArray(d.editor) ? d.editor[0] ?? null : d.editor,
   }));
+
+  // Ads view: only deliverables whose parent deal has WHITELIST or PAID_AD = on.
+  // The ads team lives here because these are the rows where ad-trafficking / usage-rights work happens.
+  if (filters.view === "ads") {
+    deliverables = deliverables.filter(d => {
+      const rights = d.deal?.deliverables ?? [];
+      return rights.some(r => (r.code === "WHITELIST" || r.code === "PAID_AD") && r.count > 0);
+    });
+  }
 
   // Client-side post-filter for things Supabase can't easily filter on
   if (filters.q) {
@@ -118,15 +130,46 @@ export default async function DeliverablesPage({
     admin.from("profiles").select("id, full_name").eq("role", "editor"),
   ]);
 
+  const isAdsView = filters.view === "ads";
+  // Preserve other filters when switching views
+  const shareParams = new URLSearchParams();
+  for (const [k, v] of Object.entries(filters)) {
+    if (v && k !== "view") shareParams.set(k, v);
+  }
+  const standardHref = `/admin/deliverables${shareParams.toString() ? `?${shareParams.toString()}` : ""}`;
+  shareParams.set("view", "ads");
+  const adsHref = `/admin/deliverables?${shareParams.toString()}`;
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
         <h1 className="text-3xl font-bold text-im8-burgundy">Deliverables</h1>
-        <p className="text-im8-burgundy/60 mt-1">Track every content piece across all active partnerships.</p>
+        <p className="text-im8-burgundy/60 mt-1">
+          {isAdsView
+            ? "Ads team view — track whitelisting, usage rights, and ad scheduling across partnerships."
+            : "Track every content piece across all active partnerships."}
+        </p>
         <p className="text-xs text-im8-burgundy/40 mt-1">
           This tracker mirrors every deliverable set on an approved contract. Edit live dates / view counts here; edit scope on the contract.
         </p>
       </div>
+
+      {/* View toggle: Standard ↔ Ads */}
+      <div className="inline-flex bg-im8-sand/40 rounded-lg p-1 gap-1">
+        <Link
+          href={standardHref}
+          className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${!isAdsView ? "bg-white text-im8-burgundy shadow-sm" : "text-im8-burgundy/60 hover:text-im8-burgundy"}`}
+        >
+          Standard
+        </Link>
+        <Link
+          href={adsHref}
+          className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${isAdsView ? "bg-white text-im8-burgundy shadow-sm" : "text-im8-burgundy/60 hover:text-im8-burgundy"}`}
+        >
+          Ads team
+        </Link>
+      </div>
+
       <DeliverablesTable
         deliverables={deliverablesWithDraft}
         pics={pics ?? []}

@@ -22,6 +22,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     "usage_rights_months", "fee_cents", "assigned_pic", "assigned_editor_id", "brief_id",
     "brief_doc_url",
     "edited_video_url", "qa_status", "qa_comments",
+    "scheduled_for_ads", "ad_usage_rights_status", "whitelisting_granted",
+    "whitelisted_start_date", "whitelisted_end_date",
   ];
   const updates = Object.fromEntries(Object.entries(body).filter(([k]) => allowed.includes(k)));
 

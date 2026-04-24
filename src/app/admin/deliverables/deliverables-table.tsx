@@ -24,6 +24,11 @@ type Deliverable = {
   edited_video_url?: string | null;
   qa_status?: string | null;
   qa_comments?: string | null;
+  scheduled_for_ads?: boolean | null;
+  ad_usage_rights_status?: string | null;
+  whitelisting_granted?: boolean | null;
+  whitelisted_start_date?: string | null;
+  whitelisted_end_date?: string | null;
   deal: { id: string; influencer_name: string; platform_primary: string; niche_tags?: string[] | null } | null;
   brief: { id: string; title: string } | null;
   pic: { id: string; full_name: string } | null;
@@ -68,11 +73,12 @@ export default function DeliverablesTable({
   deliverables: Deliverable[];
   pics: Profile[];
   editors: Profile[];
-  currentFilters: { status?: string; platform?: string; q?: string; month?: string; niche?: string; type?: string };
+  currentFilters: { status?: string; platform?: string; q?: string; month?: string; niche?: string; type?: string; view?: string };
   availableNiches?: string[];
   availableTypes?: string[];
   canViewRates?: boolean;
 }) {
+  const isAdsView = currentFilters.view === "ads";
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -146,6 +152,9 @@ export default function DeliverablesTable({
 
         {/* Table */}
         <div className="bg-white rounded-xl border border-im8-stone/30 overflow-hidden">
+          {isAdsView ? (
+            <AdsTable deliverables={deliverables} selectedId={selectedId} setSelectedId={setSelectedId} />
+          ) : (
           <table className="w-full text-sm">
             <thead className="bg-im8-sand/50 border-b border-im8-stone/20">
               <tr>
@@ -216,6 +225,7 @@ export default function DeliverablesTable({
               ))}
             </tbody>
           </table>
+          )}
         </div>
       </div>
 
@@ -226,6 +236,150 @@ export default function DeliverablesTable({
         </div>
       )}
     </div>
+  );
+}
+
+// Ads team table — focused columns: Scheduled for Ads, Usage Rights,
+// Whitelisting Granted, Start/End dates. One row per deliverable.
+function AdsTable({
+  deliverables, selectedId, setSelectedId,
+}: {
+  deliverables: Deliverable[];
+  selectedId: string | null;
+  setSelectedId: (id: string | null) => void;
+}) {
+  return (
+    <table className="w-full text-sm">
+      <thead className="bg-im8-burgundy/90 text-white border-b border-im8-stone/20">
+        <tr>
+          {["Influencer", "Type", "Scheduled for Ads", "Usage Rights", "Whitelisting Granted", "Whitelisted Start", "Whitelisted End"].map(h => (
+            <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">{h}</th>
+          ))}
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-im8-stone/10">
+        {deliverables.length === 0 && (
+          <tr><td colSpan={7} className="px-4 py-12 text-center text-im8-burgundy/40">No deliverables with whitelisting or paid-ad usage rights yet.</td></tr>
+        )}
+        {deliverables.map(d => (
+          <tr
+            key={d.id}
+            onClick={() => setSelectedId(selectedId === d.id ? null : d.id)}
+            className={`cursor-pointer transition-colors hover:bg-im8-sand/30 ${selectedId === d.id ? "bg-im8-sand/50" : ""}`}
+          >
+            <td className="px-4 py-3 font-medium text-im8-burgundy truncate max-w-[180px]">
+              {d.deal?.influencer_name ?? "—"}
+            </td>
+            <td className="px-4 py-3">
+              <span className="font-mono text-xs bg-im8-sand px-2 py-0.5 rounded text-im8-burgundy">
+                {d.deliverable_type}{d.sequence ? ` #${d.sequence}` : ""}
+              </span>
+            </td>
+            <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+              <BoolPillCell deliverableId={d.id} field="scheduled_for_ads" current={Boolean(d.scheduled_for_ads)} />
+            </td>
+            <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+              <UsageRightsCell deliverableId={d.id} current={d.ad_usage_rights_status ?? ""} />
+            </td>
+            <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+              <BoolPillCell deliverableId={d.id} field="whitelisting_granted" current={Boolean(d.whitelisting_granted)} />
+            </td>
+            <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+              <AdsDateCell deliverableId={d.id} field="whitelisted_start_date" current={d.whitelisted_start_date ?? null} />
+            </td>
+            <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+              <AdsDateCell deliverableId={d.id} field="whitelisted_end_date" current={d.whitelisted_end_date ?? null} />
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+// Yes/No pill that toggles a boolean field on save.
+function BoolPillCell({ deliverableId, field, current }: { deliverableId: string; field: string; current: boolean }) {
+  const router = useRouter();
+  const [value, setValue] = useState(current);
+
+  async function toggle() {
+    const next = !value;
+    setValue(next);
+    await fetch(`/api/deliverables/${deliverableId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ [field]: next }),
+    });
+    router.refresh();
+  }
+
+  return (
+    <button onClick={toggle}
+      className={`text-xs px-3 py-1 rounded-full font-semibold transition-colors ${value
+        ? "bg-amber-200 text-amber-900 hover:bg-amber-300"
+        : "bg-im8-stone/20 text-im8-burgundy/50 hover:bg-im8-stone/30"}`}>
+      {value ? "Yes" : "—"}
+    </button>
+  );
+}
+
+// Usage rights status dropdown.
+function UsageRightsCell({ deliverableId, current }: { deliverableId: string; current: string }) {
+  const router = useRouter();
+  const [value, setValue] = useState(current);
+  const OPTIONS = ["", "granted", "pending", "not_needed", "expired"];
+  const LABELS: Record<string, string> = {
+    "": "—",
+    granted: "Granted",
+    pending: "Pending",
+    not_needed: "Not needed",
+    expired: "Expired",
+  };
+
+  async function onChange(next: string) {
+    setValue(next);
+    await fetch(`/api/deliverables/${deliverableId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ad_usage_rights_status: next || null }),
+    });
+    router.refresh();
+  }
+
+  return (
+    <select
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      className="text-xs px-2 py-1 border border-im8-stone/40 rounded text-im8-burgundy bg-white focus:outline-none"
+    >
+      {OPTIONS.map(o => <option key={o} value={o}>{LABELS[o]}</option>)}
+    </select>
+  );
+}
+
+// Ads-view date cell (start / end). Always-visible so the ads team doesn't
+// need to click twice. Saves on change.
+function AdsDateCell({ deliverableId, field, current }: { deliverableId: string; field: string; current: string | null }) {
+  const router = useRouter();
+  const [val, setVal] = useState(current ?? "");
+
+  async function save(next: string) {
+    setVal(next);
+    await fetch(`/api/deliverables/${deliverableId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ [field]: next || null }),
+    });
+    router.refresh();
+  }
+
+  return (
+    <input
+      type="date"
+      value={val}
+      onChange={e => save(e.target.value)}
+      className="px-2 py-1 text-xs border border-im8-stone/40 rounded text-im8-burgundy bg-white focus:outline-none focus:ring-2 focus:ring-im8-red/30"
+    />
   );
 }
 
