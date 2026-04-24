@@ -210,7 +210,7 @@ export default function DealDetailClient({
           .filter(t => role === "support" ? !["contract", "gifting"].includes(t) : true)
           .map(t => {
             const label: Record<string, string> = {
-              overview: "Overview", contract: "Contract & Deliverables", briefs: "Briefs",
+              overview: "Overview", contract: "Contract", briefs: "Briefs",
               submissions: "Submissions", gifting: "Gifting", "edited-videos": "Edited Videos",
             };
             return (
@@ -257,6 +257,12 @@ export default function DealDetailClient({
           </div>
 
           {/* Contract & Deliverables — editable accordion (rate, months, gifted, deliverables) */}
+          <div className="pt-1">
+            <h3 className="text-sm font-semibold text-im8-burgundy mb-2">Contract &amp; Deliverables</h3>
+            <p className="text-xs text-im8-burgundy/50 mb-3">
+              Set the rate, duration and content deliverables. Saving this will auto-generate per-deliverable brief rows in the Briefs tab.
+            </p>
+          </div>
           <EditableContractSection
             dealId={deal.id as string}
             contractSequence={deal.contract_sequence as number | null}
@@ -496,29 +502,65 @@ export default function DealDetailClient({
             </div>
           )}
 
-          {/* Per-deliverable brief URLs — always visible */}
-          <div className="bg-white rounded-xl border border-im8-stone/30 p-5 space-y-3">
-            <div>
-              <h3 className="text-sm font-semibold text-im8-burgundy">Per-deliverable briefs</h3>
-              <p className="text-xs text-im8-burgundy/50">
-                Paste a Google Doc link for each deliverable. The creator sees it when they upload content for that row.
-              </p>
-            </div>
-            {deliverables.length > 0 ? (
-              <DeliverableBriefList deliverables={deliverables} />
-            ) : (
-              <p className="text-sm text-im8-burgundy/40 py-3 text-center">
-                No deliverables yet.{" "}
-                <button
-                  onClick={() => setTab("contract")}
-                  className="text-im8-red hover:underline"
-                >
-                  Open Contract &amp; Deliverables
-                </button>
-                {" "}and click Save contract terms — rows will appear here automatically.
-              </p>
-            )}
-          </div>
+          {/* Per-deliverable brief URLs — driven by the deal's deliverables JSON so rows
+              appear as soon as deliverables are set in the Overview tab, even before
+              tracker rows are fully created. Tracker rows are cross-referenced for the
+              saved brief_doc_url and the ID used by Save/Send actions. */}
+          {(() => {
+            const dealDeliverables = ((deal.deliverables as Array<{ code: string; count: number }> | null) ?? [])
+              .filter(d => d && d.code && d.count > 0 && !BINARY_DELIVERABLE_CODES.has(d.code));
+
+            // Build a lookup: "IGR_1" → tracker row (if it exists)
+            const trackerByKey = new Map<string, DeliverableRow>();
+            for (const d of deliverables) {
+              const key = `${d.deliverable_type}_${d.sequence ?? 1}`;
+              trackerByKey.set(key, d);
+            }
+
+            // Expand deal.deliverables into individual instances (IGR×3 → IGR#1, IGR#2, IGR#3)
+            const rows = dealDeliverables.flatMap(item =>
+              Array.from({ length: item.count }, (_, i) => {
+                const seq = i + 1;
+                const key = `${item.code}_${seq}`;
+                return {
+                  code: item.code,
+                  sequence: seq,
+                  trackerRow: trackerByKey.get(key) ?? null,
+                };
+              })
+            );
+
+            return (
+              <div className="bg-white rounded-xl border border-im8-stone/30 p-5 space-y-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-im8-burgundy">Per-deliverable briefs</h3>
+                  <p className="text-xs text-im8-burgundy/50">
+                    Paste a Google Doc link for each deliverable. The creator sees it when they upload content for that row.
+                  </p>
+                </div>
+                {rows.length === 0 ? (
+                  <p className="text-sm text-im8-burgundy/40 py-3 text-center">
+                    No deliverables set yet.{" "}
+                    <button onClick={() => setTab("overview")} className="text-im8-red hover:underline">
+                      Add deliverables in the Overview tab
+                    </button>
+                    {" "}and save — rows will appear here automatically.
+                  </p>
+                ) : (
+                  <div className="divide-y divide-im8-stone/20 -mx-5">
+                    {rows.map(({ code, sequence, trackerRow }) => (
+                      <DeliverableBriefRow
+                        key={`${code}_${sequence}`}
+                        deliverableType={code}
+                        sequence={sequence}
+                        trackerRow={trackerRow}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -1908,29 +1950,29 @@ function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) =
 
 // Per-deliverable brief-URL editor. Renders one row per deliverable with an
 // inline Google Doc URL input. Saves on blur / Enter.
-function DeliverableBriefList({ deliverables }: { deliverables: DeliverableRow[] }) {
-  return (
-    <div className="divide-y divide-im8-stone/20 -mx-5">
-      {deliverables.map(d => (
-        <DeliverableBriefRow key={d.id} deliverable={d} />
-      ))}
-    </div>
-  );
-}
-
-function DeliverableBriefRow({ deliverable }: { deliverable: DeliverableRow }) {
-  const [url, setUrl] = useState(deliverable.brief_doc_url ?? "");
-  const [savedUrl, setSavedUrl] = useState(deliverable.brief_doc_url ?? "");
+function DeliverableBriefRow({
+  deliverableType,
+  sequence,
+  trackerRow,
+}: {
+  deliverableType: string;
+  sequence: number;
+  trackerRow: DeliverableRow | null;
+}) {
+  const [url, setUrl] = useState(trackerRow?.brief_doc_url ?? "");
+  const [savedUrl, setSavedUrl] = useState(trackerRow?.brief_doc_url ?? "");
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [sendStatus, setSendStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState("");
   const isDirty = url.trim() !== savedUrl;
+  const noTracker = trackerRow === null;
 
   async function handleSave() {
+    if (noTracker) return;
     const next = url.trim();
     setSaveStatus("saving"); setErrorMsg("");
     try {
-      const res = await fetch(`/api/deliverables/${deliverable.id}`, {
+      const res = await fetch(`/api/deliverables/${trackerRow.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ brief_doc_url: next || null }),
@@ -1951,13 +1993,14 @@ function DeliverableBriefRow({ deliverable }: { deliverable: DeliverableRow }) {
   }
 
   async function handleSend() {
+    if (noTracker) return;
     const next = url.trim();
     if (!next) { setErrorMsg("Add the Google Doc link before sending."); return; }
     setErrorMsg("");
     // Save first if dirty
     if (isDirty) {
       setSaveStatus("saving");
-      const saveRes = await fetch(`/api/deliverables/${deliverable.id}`, {
+      const saveRes = await fetch(`/api/deliverables/${trackerRow.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ brief_doc_url: next }),
@@ -1972,7 +2015,7 @@ function DeliverableBriefRow({ deliverable }: { deliverable: DeliverableRow }) {
     }
     setSendStatus("sending");
     try {
-      const res = await fetch(`/api/deliverables/${deliverable.id}/send-brief`, { method: "POST" });
+      const res = await fetch(`/api/deliverables/${trackerRow.id}/send-brief`, { method: "POST" });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         setErrorMsg(data.error || `Send failed (${res.status})`);
@@ -1987,7 +2030,7 @@ function DeliverableBriefRow({ deliverable }: { deliverable: DeliverableRow }) {
     }
   }
 
-  const label = `${deliverable.deliverable_type}${deliverable.sequence ? ` #${deliverable.sequence}` : ""}`;
+  const label = `${deliverableType}${sequence > 1 ? ` #${sequence}` : ""}`;
   return (
     <div className="px-5 py-3 space-y-2">
       <div className="flex items-center gap-3 flex-wrap">
@@ -1996,36 +2039,46 @@ function DeliverableBriefRow({ deliverable }: { deliverable: DeliverableRow }) {
             {label}
           </span>
         </div>
-        <input
-          type="url"
-          value={url}
-          onChange={e => { setUrl(e.target.value); setErrorMsg(""); setSendStatus("idle"); }}
-          placeholder="https://docs.google.com/document/d/…"
-          className={`flex-1 min-w-0 px-3 py-1.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-im8-red/30 ${errorMsg ? "border-red-300 bg-red-50" : "border-im8-stone/40 text-im8-burgundy"}`}
-        />
-        {url && (
-          <a href={url} target="_blank" rel="noopener noreferrer"
-            className="shrink-0 text-xs text-im8-red hover:underline">Open ↗</a>
+        {noTracker ? (
+          <span className="flex-1 text-xs text-im8-burgundy/40 italic">
+            Save the contract terms first to enable brief links
+          </span>
+        ) : (
+          <>
+            <input
+              type="url"
+              value={url}
+              onChange={e => { setUrl(e.target.value); setErrorMsg(""); setSendStatus("idle"); }}
+              placeholder="https://docs.google.com/document/d/…"
+              className={`flex-1 min-w-0 px-3 py-1.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-im8-red/30 ${errorMsg ? "border-red-300 bg-red-50" : "border-im8-stone/40 text-im8-burgundy"}`}
+            />
+            {url && (
+              <a href={url} target="_blank" rel="noopener noreferrer"
+                className="shrink-0 text-xs text-im8-red hover:underline">Open ↗</a>
+            )}
+          </>
         )}
       </div>
-      <div className="flex items-center gap-2 pl-[6.5rem]">
-        <button
-          onClick={handleSave}
-          disabled={saveStatus === "saving" || !isDirty}
-          className="px-3 py-1 text-xs font-medium bg-im8-sand border border-im8-stone/40 text-im8-burgundy rounded-lg hover:bg-im8-stone/20 disabled:opacity-40 transition-colors"
-        >
-          {saveStatus === "saving" ? "Saving…" : saveStatus === "saved" ? "Saved ✓" : "Save draft"}
-        </button>
-        <button
-          onClick={handleSend}
-          disabled={sendStatus === "sending" || saveStatus === "saving"}
-          className="px-3 py-1 text-xs font-medium bg-im8-red text-white rounded-lg hover:bg-im8-burgundy disabled:opacity-40 transition-colors"
-        >
-          {sendStatus === "sending" ? "Sending…" : sendStatus === "sent" ? "Sent ✓" : sendStatus === "error" ? "Retry send" : "Send to influencer"}
-        </button>
-        {errorMsg && <span className="text-xs text-red-600">{errorMsg}</span>}
-        {saveStatus === "error" && !errorMsg && <span className="text-xs text-red-600">Save failed</span>}
-      </div>
+      {!noTracker && (
+        <div className="flex items-center gap-2 pl-[6.5rem]">
+          <button
+            onClick={handleSave}
+            disabled={saveStatus === "saving" || !isDirty}
+            className="px-3 py-1 text-xs font-medium bg-im8-sand border border-im8-stone/40 text-im8-burgundy rounded-lg hover:bg-im8-stone/20 disabled:opacity-40 transition-colors"
+          >
+            {saveStatus === "saving" ? "Saving…" : saveStatus === "saved" ? "Saved ✓" : "Save draft"}
+          </button>
+          <button
+            onClick={handleSend}
+            disabled={sendStatus === "sending" || saveStatus === "saving"}
+            className="px-3 py-1 text-xs font-medium bg-im8-red text-white rounded-lg hover:bg-im8-burgundy disabled:opacity-40 transition-colors"
+          >
+            {sendStatus === "sending" ? "Sending…" : sendStatus === "sent" ? "Sent ✓" : sendStatus === "error" ? "Retry send" : "Send to influencer"}
+          </button>
+          {errorMsg && <span className="text-xs text-red-600">{errorMsg}</span>}
+          {saveStatus === "error" && !errorMsg && <span className="text-xs text-red-600">Save failed</span>}
+        </div>
+      )}
     </div>
   );
 }
