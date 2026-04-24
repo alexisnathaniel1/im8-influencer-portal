@@ -12,11 +12,12 @@ function SubmitForm() {
   const router = useRouter();
   const prefillDealId = searchParams.get("dealId") || "";
   const prefillBriefId = searchParams.get("briefId") || "";
+  const prefillDeliverableId = searchParams.get("deliverableId") || "";
 
   const [deals, setDeals] = useState<Deal[]>([]);
   const [deliverables, setDeliverables] = useState<Deliverable[]>([]);
   const [selectedDealId, setSelectedDealId] = useState(prefillDealId);
-  const [selectedDeliverableId, setSelectedDeliverableId] = useState("");
+  const [selectedDeliverableId, setSelectedDeliverableId] = useState(prefillDeliverableId);
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
