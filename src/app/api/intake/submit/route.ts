@@ -82,11 +82,13 @@ export async function POST(request: NextRequest) {
 
     const supabase = createAdminClient();
 
-    // Determine source — maps to discovery_source enum ('manual' | 'intake_form' | 'agency_email')
+    // Determine source — maps to discovery_source enum ('manual' | 'inbound_form' | 'agency_email')
+    // Note: 'inbound_form' was added in migration 016. Some production DBs never had
+    // 'intake_form' in the enum, so we standardise on 'inbound_form' for all partner submissions.
     const { data: submitterProfile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
     const isAdminUser = ["admin", "management", "support"].includes(submitterProfile?.role ?? "");
     const requestedSource = (formData.get("source") as string) || "inbound_form";
-    const source: "manual" | "intake_form" | "agency_email" = (isAdminUser && requestedSource === "admin_manual") ? "manual" : "intake_form";
+    const source: "manual" | "inbound_form" | "agency_email" = (isAdminUser && requestedSource === "admin_manual") ? "manual" : "inbound_form";
     const inserted: Array<{ id: string; name: string; data: InfluencerEntry }> = [];
     const duplicates: string[] = [];
     const errors: Array<{ name: string; error: string }> = [];
