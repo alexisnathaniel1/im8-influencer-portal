@@ -1,5 +1,4 @@
 import Image from "next/image";
-import Link from "next/link";
 
 export default async function IntakeSuccessPage({
   searchParams,
@@ -37,9 +36,6 @@ export default async function IntakeSuccessPage({
             Questions? <a href="mailto:creators@im8health.com" className="underline">creators@im8health.com</a>
           </p>
         </div>
-        <Link href="/intake" className="text-im8-stone/70 text-sm hover:text-white transition-colors">
-          Submit more profiles →
-        </Link>
       </div>
     </div>
   );
