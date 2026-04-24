@@ -46,8 +46,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const statusReady = ["approved", "contracted", "live"].includes(effectiveStatus);
 
     if (statusReady && effectiveDeliverables.length > 0) {
-      const { count } = await admin.from("deliverables")
+      const { count, error: countErr } = await admin.from("deliverables")
         .select("*", { count: "exact", head: true }).eq("deal_id", id);
+      if (countErr) console.error("[deals/patch] deliverables count failed:", countErr.message);
       if ((count ?? 0) === 0) {
         const PLATFORM_MAP: Record<string, string> = {
           IGR: "instagram", IGS: "instagram",
@@ -67,7 +68,16 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
             title: `${before?.influencer_name ?? ""} — ${item.code} #${i + 1}`,
           }))
         );
-        if (rows.length > 0) await admin.from("deliverables").insert(rows);
+        if (rows.length > 0) {
+          const { error: insertErr } = await admin.from("deliverables").insert(rows);
+          if (insertErr) {
+            console.error("[deals/patch] deliverables auto-populate failed:", insertErr.message, "deal_id:", id, "rows:", rows.length);
+          } else {
+            console.log("[deals/patch] auto-populated", rows.length, "deliverable rows for deal", id);
+          }
+        }
+      } else {
+        console.log("[deals/patch] skipping auto-populate — deal already has", count, "deliverable rows");
       }
     }
   }

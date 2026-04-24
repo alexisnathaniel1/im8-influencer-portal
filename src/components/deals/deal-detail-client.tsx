@@ -210,7 +210,7 @@ export default function DealDetailClient({
           .filter(t => role === "support" ? !["contract", "gifting"].includes(t) : true)
           .map(t => {
             const label: Record<string, string> = {
-              overview: "Overview", contract: "Contract", briefs: "Briefs",
+              overview: "Overview", contract: "Contract & Deliverables", briefs: "Briefs",
               submissions: "Submissions", gifting: "Gifting", "edited-videos": "Edited Videos",
             };
             return (
@@ -508,14 +508,14 @@ export default function DealDetailClient({
               <DeliverableBriefList deliverables={deliverables} />
             ) : (
               <p className="text-sm text-im8-burgundy/40 py-3 text-center">
-                No deliverables in the tracker yet.{" "}
+                No deliverables yet.{" "}
                 <button
                   onClick={() => setTab("contract")}
                   className="text-im8-red hover:underline"
                 >
-                  Set deliverables in the Contract tab
+                  Open Contract &amp; Deliverables
                 </button>
-                {" "}— they&apos;ll appear here automatically once saved.
+                {" "}and click Save contract terms — rows will appear here automatically.
               </p>
             )}
           </div>
