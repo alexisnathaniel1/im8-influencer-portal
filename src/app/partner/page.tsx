@@ -101,11 +101,17 @@ export default async function PartnerPage() {
   // byProfileId: submissions the user filed themselves (agency or creator)
   // byEmail: submissions filed by their email address (self-submissions before account creation)
   // byInfluencerEmail: submissions where this user IS the creator, even if an admin/agency submitted
+  // Use a minimal safe SELECT to avoid failures if optional columns (e.g. influencer_email,
+  // proposed_deliverables) haven't been migrated in this environment yet.
   const SELECT_FIELDS = "id, influencer_name, platform_primary, status, positioning, niche_tags, niche, proposed_rate_cents, proposed_deliverables, negotiation_counter, agency_response, created_at";
 
-  const emptyResult = { data: [] } as { data: { id: string; [k: string]: unknown }[] };
+  const emptyResult = { data: [] as { id: string; [k: string]: unknown }[], error: null };
 
-  const [{ data: byProfileId }, { data: byEmail }, { data: byInfluencerEmail }] = await Promise.all([
+  const [
+    { data: byProfileId, error: e1 },
+    { data: byEmail, error: e2 },
+    { data: byInfluencerEmail, error: e3 },
+  ] = await Promise.all([
     admin
       .from("discovery_profiles")
       .select(SELECT_FIELDS)
@@ -126,6 +132,10 @@ export default async function PartnerPage() {
           .order("created_at", { ascending: false })
       : emptyResult,
   ]);
+
+  if (e1) console.error("[partner/page] byProfileId failed:", e1.message, "uid:", user.id);
+  if (e2) console.error("[partner/page] byEmail failed:", e2.message, "email:", email);
+  if (e3) console.error("[partner/page] byInfluencerEmail failed:", e3.message, "email:", email);
 
   // Merge and deduplicate by id
   const seen = new Set<string>();
