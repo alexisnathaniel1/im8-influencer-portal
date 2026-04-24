@@ -17,8 +17,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     "instagram_handle", "tiktok_handle", "youtube_handle",
     "is_gifted", "gifted_product", "gifted_quantity", "product_sent_at", "needs_approval",
     "niche_tags", "follower_count",
-    "campaign_start", "campaign_end", "contract_signed_at", "contract_url",
-    "payment_terms", "contract_requirements", "exclusivity_clause", "usage_rights_months",
+    "contract_url", "payment_terms", "contract_requirements", "usage_rights_months",
+    "discount_code", "affiliate_link",
   ];
   const updates = Object.fromEntries(Object.entries(body).filter(([k]) => allowed.includes(k)));
 
@@ -39,7 +39,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const effectiveDeliverables =
       ((updates.deliverables as Array<{ code: string; count: number }> | undefined) ??
        (before?.deliverables as Array<{ code: string; count: number }> | undefined) ?? [])
-        .filter(item => item && item.code && item.count > 0 && item.code !== "WHITELIST");
+        // Exclude rights/extras — not schedulable content deliverables
+        .filter(item => item && item.code && item.count > 0
+          && !["WHITELIST", "PAID_AD", "RAW_FOOTAGE", "LINK_BIO"].includes(item.code));
 
     const statusReady = ["approved", "contracted", "live"].includes(effectiveStatus);
 
@@ -49,8 +51,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       if ((count ?? 0) === 0) {
         const PLATFORM_MAP: Record<string, string> = {
           IGR: "instagram", IGS: "instagram",
-          TIKTOK: "tiktok", TIKTOK_VIDEO: "tiktok",
-          YT: "youtube", UGC: "other",
+          TIKTOK: "tiktok",
+          YT_DEDICATED: "youtube", YT_INTEGRATED: "youtube", YT_PODCAST: "youtube",
+          UGC: "other",
+          NEWSLETTER: "other", APP_PARTNERSHIP: "other", BLOG: "other",
         };
         const rows = effectiveDeliverables.flatMap(item =>
           Array.from({ length: item.count }, () => ({

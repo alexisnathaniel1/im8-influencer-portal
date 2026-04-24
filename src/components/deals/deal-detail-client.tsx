@@ -83,16 +83,16 @@ export default function DealDetailClient({
     followerCount: deal.follower_count ? String(deal.follower_count) : "",
     nicheTags: (deal.niche_tags as string[] | null) ?? [],
     needsApproval: deal.needs_approval !== false,
+    discountCode: (deal.discount_code as string) ?? "",
+    affiliateLink: (deal.affiliate_link as string) ?? "",
   });
 
   const [contract, setContract] = useState({
     campaignStart: (deal.campaign_start as string) ?? "",
     campaignEnd: (deal.campaign_end as string) ?? "",
-    contractSignedAt: (deal.contract_signed_at as string) ?? "",
     contractUrl: (deal.contract_url as string) ?? "",
     paymentTerms: (deal.payment_terms as string) ?? "",
     contractRequirements: (deal.contract_requirements as string) ?? "",
-    exclusivityClause: (deal.exclusivity_clause as string) ?? "",
     usageRightsMonths: String(deal.usage_rights_months ?? 12),
   });
   const [savingContract, setSavingContract] = useState(false);
@@ -106,11 +106,9 @@ export default function DealDetailClient({
       body: JSON.stringify({
         campaign_start: contract.campaignStart || null,
         campaign_end: contract.campaignEnd || null,
-        contract_signed_at: contract.contractSignedAt || null,
         contract_url: contract.contractUrl || null,
         payment_terms: contract.paymentTerms || null,
         contract_requirements: contract.contractRequirements || null,
-        exclusivity_clause: contract.exclusivityClause || null,
         usage_rights_months: parseInt(contract.usageRightsMonths) || 12,
       }),
     });
@@ -137,6 +135,8 @@ export default function DealDetailClient({
         follower_count: form.followerCount ? parseInt(form.followerCount) : null,
         niche_tags: form.nicheTags,
         needs_approval: form.needsApproval,
+        discount_code: form.discountCode || null,
+        affiliate_link: form.affiliateLink || null,
       }),
     });
     router.refresh();
@@ -301,6 +301,27 @@ export default function DealDetailClient({
             </div>
           </div>
 
+          {/* Discount code + affiliate link — visible to creators in their dashboard */}
+          <div className="grid grid-cols-2 gap-5">
+            <div>
+              <label className="block text-sm font-medium text-im8-burgundy mb-1">Discount code</label>
+              <input type="text" value={form.discountCode} placeholder="e.g. IM8ALEX20"
+                onChange={e => setForm(f => ({ ...f, discountCode: e.target.value }))}
+                className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40 font-mono" />
+              <p className="text-xs text-im8-burgundy/40 mt-0.5">Shown to the creator in their portal.</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-im8-burgundy mb-1">Affiliate / tracking link</label>
+              <input type="url" value={form.affiliateLink} placeholder="https://im8.com/?ref=..."
+                onChange={e => setForm(f => ({ ...f, affiliateLink: e.target.value }))}
+                className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40" />
+              {form.affiliateLink && (
+                <a href={form.affiliateLink} target="_blank" rel="noopener noreferrer"
+                  className="text-xs text-im8-red hover:underline mt-0.5 inline-block">Test link ↗</a>
+              )}
+            </div>
+          </div>
+
           {/* Portal access */}
           <div className="p-4 bg-im8-sand/40 rounded-xl border border-im8-stone/20 space-y-3">
             <span className="text-xs font-semibold text-im8-burgundy/50 uppercase tracking-wide">Portal access</span>
@@ -341,16 +362,23 @@ export default function DealDetailClient({
                 className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-im8-burgundy mb-1">Date signed</label>
-              <input type="date" value={contract.contractSignedAt}
-                onChange={e => setContract(c => ({ ...c, contractSignedAt: e.target.value }))}
-                className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40" />
-            </div>
-            <div>
               <label className="block text-sm font-medium text-im8-burgundy mb-1">Usage rights (months)</label>
               <input type="number" value={contract.usageRightsMonths}
                 onChange={e => setContract(c => ({ ...c, usageRightsMonths: e.target.value }))}
                 className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-im8-burgundy mb-1">Payment terms</label>
+              <select value={contract.paymentTerms}
+                onChange={e => setContract(c => ({ ...c, paymentTerms: e.target.value }))}
+                className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40 bg-white">
+                <option value="">— Select —</option>
+                <option value="Net 30">Net 30</option>
+                <option value="Net 15">Net 15</option>
+                <option value="Net 7">Net 7</option>
+                <option value="50% Advanced, 50% After">50% Advanced, 50% After</option>
+                <option value="Full Payment Upfront">Full Payment Upfront</option>
+              </select>
             </div>
           </div>
 
@@ -366,23 +394,9 @@ export default function DealDetailClient({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-im8-burgundy mb-1">Payment terms</label>
-            <input type="text" value={contract.paymentTerms} placeholder="e.g. Net 30, 50% upfront, monthly on 1st..."
-              onChange={e => setContract(c => ({ ...c, paymentTerms: e.target.value }))}
-              className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40" />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-im8-burgundy mb-1">Exclusivity clause</label>
-            <input type="text" value={contract.exclusivityClause} placeholder="e.g. No competing supplement brands for 6 months"
-              onChange={e => setContract(c => ({ ...c, exclusivityClause: e.target.value }))}
-              className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40" />
-          </div>
-
-          <div>
             <label className="block text-sm font-medium text-im8-burgundy mb-1">Specific requirements</label>
             <textarea value={contract.contractRequirements} rows={4}
-              placeholder="Disclosure requirements, posting schedule, approval windows, revision rounds, brand mentions, link-in-bio, anything specific to this contract..."
+              placeholder="Disclosure requirements, posting schedule, approval windows, revision rounds, brand mentions, anything specific to this contract..."
               onChange={e => setContract(c => ({ ...c, contractRequirements: e.target.value }))}
               className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40 resize-none" />
           </div>
@@ -991,22 +1005,42 @@ function Field({ label, value, onChange, type = "text" }: {
   );
 }
 
-// Deliverable label map — exported so the brief editor can reuse it.
+// Deliverable label map — exported so the brief editor and new-deal form can reuse it.
 export const DELIVERABLE_LABELS: Record<string, string> = {
+  // Instagram
   IGR: "Instagram Reels",
   IGS: "Instagram Stories",
-  UGC: "UGC Videos",
+  // TikTok
   TIKTOK: "TikTok Videos",
-  YT: "YouTube Videos",
+  // YouTube (broken down by format)
+  YT_DEDICATED: "YouTube Dedicated Review",
+  YT_INTEGRATED: "YouTube Integrated Review",
+  YT_PODCAST: "YouTube Podcast Ad Read",
+  // UGC
+  UGC: "UGC Videos",
+  // Other platforms / formats
+  NEWSLETTER: "Newsletter",
+  APP_PARTNERSHIP: "App Partnership",
+  BLOG: "Blog Post",
+  // Rights / extras — rendered as Yes/No toggles, excluded from content briefs
   WHITELIST: "Whitelisting",
+  PAID_AD: "Paid Ad Usage Rights",
+  RAW_FOOTAGE: "Raw Footage",
+  LINK_BIO: "Link in Bio",
 };
 
-// Format a single deliverable for display. Whitelisting is a binary rights grant
-// (Yes/No), not a repeatable post count, so we render it differently.
+// Codes that are binary Yes/No grants rather than countable deliverables.
+export const BINARY_DELIVERABLE_CODES = new Set(["WHITELIST", "PAID_AD", "RAW_FOOTAGE", "LINK_BIO"]);
+
+// Codes that are rights/extras — excluded from the content brief deliverable list.
+// Denis (support) writes the brief for the actual content deliverables only.
+export const BRIEF_EXCLUDED_CODES = new Set(["WHITELIST", "PAID_AD", "RAW_FOOTAGE", "LINK_BIO"]);
+
+// Format a single deliverable for display.
 export function formatDeliverable(item: { code: string; count: number }): string | null {
   if (!item || !item.code) return null;
-  if (item.code === "WHITELIST") {
-    return item.count > 0 ? "Whitelisting" : null;
+  if (BINARY_DELIVERABLE_CODES.has(item.code)) {
+    return item.count > 0 ? DELIVERABLE_LABELS[item.code] ?? item.code : null;
   }
   if (item.count <= 0) return null;
   return `${item.count}× ${DELIVERABLE_LABELS[item.code] ?? item.code}`;
@@ -1043,6 +1077,7 @@ function EditableContractSection({
   });
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [briefNote, setBriefNote] = useState("");
 
   const seq = contractSequence ?? 1;
   const rateNum = parseFloat(rate) || 0;
@@ -1072,6 +1107,7 @@ function EditableContractSection({
 
   async function save() {
     setSaving(true);
+    setBriefNote("");
     await fetch(`/api/deals/${dealId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -1082,9 +1118,25 @@ function EditableContractSection({
         deliverables: activeDeliverables,
       }),
     });
+
+    // Auto-create a content brief if deliverables are set and no brief exists yet.
+    // Denis (support) will then add the Google Doc link and send it to the creator.
+    const contentDeliverables = activeDeliverables.filter(d => !BRIEF_EXCLUDED_CODES.has(d.code));
+    if (contentDeliverables.length > 0) {
+      const briefRes = await fetch("/api/briefs/auto-create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dealId, deliverables: contentDeliverables }),
+      });
+      if (briefRes.ok) {
+        const { created } = await briefRes.json();
+        if (created) setBriefNote("📋 Brief auto-created — Denis can now add the Google Doc link.");
+      }
+    }
+
     setSaving(false);
     setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
+    setTimeout(() => { setSaved(false); setBriefNote(""); }, 5000);
   }
 
   return (
@@ -1157,47 +1209,60 @@ function EditableContractSection({
           {/* Deliverables picker */}
           <div>
             <div className="text-xs font-semibold text-im8-burgundy/60 uppercase tracking-wide mb-2">Deliverables</div>
-            <div className="space-y-2.5">
-              {Object.entries(DELIVERABLE_LABELS).map(([code, label]) => {
-                const count = deliverableCounts[code] ?? 0;
-                // Whitelisting is a rights grant (Yes/No), not a repeatable deliverable.
-                if (code === "WHITELIST") {
-                  const on = count > 0;
+
+            {/* Countable deliverables */}
+            <div className="space-y-2.5 mb-4">
+              {Object.entries(DELIVERABLE_LABELS)
+                .filter(([code]) => !BINARY_DELIVERABLE_CODES.has(code))
+                .map(([code, label]) => {
+                  const count = deliverableCounts[code] ?? 0;
                   return (
-                    <div key={code} className="flex items-center justify-between gap-3">
-                      <span className="text-sm text-im8-burgundy">{label}</span>
-                      <Toggle on={on} onChange={v => setCount(code, v ? 1 : 0)} label={on ? "Yes" : "No"} />
+                    <div key={code} className="flex items-center gap-3">
+                      <span className="text-sm text-im8-burgundy flex-1">{label}</span>
+                      <div className="flex items-center gap-1.5">
+                        <button type="button"
+                          onClick={() => setCount(code, Math.max(0, count - 1))}
+                          disabled={count === 0}
+                          className={`w-7 h-7 rounded border text-sm font-medium transition-colors ${count > 0 ? "border-im8-stone/40 hover:bg-im8-sand text-im8-burgundy" : "border-im8-stone/20 text-im8-burgundy/20 cursor-not-allowed"}`}>
+                          −
+                        </button>
+                        <span className={`w-8 text-center text-sm font-semibold tabular-nums ${count > 0 ? "text-im8-burgundy" : "text-im8-burgundy/25"}`}>
+                          {count}
+                        </span>
+                        <button type="button"
+                          onClick={() => setCount(code, count + 1)}
+                          className="w-7 h-7 rounded border border-im8-stone/40 hover:bg-im8-sand text-im8-burgundy text-sm font-medium transition-colors">
+                          +
+                        </button>
+                      </div>
                     </div>
                   );
-                }
-                return (
-                  <div key={code} className="flex items-center gap-3">
-                    <span className="text-sm text-im8-burgundy flex-1">{label}</span>
-                    <div className="flex items-center gap-1.5">
-                      <button type="button"
-                        onClick={() => setCount(code, Math.max(0, count - 1))}
-                        disabled={count === 0}
-                        className={`w-7 h-7 rounded border text-sm font-medium transition-colors ${count > 0 ? "border-im8-stone/40 hover:bg-im8-sand text-im8-burgundy" : "border-im8-stone/20 text-im8-burgundy/20 cursor-not-allowed"}`}>
-                        −
-                      </button>
-                      <span className={`w-8 text-center text-sm font-semibold tabular-nums ${count > 0 ? "text-im8-burgundy" : "text-im8-burgundy/25"}`}>
-                        {count}
-                      </span>
-                      <button type="button"
-                        onClick={() => setCount(code, count + 1)}
-                        className="w-7 h-7 rounded border border-im8-stone/40 hover:bg-im8-sand text-im8-burgundy text-sm font-medium transition-colors">
-                        +
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
+                })}
+            </div>
+
+            {/* Binary rights / extras */}
+            <div className="border-t border-im8-stone/10 pt-3">
+              <div className="text-xs text-im8-burgundy/40 uppercase tracking-wide mb-2">Rights &amp; extras</div>
+              <div className="space-y-2.5">
+                {Object.entries(DELIVERABLE_LABELS)
+                  .filter(([code]) => BINARY_DELIVERABLE_CODES.has(code))
+                  .map(([code, label]) => {
+                    const on = (deliverableCounts[code] ?? 0) > 0;
+                    return (
+                      <div key={code} className="flex items-center justify-between gap-3">
+                        <span className="text-sm text-im8-burgundy">{label}</span>
+                        <Toggle on={on} onChange={v => setCount(code, v ? 1 : 0)} label={on ? "Yes" : "No"} />
+                      </div>
+                    );
+                  })}
+              </div>
             </div>
           </div>
 
-          <div className="flex justify-end pt-1 border-t border-im8-stone/10">
+          <div className="flex items-center justify-between pt-1 border-t border-im8-stone/10 gap-3">
+            {briefNote && <p className="text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-1.5 flex-1">{briefNote}</p>}
             <button type="button" onClick={save} disabled={saving}
-              className={`px-4 py-2 text-sm text-white rounded-lg transition-colors disabled:opacity-50 ${saved ? "bg-green-600 hover:bg-green-700" : "bg-im8-red hover:bg-im8-burgundy"}`}>
+              className={`px-4 py-2 text-sm text-white rounded-lg transition-colors disabled:opacity-50 shrink-0 ${saved ? "bg-green-600 hover:bg-green-700" : "bg-im8-red hover:bg-im8-burgundy"}`}>
               {saving ? "Saving…" : saved ? "Saved ✓" : "Save contract terms"}
             </button>
           </div>
@@ -1244,10 +1309,10 @@ function VersionHistorySection({ dealId }: { dealId: string }) {
     instagram_handle: "Instagram", tiktok_handle: "TikTok", youtube_handle: "YouTube",
     follower_count: "Followers", niche_tags: "Niche tags",
     campaign_start: "Campaign start", campaign_end: "Campaign end",
-    contract_signed_at: "Date signed", contract_url: "Contract URL",
-    payment_terms: "Payment terms", exclusivity_clause: "Exclusivity",
-    contract_requirements: "Requirements", usage_rights_months: "Usage rights",
-    needs_approval: "Needs approval",
+    contract_url: "Contract URL",
+    payment_terms: "Payment terms", contract_requirements: "Requirements",
+    usage_rights_months: "Usage rights", needs_approval: "Needs approval",
+    discount_code: "Discount code", affiliate_link: "Affiliate link",
   };
 
   function describe(action: string, after: Record<string, unknown> | null) {

@@ -34,13 +34,25 @@ function NewPartnershipForm() {
   const [nicheTags, setNicheTags] = useState<string[]>([]);
   const [deliverableCounts, setDeliverableCounts] = useState<Record<string, number>>({});
 
-  const DELIVERABLE_OPTIONS = [
+  // Countable deliverables (episode / post counts)
+  const COUNTABLE_OPTIONS = [
     { code: "IGR", label: "Instagram Reels" },
     { code: "IGS", label: "Instagram Stories" },
-    { code: "UGC", label: "UGC Videos" },
     { code: "TIKTOK", label: "TikTok Videos" },
-    { code: "YT", label: "YouTube Videos" },
+    { code: "YT_DEDICATED", label: "YouTube Dedicated Review" },
+    { code: "YT_INTEGRATED", label: "YouTube Integrated Review" },
+    { code: "YT_PODCAST", label: "YouTube Podcast Ad Read" },
+    { code: "UGC", label: "UGC Videos" },
+    { code: "NEWSLETTER", label: "Newsletter" },
+    { code: "APP_PARTNERSHIP", label: "App Partnership" },
+    { code: "BLOG", label: "Blog Post" },
+  ];
+  // Binary Yes/No rights / extras
+  const BINARY_OPTIONS = [
     { code: "WHITELIST", label: "Whitelisting" },
+    { code: "PAID_AD", label: "Paid Ad Usage Rights" },
+    { code: "RAW_FOOTAGE", label: "Raw Footage" },
+    { code: "LINK_BIO", label: "Link in Bio" },
   ];
 
   function setDeliverableCount(code: string, count: number) {
@@ -242,27 +254,8 @@ function NewPartnershipForm() {
             <p className="text-xs font-semibold text-im8-burgundy/50 uppercase tracking-wide">Deliverables</p>
             <p className="text-xs text-im8-burgundy/50 -mt-1">Optional — you can also set these later from the deal page.</p>
             <div className="space-y-2">
-              {DELIVERABLE_OPTIONS.map(({ code, label }) => {
+              {COUNTABLE_OPTIONS.map(({ code, label }) => {
                 const count = deliverableCounts[code] ?? 0;
-                // Whitelisting is a Yes/No rights grant, not a repeatable post.
-                if (code === "WHITELIST") {
-                  const on = count > 0;
-                  return (
-                    <div key={code} className="flex items-center justify-between gap-3">
-                      <span className="text-sm text-im8-burgundy">{label}</span>
-                      <button
-                        type="button"
-                        onClick={() => setDeliverableCount(code, on ? 0 : 1)}
-                        className="flex items-center gap-2.5"
-                      >
-                        <span className={`relative w-9 h-5 rounded-full transition-colors ${on ? "bg-im8-red" : "bg-im8-stone/40"}`}>
-                          <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${on ? "left-4" : "left-0.5"}`} />
-                        </span>
-                        <span className="text-sm font-medium text-im8-burgundy">{on ? "Yes" : "No"}</span>
-                      </button>
-                    </div>
-                  );
-                }
                 return (
                   <div key={code} className="flex items-center gap-3">
                     <span className="text-sm text-im8-burgundy flex-1">{label}</span>
@@ -280,6 +273,28 @@ function NewPartnershipForm() {
                         +
                       </button>
                     </div>
+                  </div>
+                );
+              })}
+            </div>
+            {/* Rights & extras — Yes/No toggles */}
+            <div className="border-t border-im8-stone/10 pt-2 space-y-2">
+              <p className="text-xs text-im8-burgundy/40 uppercase tracking-wide">Rights &amp; extras</p>
+              {BINARY_OPTIONS.map(({ code, label }) => {
+                const on = (deliverableCounts[code] ?? 0) > 0;
+                return (
+                  <div key={code} className="flex items-center justify-between gap-3">
+                    <span className="text-sm text-im8-burgundy">{label}</span>
+                    <button
+                      type="button"
+                      onClick={() => setDeliverableCount(code, on ? 0 : 1)}
+                      className="flex items-center gap-2.5"
+                    >
+                      <span className={`relative w-9 h-5 rounded-full transition-colors ${on ? "bg-im8-red" : "bg-im8-stone/40"}`}>
+                        <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${on ? "left-4" : "left-0.5"}`} />
+                      </span>
+                      <span className="text-sm font-medium text-im8-burgundy">{on ? "Yes" : "No"}</span>
+                    </button>
                   </div>
                 );
               })}

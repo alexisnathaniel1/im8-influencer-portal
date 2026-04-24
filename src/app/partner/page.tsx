@@ -46,7 +46,7 @@ export default async function PartnerPage() {
   // Shown as Contract 1, Contract 2, etc. so partners see their full history.
   const { data: linkedDeals } = await admin
     .from("deals")
-    .select("id, influencer_name, status, platform_primary, campaign_start, campaign_end, monthly_rate_cents, total_months, drive_folder_id, contract_sequence, previous_deal_id")
+    .select("id, influencer_name, status, platform_primary, campaign_start, campaign_end, monthly_rate_cents, total_months, drive_folder_id, contract_sequence, previous_deal_id, discount_code, affiliate_link, payment_terms")
     .eq("influencer_profile_id", user.id)
     .not("status", "in", '("declined","rejected")')
     .order("contract_sequence", { ascending: true });
@@ -238,6 +238,24 @@ export default async function PartnerPage() {
                   )}
                 </div>
               </div>
+              {/* Discount code + affiliate link — shown when set */}
+              {(deal.discount_code || deal.affiliate_link) && (
+                <div className="flex flex-wrap gap-4 px-4 py-3 bg-im8-sand/50 rounded-xl border border-im8-stone/20 text-sm">
+                  {deal.discount_code && (
+                    <div>
+                      <p className="text-xs text-im8-burgundy/50 uppercase tracking-wide font-medium mb-0.5">Your discount code</p>
+                      <p className="font-mono font-bold text-im8-burgundy text-base tracking-wider">{deal.discount_code}</p>
+                    </div>
+                  )}
+                  {deal.affiliate_link && (
+                    <div>
+                      <p className="text-xs text-im8-burgundy/50 uppercase tracking-wide font-medium mb-0.5">Your tracking link</p>
+                      <a href={deal.affiliate_link} target="_blank" rel="noopener noreferrer"
+                        className="text-im8-red hover:underline text-sm break-all">{deal.affiliate_link}</a>
+                    </div>
+                  )}
+                </div>
+              )}
               {["approved", "contracted", "live"].includes(deal.status) ? (
                 <div className="flex flex-wrap gap-3">
                   <Link href="/partner/briefs" className="text-sm px-4 py-2 bg-im8-burgundy text-white rounded-lg hover:bg-im8-red transition-colors">
