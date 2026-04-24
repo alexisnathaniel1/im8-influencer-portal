@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 
 export default async function IntakeSuccessPage({
   searchParams,
@@ -35,6 +36,12 @@ export default async function IntakeSuccessPage({
           <p className="text-xs text-im8-burgundy/50">
             Questions? <a href="mailto:creators@im8health.com" className="underline">creators@im8health.com</a>
           </p>
+          <Link
+            href="/partner"
+            className="inline-block w-full py-2.5 bg-im8-burgundy text-white text-sm font-semibold rounded-lg hover:bg-im8-red transition-colors"
+          >
+            Go to my dashboard →
+          </Link>
         </div>
       </div>
     </div>
