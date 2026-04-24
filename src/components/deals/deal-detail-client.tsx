@@ -219,7 +219,12 @@ export default function DealDetailClient({
                   tab === t ? "bg-white text-im8-burgundy shadow-sm" : "text-im8-burgundy/50 hover:text-im8-burgundy"
                 }`}>
                 {label[t]}
-                {t === "briefs" && briefs.length > 0 && <span className="ml-1 text-xs">({briefs.length})</span>}
+                {t === "briefs" && (() => {
+                  const n = ((deal.deliverables as Array<{ code: string; count: number }> | null) ?? [])
+                    .filter(d => d && d.code && d.count > 0 && !BINARY_DELIVERABLE_CODES.has(d.code))
+                    .reduce((s, d) => s + d.count, 0);
+                  return n > 0 ? <span className="ml-1 text-xs">({n})</span> : null;
+                })()}
                 {t === "submissions" && submissions.length > 0 && <span className="ml-1 text-xs">({submissions.length})</span>}
               </button>
             );
@@ -439,68 +444,6 @@ export default function DealDetailClient({
       {/* Briefs tab */}
       {tab === "briefs" && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between gap-4">
-            {briefCreateError && (
-              <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 flex-1">{briefCreateError}</p>
-            )}
-            <button
-              disabled={creatingBrief}
-              onClick={async () => {
-                setCreatingBrief(true);
-                setBriefCreateError("");
-                try {
-                  const res = await fetch("/api/briefs", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ dealId: deal.id }),
-                  });
-                  if (!res.ok) {
-                    const data = await res.json().catch(() => ({}));
-                    setBriefCreateError(data.error || `Error ${res.status} — could not create brief`);
-                    setCreatingBrief(false);
-                    return;
-                  }
-                  const { brief } = await res.json();
-                  if (brief?.id) {
-                    router.push(`/admin/briefs/${brief.id}`);
-                  } else {
-                    setBriefCreateError("Brief created but no ID returned — please refresh");
-                    setCreatingBrief(false);
-                  }
-                } catch (err) {
-                  setBriefCreateError(err instanceof Error ? err.message : "Network error — please try again");
-                  setCreatingBrief(false);
-                }
-              }}
-              className="ml-auto px-4 py-2 bg-im8-red text-white text-sm rounded-lg hover:bg-im8-burgundy disabled:opacity-60 transition-colors">
-              {creatingBrief ? "Creating…" : "+ Create brief"}
-            </button>
-          </div>
-          {briefs.length === 0 ? (
-            <div className="bg-white rounded-xl border border-im8-stone/30 p-12 text-center text-im8-burgundy/40">
-              No briefs yet. Create the first brief for this influencer.
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {briefs.map(b => (
-                <div key={b.id as string} className="bg-white rounded-xl border border-im8-stone/30 p-5 flex items-center justify-between">
-                  <div>
-                    <div className="font-medium text-im8-burgundy">{b.title as string}</div>
-                    <div className="text-xs text-im8-burgundy/50 mt-1 capitalize">
-                      {b.status as string}
-                      {b.platform ? ` · ${b.platform as string}` : ""}
-                      {b.due_date ? ` · Due ${new Date(b.due_date as string).toLocaleDateString()}` : ""}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <Link href={`/admin/briefs/${b.id}`}
-                      className="text-sm text-im8-red hover:underline">Edit →</Link>
-                    <DeleteBriefButton briefId={b.id as string} onDeleted={() => router.refresh()} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
 
           {/* Per-deliverable brief URLs — driven by the deal's deliverables JSON so rows
               appear as soon as deliverables are set in the Overview tab, even before
@@ -551,6 +494,7 @@ export default function DealDetailClient({
                     {rows.map(({ code, sequence, trackerRow }) => (
                       <DeliverableBriefRow
                         key={`${code}_${sequence}`}
+                        dealId={deal.id as string}
                         deliverableType={code}
                         sequence={sequence}
                         trackerRow={trackerRow}
@@ -1951,71 +1895,85 @@ function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) =
 // Per-deliverable brief-URL editor. Renders one row per deliverable with an
 // inline Google Doc URL input. Saves on blur / Enter.
 function DeliverableBriefRow({
+  dealId,
   deliverableType,
   sequence,
   trackerRow,
 }: {
+  dealId: string;
   deliverableType: string;
   sequence: number;
   trackerRow: DeliverableRow | null;
 }) {
   const [url, setUrl] = useState(trackerRow?.brief_doc_url ?? "");
   const [savedUrl, setSavedUrl] = useState(trackerRow?.brief_doc_url ?? "");
+  // rowId is set once we have a tracker row (either passed in or created on first Save)
+  const [rowId, setRowId] = useState<string | null>(trackerRow?.id ?? null);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [sendStatus, setSendStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState("");
   const isDirty = url.trim() !== savedUrl;
-  const noTracker = trackerRow === null;
 
-  async function handleSave() {
-    if (noTracker) return;
+  // Save brief_doc_url — creates tracker row on-demand if it doesn't exist yet.
+  async function handleSave(): Promise<string | null> {
     const next = url.trim();
     setSaveStatus("saving"); setErrorMsg("");
     try {
-      const res = await fetch(`/api/deliverables/${trackerRow.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ brief_doc_url: next || null }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setErrorMsg(data.error || `Error ${res.status}`);
-        setSaveStatus("error");
-        return;
+      let id = rowId;
+      if (!id) {
+        // No tracker row yet — call ensure+save endpoint which creates it and saves URL atomically
+        const res = await fetch(`/api/deals/${dealId}/deliverable-brief`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code: deliverableType, sequence, brief_doc_url: next || null }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          setErrorMsg(data.error || `Error ${res.status}`);
+          setSaveStatus("error");
+          return null;
+        }
+        const data = await res.json();
+        id = data.id as string;
+        setRowId(id);
+      } else {
+        // Existing row — PATCH it directly
+        const res = await fetch(`/api/deliverables/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ brief_doc_url: next || null }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          setErrorMsg(data.error || `Error ${res.status}`);
+          setSaveStatus("error");
+          return null;
+        }
       }
       setSavedUrl(next);
       setSaveStatus("saved");
       setTimeout(() => setSaveStatus("idle"), 1500);
+      return id;
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "Network error");
       setSaveStatus("error");
+      return null;
     }
   }
 
   async function handleSend() {
-    if (noTracker) return;
     const next = url.trim();
     if (!next) { setErrorMsg("Add the Google Doc link before sending."); return; }
     setErrorMsg("");
-    // Save first if dirty
-    if (isDirty) {
-      setSaveStatus("saving");
-      const saveRes = await fetch(`/api/deliverables/${trackerRow.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ brief_doc_url: next }),
-      }).catch(() => null);
-      if (!saveRes?.ok) {
-        setSaveStatus("error"); setErrorMsg("Could not save the link — check your connection.");
-        return;
-      }
-      setSavedUrl(next);
-      setSaveStatus("saved");
-      setTimeout(() => setSaveStatus("idle"), 1500);
+    // Save first (creates row if needed), get the row id
+    let id = rowId;
+    if (isDirty || !id) {
+      id = await handleSave();
+      if (!id) return; // save failed
     }
     setSendStatus("sending");
     try {
-      const res = await fetch(`/api/deliverables/${trackerRow.id}/send-brief`, { method: "POST" });
+      const res = await fetch(`/api/deliverables/${id}/send-brief`, { method: "POST" });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         setErrorMsg(data.error || `Send failed (${res.status})`);
@@ -2039,46 +1997,36 @@ function DeliverableBriefRow({
             {label}
           </span>
         </div>
-        {noTracker ? (
-          <span className="flex-1 text-xs text-im8-burgundy/40 italic">
-            Save the contract terms first to enable brief links
-          </span>
-        ) : (
-          <>
-            <input
-              type="url"
-              value={url}
-              onChange={e => { setUrl(e.target.value); setErrorMsg(""); setSendStatus("idle"); }}
-              placeholder="https://docs.google.com/document/d/…"
-              className={`flex-1 min-w-0 px-3 py-1.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-im8-red/30 ${errorMsg ? "border-red-300 bg-red-50" : "border-im8-stone/40 text-im8-burgundy"}`}
-            />
-            {url && (
-              <a href={url} target="_blank" rel="noopener noreferrer"
-                className="shrink-0 text-xs text-im8-red hover:underline">Open ↗</a>
-            )}
-          </>
+        <input
+          type="url"
+          value={url}
+          onChange={e => { setUrl(e.target.value); setErrorMsg(""); setSendStatus("idle"); }}
+          placeholder="https://docs.google.com/document/d/…"
+          className={`flex-1 min-w-0 px-3 py-1.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-im8-red/30 ${errorMsg ? "border-red-300 bg-red-50" : "border-im8-stone/40 text-im8-burgundy"}`}
+        />
+        {url && (
+          <a href={url} target="_blank" rel="noopener noreferrer"
+            className="shrink-0 text-xs text-im8-red hover:underline">Open ↗</a>
         )}
       </div>
-      {!noTracker && (
-        <div className="flex items-center gap-2 pl-[6.5rem]">
-          <button
-            onClick={handleSave}
-            disabled={saveStatus === "saving" || !isDirty}
-            className="px-3 py-1 text-xs font-medium bg-im8-sand border border-im8-stone/40 text-im8-burgundy rounded-lg hover:bg-im8-stone/20 disabled:opacity-40 transition-colors"
-          >
-            {saveStatus === "saving" ? "Saving…" : saveStatus === "saved" ? "Saved ✓" : "Save draft"}
-          </button>
-          <button
-            onClick={handleSend}
-            disabled={sendStatus === "sending" || saveStatus === "saving"}
-            className="px-3 py-1 text-xs font-medium bg-im8-red text-white rounded-lg hover:bg-im8-burgundy disabled:opacity-40 transition-colors"
-          >
-            {sendStatus === "sending" ? "Sending…" : sendStatus === "sent" ? "Sent ✓" : sendStatus === "error" ? "Retry send" : "Send to influencer"}
-          </button>
-          {errorMsg && <span className="text-xs text-red-600">{errorMsg}</span>}
-          {saveStatus === "error" && !errorMsg && <span className="text-xs text-red-600">Save failed</span>}
-        </div>
-      )}
+      <div className="flex items-center gap-2 pl-[6.5rem]">
+        <button
+          onClick={() => handleSave()}
+          disabled={saveStatus === "saving" || !isDirty}
+          className="px-3 py-1 text-xs font-medium bg-im8-sand border border-im8-stone/40 text-im8-burgundy rounded-lg hover:bg-im8-stone/20 disabled:opacity-40 transition-colors"
+        >
+          {saveStatus === "saving" ? "Saving…" : saveStatus === "saved" ? "Saved ✓" : "Save draft"}
+        </button>
+        <button
+          onClick={handleSend}
+          disabled={sendStatus === "sending" || saveStatus === "saving"}
+          className="px-3 py-1 text-xs font-medium bg-im8-red text-white rounded-lg hover:bg-im8-burgundy disabled:opacity-40 transition-colors"
+        >
+          {sendStatus === "sending" ? "Sending…" : sendStatus === "sent" ? "Sent ✓" : sendStatus === "error" ? "Retry send" : "Send to influencer"}
+        </button>
+        {errorMsg && <span className="text-xs text-red-600">{errorMsg}</span>}
+        {saveStatus === "error" && !errorMsg && <span className="text-xs text-red-600">Save failed</span>}
+      </div>
     </div>
   );
 }

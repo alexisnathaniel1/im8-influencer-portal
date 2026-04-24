@@ -24,18 +24,15 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   const admin = createAdminClient();
 
-  // Read current status before update so we can detect contracted transition
   const { data: before } = await admin.from("deals").select("status, deliverables, influencer_name, platform_primary").eq("id", id).single();
 
   const { error } = await admin.from("deals").update(updates).eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
-  // Auto-populate deliverables as soon as a deal is approved/contracted/live AND
-  // deliverables have been saved. No manual "Move to contracted" click required —
-  // the tracker mirrors the contract state automatically.
-  // WHITELIST is a rights grant, not a schedulable post, so we skip it here.
+  // Auto-populate tracker rows as soon as deliverables are saved on a deal —
+  // regardless of deal status, so brief links work even for pending/negotiating deals.
+  // WHITELIST/PAID_AD/RAW_FOOTAGE/LINK_BIO are rights grants, not schedulable posts — skip them.
   {
-    const effectiveStatus = (updates.status as string | undefined) ?? before?.status ?? "";
     const effectiveDeliverables =
       ((updates.deliverables as Array<{ code: string; count: number }> | undefined) ??
        (before?.deliverables as Array<{ code: string; count: number }> | undefined) ?? [])
@@ -43,9 +40,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         .filter(item => item && item.code && item.count > 0
           && !["WHITELIST", "PAID_AD", "RAW_FOOTAGE", "LINK_BIO"].includes(item.code));
 
-    const statusReady = ["approved", "contracted", "live"].includes(effectiveStatus);
-
-    if (statusReady && effectiveDeliverables.length > 0) {
+    if (effectiveDeliverables.length > 0) {
       const { count, error: countErr } = await admin.from("deliverables")
         .select("*", { count: "exact", head: true }).eq("deal_id", id);
       if (countErr) console.error("[deals/patch] deliverables count failed:", countErr.message);
