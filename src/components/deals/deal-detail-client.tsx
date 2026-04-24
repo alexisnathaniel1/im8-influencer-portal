@@ -1075,6 +1075,7 @@ function EditableContractSection({
     }
     return counts;
   });
+  const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [briefNote, setBriefNote] = useState("");
@@ -1123,20 +1124,26 @@ function EditableContractSection({
     // Denis (support) will then add the Google Doc link and send it to the creator.
     const contentDeliverables = activeDeliverables.filter(d => !BRIEF_EXCLUDED_CODES.has(d.code));
     if (contentDeliverables.length > 0) {
-      const briefRes = await fetch("/api/briefs/auto-create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dealId, deliverables: contentDeliverables }),
-      });
-      if (briefRes.ok) {
-        const { created } = await briefRes.json();
-        if (created) setBriefNote("📋 Brief auto-created — Denis can now add the Google Doc link.");
+      try {
+        const briefRes = await fetch("/api/briefs/auto-create", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ dealId, deliverables: contentDeliverables }),
+        });
+        if (briefRes.ok) {
+          const { created } = await briefRes.json();
+          if (created) setBriefNote("📋 Brief created — click the Briefs tab to open it and add the Google Doc link.");
+        }
+      } catch {
+        // Auto-create failed silently — Denis can create it manually from the Briefs tab.
       }
     }
 
+    // Refresh server-side data so the Briefs tab shows the newly created brief.
+    router.refresh();
     setSaving(false);
     setSaved(true);
-    setTimeout(() => { setSaved(false); setBriefNote(""); }, 5000);
+    setTimeout(() => { setSaved(false); setBriefNote(""); }, 8000);
   }
 
   return (
