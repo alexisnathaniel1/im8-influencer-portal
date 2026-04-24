@@ -67,7 +67,7 @@ type DeliverableRow = {
 };
 
 export default function DealDetailClient({
-  deal, briefs, submissions, giftingRequests, deliverables = [], partnerShippingAddress, canViewRates = true,
+  deal, briefs, submissions, giftingRequests, deliverables = [], partnerShippingAddress, canViewRates = true, role = "",
 }: {
   deal: Deal;
   briefs: Brief[];
@@ -76,6 +76,7 @@ export default function DealDetailClient({
   deliverables?: DeliverableRow[];
   partnerShippingAddress: ShippingAddress | null;
   canViewRates?: boolean;
+  role?: string;
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<"overview" | "contract" | "briefs" | "submissions" | "gifting" | "edited-videos">("overview");
@@ -204,23 +205,25 @@ export default function DealDetailClient({
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-im8-sand/50 rounded-xl p-1 w-fit">
-        {(["overview", "contract", "briefs", "submissions", "gifting", "edited-videos"] as const).map(t => {
-          const label: Record<string, string> = {
-            overview: "Overview", contract: "Contract", briefs: "Briefs",
-            submissions: "Submissions", gifting: "Gifting", "edited-videos": "Edited Videos",
-          };
-          return (
-            <button key={t} onClick={() => setTab(t)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                tab === t ? "bg-white text-im8-burgundy shadow-sm" : "text-im8-burgundy/50 hover:text-im8-burgundy"
-              }`}>
-              {label[t]}
-              {t === "briefs" && briefs.length > 0 && <span className="ml-1 text-xs">({briefs.length})</span>}
-              {t === "submissions" && submissions.length > 0 && <span className="ml-1 text-xs">({submissions.length})</span>}
-            </button>
-          );
-        })}
+      <div className="flex gap-1 bg-im8-sand/50 rounded-xl p-1 w-fit flex-wrap">
+        {(["overview", "contract", "briefs", "submissions", "gifting", "edited-videos"] as const)
+          .filter(t => role === "support" ? !["contract", "gifting"].includes(t) : true)
+          .map(t => {
+            const label: Record<string, string> = {
+              overview: "Overview", contract: "Contract", briefs: "Briefs",
+              submissions: "Submissions", gifting: "Gifting", "edited-videos": "Edited Videos",
+            };
+            return (
+              <button key={t} onClick={() => setTab(t)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  tab === t ? "bg-white text-im8-burgundy shadow-sm" : "text-im8-burgundy/50 hover:text-im8-burgundy"
+                }`}>
+                {label[t]}
+                {t === "briefs" && briefs.length > 0 && <span className="ml-1 text-xs">({briefs.length})</span>}
+                {t === "submissions" && submissions.length > 0 && <span className="ml-1 text-xs">({submissions.length})</span>}
+              </button>
+            );
+          })}
       </div>
 
       {/* Overview tab */}
@@ -1908,12 +1911,15 @@ function DeliverableBriefList({ deliverables }: { deliverables: DeliverableRow[]
 
 function DeliverableBriefRow({ deliverable }: { deliverable: DeliverableRow }) {
   const [url, setUrl] = useState(deliverable.brief_doc_url ?? "");
-  const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
-  const [error, setError] = useState("");
+  const [savedUrl, setSavedUrl] = useState(deliverable.brief_doc_url ?? "");
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [sendStatus, setSendStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [errorMsg, setErrorMsg] = useState("");
+  const isDirty = url.trim() !== savedUrl;
 
-  async function save(next: string) {
-    if (next === (deliverable.brief_doc_url ?? "")) return;  // no change
-    setStatus("saving"); setError("");
+  async function handleSave() {
+    const next = url.trim();
+    setSaveStatus("saving"); setErrorMsg("");
     try {
       const res = await fetch(`/api/deliverables/${deliverable.id}`, {
         method: "PATCH",
@@ -1922,42 +1928,95 @@ function DeliverableBriefRow({ deliverable }: { deliverable: DeliverableRow }) {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setError(data.error || `Error ${res.status}`);
-        setStatus("error");
+        setErrorMsg(data.error || `Error ${res.status}`);
+        setSaveStatus("error");
         return;
       }
-      setStatus("saved");
-      setTimeout(() => setStatus("idle"), 1500);
+      setSavedUrl(next);
+      setSaveStatus("saved");
+      setTimeout(() => setSaveStatus("idle"), 1500);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Network error");
-      setStatus("error");
+      setErrorMsg(err instanceof Error ? err.message : "Network error");
+      setSaveStatus("error");
+    }
+  }
+
+  async function handleSend() {
+    const next = url.trim();
+    if (!next) { setErrorMsg("Add the Google Doc link before sending."); return; }
+    setErrorMsg("");
+    // Save first if dirty
+    if (isDirty) {
+      setSaveStatus("saving");
+      const saveRes = await fetch(`/api/deliverables/${deliverable.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ brief_doc_url: next }),
+      }).catch(() => null);
+      if (!saveRes?.ok) {
+        setSaveStatus("error"); setErrorMsg("Could not save the link — check your connection.");
+        return;
+      }
+      setSavedUrl(next);
+      setSaveStatus("saved");
+      setTimeout(() => setSaveStatus("idle"), 1500);
+    }
+    setSendStatus("sending");
+    try {
+      const res = await fetch(`/api/deliverables/${deliverable.id}/send-brief`, { method: "POST" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setErrorMsg(data.error || `Send failed (${res.status})`);
+        setSendStatus("error");
+        return;
+      }
+      setSendStatus("sent");
+      setTimeout(() => setSendStatus("idle"), 3000);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Network error");
+      setSendStatus("error");
     }
   }
 
   const label = `${deliverable.deliverable_type}${deliverable.sequence ? ` #${deliverable.sequence}` : ""}`;
   return (
-    <div className="px-5 py-3 flex items-center gap-3">
-      <div className="shrink-0 w-24">
-        <span className="inline-block px-2 py-0.5 rounded text-xs font-bold font-mono bg-purple-100 text-purple-700">
-          {label}
-        </span>
+    <div className="px-5 py-3 space-y-2">
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="shrink-0 w-24">
+          <span className="inline-block px-2 py-0.5 rounded text-xs font-bold font-mono bg-purple-100 text-purple-700">
+            {label}
+          </span>
+        </div>
+        <input
+          type="url"
+          value={url}
+          onChange={e => { setUrl(e.target.value); setErrorMsg(""); setSendStatus("idle"); }}
+          placeholder="https://docs.google.com/document/d/…"
+          className={`flex-1 min-w-0 px-3 py-1.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-im8-red/30 ${errorMsg ? "border-red-300 bg-red-50" : "border-im8-stone/40 text-im8-burgundy"}`}
+        />
+        {url && (
+          <a href={url} target="_blank" rel="noopener noreferrer"
+            className="shrink-0 text-xs text-im8-red hover:underline">Open ↗</a>
+        )}
       </div>
-      <input
-        type="url"
-        value={url}
-        onChange={e => setUrl(e.target.value)}
-        onBlur={() => save(url.trim())}
-        onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-        placeholder="https://docs.google.com/document/d/…"
-        className={`flex-1 min-w-0 px-3 py-1.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-im8-red/30 ${status === "error" ? "border-red-300 bg-red-50" : "border-im8-stone/40 text-im8-burgundy"}`}
-      />
-      {url && (
-        <a href={url} target="_blank" rel="noopener noreferrer"
-          className="shrink-0 text-xs text-im8-red hover:underline">Open ↗</a>
-      )}
-      <span className="shrink-0 text-xs text-im8-burgundy/40 w-14 text-right">
-        {status === "saving" ? "Saving…" : status === "saved" ? "Saved ✓" : status === "error" ? <span title={error} className="text-red-600">Error</span> : ""}
-      </span>
+      <div className="flex items-center gap-2 pl-[6.5rem]">
+        <button
+          onClick={handleSave}
+          disabled={saveStatus === "saving" || !isDirty}
+          className="px-3 py-1 text-xs font-medium bg-im8-sand border border-im8-stone/40 text-im8-burgundy rounded-lg hover:bg-im8-stone/20 disabled:opacity-40 transition-colors"
+        >
+          {saveStatus === "saving" ? "Saving…" : saveStatus === "saved" ? "Saved ✓" : "Save draft"}
+        </button>
+        <button
+          onClick={handleSend}
+          disabled={sendStatus === "sending" || saveStatus === "saving"}
+          className="px-3 py-1 text-xs font-medium bg-im8-red text-white rounded-lg hover:bg-im8-burgundy disabled:opacity-40 transition-colors"
+        >
+          {sendStatus === "sending" ? "Sending…" : sendStatus === "sent" ? "Sent ✓" : sendStatus === "error" ? "Retry send" : "Send to influencer"}
+        </button>
+        {errorMsg && <span className="text-xs text-red-600">{errorMsg}</span>}
+        {saveStatus === "error" && !errorMsg && <span className="text-xs text-red-600">Save failed</span>}
+      </div>
     </div>
   );
 }

@@ -4,7 +4,7 @@ export type AdminRole = "admin" | "management" | "support";
 const ROLE_NAV: Record<AdminRole, string[]> = {
   admin:      ["/admin", "/admin/discovery", "/admin/approvals", "/admin/deals", "/admin/deliverables", "/admin/review", "/admin/settings"],
   management: ["/admin", "/admin/approvals", "/admin/deals"],
-  support:    ["/admin", "/admin/discovery", "/admin/approvals", "/admin/deals", "/admin/deliverables", "/admin/review"],
+  support:    ["/admin", "/admin/deals", "/admin/deliverables", "/admin/review"],
 };
 
 export function getAllowedNav(role: string): string[] {

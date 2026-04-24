@@ -97,6 +97,7 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
         deliverables={deliverables ?? []}
         partnerShippingAddress={partnerShippingAddress}
         canViewRates={showRates}
+        role={profile?.role ?? ""}
       />
     </div>
   );

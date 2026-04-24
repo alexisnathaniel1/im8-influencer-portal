@@ -270,11 +270,9 @@ export default function BriefEditorPage({ params }: { params: Promise<{ id: stri
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Button onClick={handleSave} loading={saving}>Save Draft</Button>
-            {brief.status === "draft" && (
-              <Button variant="secondary" onClick={handleSend} loading={sending}>
-                Send to Influencer
-              </Button>
-            )}
+            <Button variant="secondary" onClick={handleSend} loading={sending}>
+              {brief.status === "draft" ? "Send to Influencer" : "Resend to Influencer"}
+            </Button>
           </div>
           {message && <p className="text-sm text-im8-burgundy/60">{message}</p>}
         </div>

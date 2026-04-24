@@ -256,6 +256,7 @@ export default function AdminReviewPage() {
                     {fileId && (
                       <DriveVideo
                         fileId={fileId}
+                        driveUrl={sub.drive_url ?? undefined}
                         controls
                         preload="metadata"
                         width="100%"
