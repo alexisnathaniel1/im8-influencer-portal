@@ -28,6 +28,7 @@ export default async function DeliverablesPage({
       id, deliverable_type, platform, title, status, due_date, live_date,
       post_url, views, likes, comments_count, is_story, fee_cents,
       views_updated_at, created_at, sequence, brief_doc_url,
+      edited_video_url, qa_status, qa_comments,
       deal:deal_id(id, influencer_name, platform_primary, niche_tags),
       brief:brief_id(id, title),
       pic:assigned_pic(id, full_name),

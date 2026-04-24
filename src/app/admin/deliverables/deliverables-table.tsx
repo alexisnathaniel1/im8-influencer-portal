@@ -21,11 +21,25 @@ type Deliverable = {
   views_updated_at: string | null;
   sequence: number | null;
   brief_doc_url?: string | null;
+  edited_video_url?: string | null;
+  qa_status?: string | null;
+  qa_comments?: string | null;
   deal: { id: string; influencer_name: string; platform_primary: string; niche_tags?: string[] | null } | null;
   brief: { id: string; title: string } | null;
   pic: { id: string; full_name: string } | null;
   editor: { id: string; full_name: string } | null;
   approved_submission?: { id: string; drive_url: string | null; file_name: string | null } | null;
+};
+
+const QA_STATUS_COLORS: Record<string, string> = {
+  pending: "bg-gray-100 text-gray-600",
+  ready_to_go_live: "bg-emerald-100 text-emerald-700",
+  revisions_needed: "bg-orange-100 text-orange-700",
+};
+const QA_STATUS_LABELS: Record<string, string> = {
+  pending: "Pending QA",
+  ready_to_go_live: "Ready to go live",
+  revisions_needed: "Revisions needed",
 };
 
 type Profile = { id: string; full_name: string };
@@ -135,14 +149,14 @@ export default function DeliverablesTable({
           <table className="w-full text-sm">
             <thead className="bg-im8-sand/50 border-b border-im8-stone/20">
               <tr>
-                {["Influencer", "Type", "Status", "Due", "Draft", "Post URL", "Views", "PIC"].map(h => (
+                {["Influencer", "Type", "Status", "Due", "Draft", "Edit", "QA", "Post URL", "Views", "PIC"].map(h => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-im8-burgundy/60 uppercase tracking-wide">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-im8-stone/10">
               {deliverables.length === 0 && (
-                <tr><td colSpan={8} className="px-4 py-12 text-center text-im8-burgundy/40">No deliverables yet. They&rsquo;ll appear here automatically once a deal is approved and deliverables are saved on the contract.</td></tr>
+                <tr><td colSpan={10} className="px-4 py-12 text-center text-im8-burgundy/40">No deliverables yet. They&rsquo;ll appear here automatically once a deal is approved and deliverables are saved on the contract.</td></tr>
               )}
               {deliverables.map(d => (
                 <tr
@@ -182,6 +196,12 @@ export default function DeliverablesTable({
                     ) : (
                       <span className="text-xs text-im8-burgundy/30">—</span>
                     )}
+                  </td>
+                  <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                    <EditedVideoCell deliverableId={d.id} current={d.edited_video_url ?? null} />
+                  </td>
+                  <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                    <QaStatusCell deliverableId={d.id} current={d.qa_status ?? "pending"} />
                   </td>
                   <td className="px-4 py-3">
                     <PostUrlCell deliverableId={d.id} current={d.post_url} isStory={d.is_story} />
@@ -271,6 +291,79 @@ function DueDateCell({ deliverableId, current }: { deliverableId: string; curren
       className="text-xs text-im8-burgundy/70 hover:text-im8-red hover:underline">
       {current ? new Date(current).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "2-digit" }) : "+ Set"}
     </button>
+  );
+}
+
+// Editor's finished-cut link cell. Click "+ Add edit" to open an inline URL input.
+function EditedVideoCell({ deliverableId, current }: { deliverableId: string; current: string | null }) {
+  const router = useRouter();
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(current ?? "");
+
+  async function save() {
+    setEditing(false);
+    await fetch(`/api/deliverables/${deliverableId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ edited_video_url: val || null }),
+    });
+    router.refresh();
+  }
+
+  if (editing) return (
+    <input
+      autoFocus
+      value={val}
+      onChange={e => setVal(e.target.value)}
+      onBlur={save}
+      onKeyDown={e => e.key === "Enter" && save()}
+      placeholder="https://drive.google.com/…"
+      className="w-36 px-2 py-1 text-xs border border-im8-stone/40 rounded focus:outline-none"
+    />
+  );
+
+  if (current) return (
+    <a href={current} target="_blank" rel="noopener noreferrer"
+      className="text-xs text-im8-red hover:underline inline-flex items-center gap-1">
+      <span className="inline-block w-2 h-2 rounded-full bg-blue-500" />
+      Edit
+      <span className="text-im8-burgundy/30">↗</span>
+    </a>
+  );
+
+  return (
+    <button onClick={() => setEditing(true)}
+      className="text-xs text-im8-burgundy/40 hover:text-im8-red">
+      + Add edit
+    </button>
+  );
+}
+
+// QA status dropdown. Pending → Ready to go live / Revisions needed.
+function QaStatusCell({ deliverableId, current }: { deliverableId: string; current: string }) {
+  const router = useRouter();
+  const [value, setValue] = useState(current);
+
+  async function onChange(next: string) {
+    setValue(next);
+    await fetch(`/api/deliverables/${deliverableId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ qa_status: next }),
+    });
+    router.refresh();
+  }
+
+  return (
+    <select
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      className={`text-xs px-2 py-1 rounded-full font-medium border-0 cursor-pointer focus:outline-none ${QA_STATUS_COLORS[value] ?? "bg-gray-100 text-gray-600"}`}
+    >
+      {Object.entries(QA_STATUS_LABELS).map(([v, label]) => (
+        <option key={v} value={v} className="bg-white text-im8-burgundy">{label}</option>
+      ))}
+    </select>
   );
 }
 
@@ -519,6 +612,29 @@ function DeliverablePanel({ deliverable, editors, onClose }: { deliverable: Deli
         )}
       </div>
 
+      {/* Editor + QA */}
+      <div className="space-y-3 border-t border-im8-stone/20 pt-3">
+        <div className="text-xs font-semibold text-im8-burgundy/50 uppercase tracking-wide">Edit &amp; QA</div>
+
+        {/* Edited video URL */}
+        <div>
+          <label className="block text-xs text-im8-burgundy/60 mb-1">Edited video URL</label>
+          <EditedVideoInlineField deliverableId={deliverable.id} current={deliverable.edited_video_url ?? null} />
+        </div>
+
+        {/* QA status (larger control) */}
+        <div>
+          <label className="block text-xs text-im8-burgundy/60 mb-1">QA status</label>
+          <QaStatusCell deliverableId={deliverable.id} current={deliverable.qa_status ?? "pending"} />
+        </div>
+
+        {/* QA comments */}
+        <div>
+          <label className="block text-xs text-im8-burgundy/60 mb-1">QA comments</label>
+          <QaCommentsField deliverableId={deliverable.id} current={deliverable.qa_comments ?? ""} />
+        </div>
+      </div>
+
       {/* Comments */}
       <div className="space-y-3 border-t border-im8-stone/20 pt-3">
         <div className="text-xs font-semibold text-im8-burgundy/50 uppercase tracking-wide">Comments</div>
@@ -573,6 +689,84 @@ function DateField({ label, deliverableId, field, value }: {
       <label className="block text-xs text-im8-burgundy/50 mb-1">{label}</label>
       <input type="date" value={val} onChange={e => save(e.target.value)}
         className="w-full px-2 py-1.5 text-xs border border-im8-stone/40 rounded-lg focus:outline-none focus:ring-2 focus:ring-im8-red/40 text-im8-burgundy" />
+    </div>
+  );
+}
+
+// Side-panel version of the edited-video URL input. Always-visible input
+// (no click-to-edit) so editors can paste directly.
+function EditedVideoInlineField({ deliverableId, current }: { deliverableId: string; current: string | null }) {
+  const router = useRouter();
+  const [val, setVal] = useState(current ?? "");
+  const [status, setStatus] = useState<"idle" | "saving" | "saved">("idle");
+
+  async function save(next: string) {
+    if (next === (current ?? "")) return;
+    setStatus("saving");
+    await fetch(`/api/deliverables/${deliverableId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ edited_video_url: next || null }),
+    });
+    setStatus("saved");
+    router.refresh();
+    setTimeout(() => setStatus("idle"), 1500);
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        type="url"
+        value={val}
+        onChange={e => setVal(e.target.value)}
+        onBlur={() => save(val.trim())}
+        onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+        placeholder="https://drive.google.com/…"
+        className="flex-1 px-2 py-1.5 text-xs border border-im8-stone/40 rounded-lg focus:outline-none focus:ring-2 focus:ring-im8-red/40 text-im8-burgundy"
+      />
+      {val && (
+        <a href={val} target="_blank" rel="noopener noreferrer"
+          className="text-xs text-im8-red hover:underline">Open ↗</a>
+      )}
+      <span className="text-xs text-im8-burgundy/40 w-12 text-right">
+        {status === "saving" ? "Saving…" : status === "saved" ? "Saved ✓" : ""}
+      </span>
+    </div>
+  );
+}
+
+// QA comments textarea — saves on blur.
+function QaCommentsField({ deliverableId, current }: { deliverableId: string; current: string }) {
+  const router = useRouter();
+  const [val, setVal] = useState(current);
+  const [status, setStatus] = useState<"idle" | "saving" | "saved">("idle");
+
+  async function save(next: string) {
+    if (next === current) return;
+    setStatus("saving");
+    await fetch(`/api/deliverables/${deliverableId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ qa_comments: next || null }),
+    });
+    setStatus("saved");
+    router.refresh();
+    setTimeout(() => setStatus("idle"), 1500);
+  }
+
+  return (
+    <div>
+      <textarea
+        rows={3}
+        value={val}
+        onChange={e => setVal(e.target.value)}
+        onBlur={() => save(val.trim())}
+        placeholder="Notes from QA (e.g. fix brand mention timing, re-record CTA)…"
+        className="w-full px-2 py-1.5 text-xs border border-im8-stone/40 rounded-lg focus:outline-none focus:ring-2 focus:ring-im8-red/40 text-im8-burgundy resize-none"
+      />
+      <span className="text-xs text-im8-burgundy/40">
+        {status === "saving" ? "Saving…" : status === "saved" ? "Saved ✓" : ""}
+      </span>
     </div>
   );
 }
