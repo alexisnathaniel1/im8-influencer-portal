@@ -39,6 +39,7 @@ interface Brief {
 export default function BriefEditorPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [brief, setBrief] = useState<Brief | null>(null);
+  const [loadError, setLoadError] = useState("");
   const [body, setBody] = useState("");
   const [title, setTitle] = useState("");
   const [googleDocUrl, setGoogleDocUrl] = useState("");
@@ -49,15 +50,23 @@ export default function BriefEditorPage({ params }: { params: Promise<{ id: stri
 
   useEffect(() => {
     fetch(`/api/briefs/${id}`)
-      .then(r => r.json())
-      .then(({ brief: data }) => {
+      .then(async r => {
+        const json = await r.json();
+        if (!r.ok) {
+          setLoadError(json.error || `Error ${r.status} loading brief`);
+          return;
+        }
+        const data = json.brief;
         if (data) {
           setBrief(data as unknown as Brief);
           setBody(data.body_markdown || "");
           setTitle(data.title || "");
           setGoogleDocUrl(data.google_doc_url || "");
+        } else {
+          setLoadError("Brief not found");
         }
-      });
+      })
+      .catch(err => setLoadError(err.message || "Network error loading brief"));
   }, [id]);
 
   function validateGoogleDocUrl(url: string): string {
@@ -109,6 +118,18 @@ export default function BriefEditorPage({ params }: { params: Promise<{ id: stri
     setSending(false);
     setMessage("Brief sent to influencer");
     setTimeout(() => setMessage(""), 3000);
+  }
+
+  if (loadError) {
+    return (
+      <div className="min-h-screen bg-im8-offwhite flex items-center justify-center">
+        <div className="text-center max-w-md px-4">
+          <p className="text-im8-burgundy font-semibold mb-2">Could not load brief</p>
+          <p className="text-sm text-im8-burgundy/60 mb-4">{loadError}</p>
+          <Link href="/admin/deals" className="text-sm text-im8-red hover:underline">← Back to Partner Tracker</Link>
+        </div>
+      </div>
+    );
   }
 
   if (!brief) {
