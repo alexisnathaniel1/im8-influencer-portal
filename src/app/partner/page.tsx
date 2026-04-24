@@ -44,12 +44,58 @@ export default async function PartnerPage() {
 
   // Fetch all deals where this user is the linked partner (both active + completed).
   // Shown as Contract 1, Contract 2, etc. so partners see their full history.
-  const { data: linkedDeals } = await admin
+  // Use select("*") defensively — some columns (discount_code, affiliate_link) come
+  // from later migrations; if those haven't been applied yet, an explicit column list
+  // would make the whole query fail and the dashboard would silently show "No submissions".
+  type LinkedDeal = {
+    id: string;
+    influencer_name: string;
+    status: string;
+    platform_primary: string;
+    campaign_start: string | null;
+    campaign_end: string | null;
+    monthly_rate_cents: number | null;
+    total_months: number | null;
+    drive_folder_id: string | null;
+    contract_sequence: number | null;
+    previous_deal_id: string | null;
+    discount_code: string | null;
+    affiliate_link: string | null;
+    payment_terms: string | null;
+  };
+  const { data: linkedDealsRaw, error: linkedDealsError } = await admin
     .from("deals")
-    .select("id, influencer_name, status, platform_primary, campaign_start, campaign_end, monthly_rate_cents, total_months, drive_folder_id, contract_sequence, previous_deal_id, discount_code, affiliate_link, payment_terms")
+    .select("*")
     .eq("influencer_profile_id", user.id)
     .not("status", "in", '("declined","rejected")')
-    .order("contract_sequence", { ascending: true });
+    .order("contract_sequence", { ascending: true, nullsFirst: false });
+  if (linkedDealsError) console.error("[partner/page] linkedDeals query failed:", linkedDealsError.message);
+  let linkedDeals = (linkedDealsRaw ?? []) as unknown as LinkedDeal[];
+
+  // Also fetch deals linked via discovery profiles this user submitted. This covers
+  // the case where an admin manually added a creator to Discovery on behalf of an
+  // agency — the deal's influencer_profile_id is set to the creator (not the agency),
+  // so the agency wouldn't see it via the query above.
+  {
+    const { data: mySubmissions } = await admin
+      .from("discovery_profiles")
+      .select("id")
+      .or(`submitted_by_profile_id.eq.${user.id}${email ? `,submitter_email.ilike.${email}` : ""}`);
+    const submittedIds = (mySubmissions ?? []).map(s => s.id);
+    if (submittedIds.length > 0) {
+      const { data: moreDealsRaw } = await admin
+        .from("deals")
+        .select("*")
+        .in("discovery_profile_id", submittedIds)
+        .not("status", "in", '("declined","rejected")');
+      const moreDeals = (moreDealsRaw ?? []) as unknown as LinkedDeal[];
+      const existing = new Set(linkedDeals.map(d => d.id));
+      for (const d of moreDeals) if (!existing.has(d.id)) linkedDeals.push(d);
+      linkedDeals = linkedDeals.sort((a, b) =>
+        (a.contract_sequence ?? 999) - (b.contract_sequence ?? 999)
+      );
+    }
+  }
 
   // Three separate queries to avoid PostgREST escaping issues with email in .or()
   // byProfileId: submissions the user filed themselves (agency or creator)

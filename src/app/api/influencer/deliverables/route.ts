@@ -24,10 +24,12 @@ export async function GET(request: NextRequest) {
 
   const { data } = await admin
     .from("deliverables")
-    .select("id, deliverable_type, title, status")
+    .select("id, deliverable_type, title, status, sequence")
     .eq("deal_id", dealId)
     .not("status", "in", '("completed")')
-    .order("created_at");
+    .order("deliverable_type", { ascending: true })
+    .order("sequence", { ascending: true, nullsFirst: false })
+    .order("created_at", { ascending: true });
 
   return NextResponse.json({ deliverables: data ?? [] });
 }

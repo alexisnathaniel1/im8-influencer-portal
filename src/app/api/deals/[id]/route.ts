@@ -57,12 +57,14 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
           NEWSLETTER: "other", APP_PARTNERSHIP: "other", BLOG: "other",
         };
         const rows = effectiveDeliverables.flatMap(item =>
-          Array.from({ length: item.count }, () => ({
+          Array.from({ length: item.count }, (_, i) => ({
             deal_id: id,
             deliverable_type: item.code,
             platform: PLATFORM_MAP[item.code] ?? (before?.platform_primary ?? "instagram"),
             is_story: item.code === "IGS",
-            title: `${before?.influencer_name ?? ""} — ${item.code}`,
+            // Per-type sequence (1, 2, 3…) so 3× IGR shows as IGR #1, #2, #3.
+            sequence: i + 1,
+            title: `${before?.influencer_name ?? ""} — ${item.code} #${i + 1}`,
           }))
         );
         if (rows.length > 0) await admin.from("deliverables").insert(rows);

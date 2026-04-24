@@ -24,13 +24,15 @@ export default async function DeliverablesPage({
     .select(`
       id, deliverable_type, platform, title, status, due_date, live_date,
       post_url, views, likes, comments_count, is_story, fee_cents,
-      views_updated_at, created_at,
+      views_updated_at, created_at, sequence,
       deal:deal_id(id, influencer_name, platform_primary),
       brief:brief_id(id, title),
       pic:assigned_pic(id, full_name),
       editor:assigned_editor_id(id, full_name)
     `)
-    .order("due_date", { ascending: true, nullsFirst: false });
+    .order("due_date", { ascending: true, nullsFirst: false })
+    .order("deliverable_type", { ascending: true })
+    .order("sequence", { ascending: true, nullsFirst: false });
 
   if (filters.status) query = query.eq("status", filters.status);
   if (filters.platform) query = query.eq("platform", filters.platform);

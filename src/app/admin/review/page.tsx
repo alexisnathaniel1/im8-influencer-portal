@@ -25,6 +25,8 @@ interface PendingSubmission {
   influencer_name: string;
   deal_id: string;
   brief_title: string | null;
+  deliverable_type: string | null;
+  deliverable_sequence: number | null;
 }
 
 export default function AdminReviewPage() {
@@ -45,7 +47,8 @@ export default function AdminReviewPage() {
         id, file_name, drive_url, drive_file_id, content_type, platform, post_url, submitted_at,
         influencer:influencer_id(full_name),
         deal:deal_id(influencer_name),
-        brief:brief_id(title)
+        brief:brief_id(title),
+        deliverable:deliverable_id(deliverable_type, sequence)
       `)
       .eq("status", "pending")
       .order("submitted_at", { ascending: false });
@@ -57,6 +60,7 @@ export default function AdminReviewPage() {
       const inf = s.influencer as unknown as { full_name: string } | null;
       const deal = s.deal as unknown as { influencer_name: string } | null;
       const brief = s.brief as unknown as { title: string } | null;
+      const deliv = s.deliverable as unknown as { deliverable_type: string; sequence: number | null } | null;
       rows.push({
         id: s.id,
         file_name: s.file_name,
@@ -69,6 +73,8 @@ export default function AdminReviewPage() {
         influencer_name: inf?.full_name || deal?.influencer_name || "Unknown",
         deal_id: (s as Record<string, unknown>).deal_id as string,
         brief_title: brief?.title ?? null,
+        deliverable_type: deliv?.deliverable_type ?? null,
+        deliverable_sequence: deliv?.sequence ?? null,
       });
     }
 
@@ -216,7 +222,12 @@ export default function AdminReviewPage() {
                       <Link href={`/admin/deals/${sub.deal_id}`} className="text-sm font-semibold text-im8-burgundy hover:underline" onClick={(e) => e.stopPropagation()}>
                         {sub.influencer_name}
                       </Link>
-                      {sub.brief_title && <span className="text-xs text-im8-burgundy/50">{sub.brief_title}</span>}
+                      {sub.deliverable_type && (
+                        <span className="inline-block px-2 py-0.5 rounded text-xs font-bold font-mono bg-purple-100 text-purple-700">
+                          {sub.deliverable_type}{sub.deliverable_sequence ? ` #${sub.deliverable_sequence}` : ""}
+                        </span>
+                      )}
+                      {sub.brief_title && !sub.deliverable_type && <span className="text-xs text-im8-burgundy/50">{sub.brief_title}</span>}
                       <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${sub.content_type === "final" ? "bg-im8-flamingo/20 text-im8-red" : "bg-im8-sand text-im8-burgundy"}`}>
                         {sub.content_type}
                       </span>

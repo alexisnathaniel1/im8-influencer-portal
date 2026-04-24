@@ -19,6 +19,7 @@ type Deliverable = {
   is_story: boolean;
   fee_cents: number | null;
   views_updated_at: string | null;
+  sequence: number | null;
   deal: { id: string; influencer_name: string; platform_primary: string } | null;
   brief: { id: string; title: string } | null;
   pic: { id: string; full_name: string } | null;
@@ -137,7 +138,7 @@ export default function DeliverablesTable({
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    <span className="font-mono text-xs bg-im8-sand px-2 py-0.5 rounded text-im8-burgundy">{d.deliverable_type}</span>
+                    <span className="font-mono text-xs bg-im8-sand px-2 py-0.5 rounded text-im8-burgundy">{d.deliverable_type}{d.sequence ? ` #${d.sequence}` : ""}</span>
                     {d.is_story && <span className="ml-1 text-xs text-im8-burgundy/40">story</span>}
                   </td>
                   <td className="px-4 py-3">
@@ -382,7 +383,7 @@ function DeliverablePanel({ deliverable, editors, onClose }: { deliverable: Deli
         <div>
           <div className="font-semibold text-im8-burgundy">{deliverable.deal?.influencer_name}</div>
           <div className="flex items-center gap-2 mt-1">
-            <span className="font-mono text-xs bg-im8-sand px-2 py-0.5 rounded text-im8-burgundy">{deliverable.deliverable_type}</span>
+            <span className="font-mono text-xs bg-im8-sand px-2 py-0.5 rounded text-im8-burgundy">{deliverable.deliverable_type}{deliverable.sequence ? ` #${deliverable.sequence}` : ""}</span>
             {deliverable.is_story && <span className="text-xs text-im8-burgundy/40">story</span>}
           </div>
         </div>

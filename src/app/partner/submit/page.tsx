@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 
 type Deal = { id: string; influencer_name: string; platform_primary: string; status: string };
-type Deliverable = { id: string; deliverable_type: string; title: string | null; deal_id: string };
+type Deliverable = { id: string; deliverable_type: string; title: string | null; deal_id: string; sequence: number | null };
 
 function SubmitForm() {
   const searchParams = useSearchParams();
@@ -149,7 +149,7 @@ function SubmitForm() {
               <option value="">Not tied to a specific deliverable</option>
               {deliverables.map(d => (
                 <option key={d.id} value={d.id}>
-                  {d.deliverable_type}{d.title ? ` — ${d.title}` : ""}
+                  {d.deliverable_type}{d.sequence ? ` #${d.sequence}` : ""}
                 </option>
               ))}
             </select>
