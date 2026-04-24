@@ -32,12 +32,17 @@ export async function POST(request: NextRequest) {
     status: body.status ?? "live",
     monthly_rate_cents: body.monthlyRateCents ?? null,
     total_months: body.totalMonths ?? 3,
+    follower_count: body.followerCount ?? null,
+    niche_tags: Array.isArray(body.nicheTags) ? body.nicheTags : [],
     contract_sequence: 1,
     discovery_profile_id: body.discoveryProfileId || null,
     assigned_to: user.id,
   }).select("id").single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  if (error) {
+    console.error("[deals/create]", error.message);
+    return NextResponse.json({ error: error.message }, { status: 400 });
+  }
 
   // If came from a discovery profile, mark it converted
   if (body.discoveryProfileId) {

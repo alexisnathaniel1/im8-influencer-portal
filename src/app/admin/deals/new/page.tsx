@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import NicheMultiSelect from "@/components/shared/niche-multi-select";
 
 const DEAL_STATUSES = [
   { value: "live",       label: "Live — partnership is active now" },
@@ -28,7 +29,9 @@ function NewPartnershipForm() {
     status: "live",
     monthlyRateUsd: "",
     totalMonths: "3",
+    followerCount: "",
   });
+  const [nicheTags, setNicheTags] = useState<string[]>([]);
 
   useEffect(() => {
     if (profileId) {
@@ -45,7 +48,9 @@ function NewPartnershipForm() {
             youtubeHandle: profile.youtube_handle ?? "",
             monthlyRateUsd: profile.proposed_rate_cents ? String(profile.proposed_rate_cents / 100) : "",
             totalMonths: profile.total_months ? String(profile.total_months) : "3",
+            followerCount: profile.follower_count ? String(profile.follower_count) : "",
           }));
+          if (Array.isArray(profile.niche_tags)) setNicheTags(profile.niche_tags);
         }
       });
     }
@@ -60,6 +65,7 @@ function NewPartnershipForm() {
       ? Math.round(parseFloat(form.monthlyRateUsd) * 100)
       : null;
     const totalMonths = parseInt(form.totalMonths) || 3;
+    const followerCount = form.followerCount ? parseInt(form.followerCount) : null;
 
     const res = await fetch("/api/deals/create", {
       method: "POST",
@@ -75,6 +81,8 @@ function NewPartnershipForm() {
         status: form.status,
         monthlyRateCents,
         totalMonths,
+        followerCount,
+        nicheTags,
         discoveryProfileId: profileId,
       }),
     });
@@ -145,6 +153,20 @@ function NewPartnershipForm() {
                     className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40" />
                 </div>
               ))}
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-im8-burgundy mb-1">Followers (approx)</label>
+                <input type="number" min="0" value={form.followerCount}
+                  onChange={e => setForm(f => ({ ...f, followerCount: e.target.value }))}
+                  placeholder="e.g. 50000"
+                  className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40" />
+                <p className="text-[11px] text-im8-burgundy/50 mt-1">Saved to the creator&apos;s profile for reuse on future contracts.</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-im8-burgundy mb-1">Niche tags</label>
+                <NicheMultiSelect value={nicheTags} onChange={setNicheTags} />
+              </div>
             </div>
           </div>
 

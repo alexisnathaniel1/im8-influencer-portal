@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import NicheMultiSelect from "@/components/shared/niche-multi-select";
 
 type Deal = Record<string, unknown>;
 type Brief = Record<string, unknown>;
@@ -67,9 +68,7 @@ export default function DealDetailClient({
     followerCount: deal.follower_count ? String(deal.follower_count) : "",
     nicheTags: (deal.niche_tags as string[] | null) ?? [],
     isGifted: Boolean(deal.is_gifted),
-    giftedProduct: (deal.gifted_product as string) ?? "",
-    giftedQuantity: String(deal.gifted_quantity ?? 1),
-    productSentAt: (deal.product_sent_at as string) ?? "",
+    // gifted_product / gifted_quantity / product_sent_at are owned by the Gifting tab now
     needsApproval: deal.needs_approval !== false,
   });
 
@@ -127,9 +126,7 @@ export default function DealDetailClient({
         follower_count: form.followerCount ? parseInt(form.followerCount) : null,
         niche_tags: form.nicheTags,
         is_gifted: form.isGifted,
-        gifted_product: form.giftedProduct || null,
-        gifted_quantity: parseInt(form.giftedQuantity) || 1,
-        product_sent_at: form.productSentAt || null,
+        // gifted_product / gifted_quantity / product_sent_at live in the Gifting tab now
         needs_approval: form.needsApproval,
       }),
     });
@@ -251,30 +248,17 @@ export default function DealDetailClient({
             </>}
           </div>
 
-          {/* Product section — always shown */}
-          <div className="grid grid-cols-2 gap-5 p-4 bg-im8-sand/40 rounded-xl border border-im8-stone/20">
-            <div className="col-span-2">
-              <span className="text-xs font-semibold text-im8-burgundy/50 uppercase tracking-wide">Product sent</span>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-im8-burgundy mb-1">Product</label>
-              <select value={form.giftedProduct} onChange={e => setForm(f => ({ ...f, giftedProduct: e.target.value }))}
-                className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none">
-                <option value="">Select product...</option>
-                <option value="Daily Ultimate Essentials">Daily Ultimate Essentials</option>
-                <option value="Daily Ultimate Longevity">Daily Ultimate Longevity</option>
-                <option value="Beckham Stack">Beckham Stack</option>
-              </select>
-            </div>
-            <Field label="Quantity" value={form.giftedQuantity}
-              onChange={v => setForm(f => ({ ...f, giftedQuantity: v }))} type="number" />
-            <div>
-              <label className="block text-sm font-medium text-im8-burgundy mb-1">Date sent</label>
-              <input type="date" value={form.productSentAt}
-                onChange={e => setForm(f => ({ ...f, productSentAt: e.target.value }))}
-                className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40" />
-            </div>
-          </div>
+          {/* Contract & Deliverables — collapsible summary */}
+          <ContractDeliverablesSummary
+            contractSequence={deal.contract_sequence as number | null}
+            totalMonths={deal.total_months as number | null}
+            monthlyRateCents={deal.monthly_rate_cents as number | null}
+            isGifted={form.isGifted}
+            deliverables={deal.deliverables as Array<{ code: string; count: number }> | null}
+            campaignStart={deal.campaign_start as string | null}
+            campaignEnd={deal.campaign_end as string | null}
+            canViewRates={canViewRates}
+          />
 
           <div>
             <label className="block text-sm font-medium text-im8-burgundy mb-1">Rationale * (shown to managers)</label>
@@ -322,9 +306,10 @@ export default function DealDetailClient({
             </div>
             <div>
               <label className="block text-sm font-medium text-im8-burgundy mb-1">Niche tags</label>
-              <input type="text" value={form.nicheTags.join(", ")} placeholder="Fitness, Wellness..."
-                onChange={e => setForm(f => ({ ...f, nicheTags: e.target.value.split(",").map(t => t.trim()).filter(Boolean) }))}
-                className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40" />
+              <NicheMultiSelect
+                value={form.nicheTags}
+                onChange={next => setForm(f => ({ ...f, nicheTags: next }))}
+              />
             </div>
           </div>
 
@@ -465,6 +450,11 @@ export default function DealDetailClient({
           dealId={deal.id as string}
           initialRequests={giftingRequests}
           partnerShippingAddress={partnerShippingAddress}
+          initialProductSent={{
+            product: (deal.gifted_product as string) ?? "",
+            quantity: String(deal.gifted_quantity ?? 1),
+            sentAt: (deal.product_sent_at as string) ?? "",
+          }}
         />
       )}
 
@@ -653,18 +643,44 @@ function GiftingTab({
   dealId,
   initialRequests,
   partnerShippingAddress,
+  initialProductSent,
 }: {
   dealId: string;
   initialRequests: GiftingRequest[];
   partnerShippingAddress: ShippingAddress | null;
+  initialProductSent: { product: string; quantity: string; sentAt: string };
 }) {
   const router = useRouter();
   const addr = partnerShippingAddress ?? {};
   const [requests, setRequests] = useState(initialRequests);
-  const [showForm, setShowForm] = useState(initialRequests.length === 0);
+  const [showForm, setShowForm] = useState(false);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState("");
   const [selectedProducts, setSelectedProducts] = useState<Record<string, number>>({});
+
+  // Quick-log state for recording a product that was already sent outside the
+  // im8hub flow (e.g. hand-delivered). Replaces the old Overview tab block.
+  const [productSent, setProductSent] = useState(initialProductSent);
+  const [savingProductSent, setSavingProductSent] = useState(false);
+  const [savedProductSent, setSavedProductSent] = useState(false);
+
+  async function saveProductSent() {
+    setSavingProductSent(true);
+    await fetch(`/api/deals/${dealId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        gifted_product: productSent.product || null,
+        gifted_quantity: parseInt(productSent.quantity) || 1,
+        product_sent_at: productSent.sentAt || null,
+      }),
+    });
+    setSavingProductSent(false);
+    setSavedProductSent(true);
+    setTimeout(() => setSavedProductSent(false), 2000);
+    router.refresh();
+  }
+
   const [form, setForm] = useState({
     recipient_name: addr.recipient_name ?? "",
     phone: addr.phone ?? "",
@@ -721,10 +737,88 @@ function GiftingTab({
     delivered: "bg-emerald-100 text-emerald-700",
   };
 
+  const hasAddress = !!(partnerShippingAddress?.address_line1);
+
   return (
     <div className="space-y-5">
+      {/* 1. Shipping address status */}
+      <div className={`rounded-xl border p-5 ${hasAddress ? "bg-green-50/50 border-green-200" : "bg-amber-50/60 border-amber-200"}`}>
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs font-semibold uppercase tracking-wide text-im8-burgundy/60">Shipping address</span>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${hasAddress ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>
+                {hasAddress ? "✓ On file" : "Not saved yet"}
+              </span>
+            </div>
+            {hasAddress ? (
+              <div className="text-sm text-im8-burgundy space-y-0.5">
+                {partnerShippingAddress?.recipient_name && <div className="font-medium">{partnerShippingAddress.recipient_name}</div>}
+                <div className="text-im8-burgundy/70">
+                  {partnerShippingAddress?.address_line1}
+                  {partnerShippingAddress?.address_line2 ? `, ${partnerShippingAddress.address_line2}` : ""}
+                </div>
+                <div className="text-im8-burgundy/70">
+                  {[partnerShippingAddress?.city, partnerShippingAddress?.state, partnerShippingAddress?.postal_code].filter(Boolean).join(", ")}
+                  {partnerShippingAddress?.country ? ` · ${partnerShippingAddress.country}` : ""}
+                </div>
+                {partnerShippingAddress?.phone && <div className="text-im8-burgundy/50 text-xs">{partnerShippingAddress.phone}</div>}
+              </div>
+            ) : (
+              <p className="text-sm text-amber-800">
+                The creator hasn&apos;t added a shipping address to their portal yet. You can still send a
+                gifting request below — enter it manually.
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* 2. Product sent — quick log (replaces the old Overview "Product sent" block) */}
+      <div className="bg-white rounded-xl border border-im8-stone/30 p-5 space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h3 className="font-semibold text-im8-burgundy">Product sent (quick log)</h3>
+            <p className="text-xs text-im8-burgundy/50 mt-0.5">Record product + quantity + date if you shipped outside the im8hub flow.</p>
+          </div>
+          <button
+            type="button" onClick={saveProductSent} disabled={savingProductSent}
+            className={`px-4 py-1.5 text-sm rounded-lg text-white transition-colors disabled:opacity-50 ${savedProductSent ? "bg-green-600 hover:bg-green-700" : "bg-im8-burgundy hover:bg-im8-red"}`}
+          >
+            {savingProductSent ? "Saving…" : savedProductSent ? "Saved ✓" : "Save"}
+          </button>
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          <div className="col-span-1">
+            <label className="block text-xs font-medium text-im8-burgundy/60 mb-1">Product</label>
+            <select value={productSent.product}
+              onChange={e => setProductSent(p => ({ ...p, product: e.target.value }))}
+              className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none">
+              <option value="">Select…</option>
+              {IM8_PRODUCTS.map(p => (
+                <option key={p.name} value={p.name}>{p.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-im8-burgundy/60 mb-1">Quantity</label>
+            <input type="number" min="1" value={productSent.quantity}
+              onChange={e => setProductSent(p => ({ ...p, quantity: e.target.value }))}
+              className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-im8-burgundy/60 mb-1">Date sent</label>
+            <input type="date" value={productSent.sentAt}
+              onChange={e => setProductSent(p => ({ ...p, sentAt: e.target.value }))}
+              className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40" />
+          </div>
+        </div>
+      </div>
+
+      {/* 3. Existing gifting requests */}
       {requests.length > 0 && (
         <div className="space-y-3">
+          <h3 className="text-xs font-semibold text-im8-burgundy/50 uppercase tracking-wide">im8hub requests</h3>
           {requests.map(r => (
             <div key={r.id} className="bg-white rounded-xl border border-im8-stone/30 p-5 space-y-3">
               <div className="flex items-start justify-between gap-4">
@@ -889,6 +983,121 @@ function Field({ label, value, onChange, type = "text" }: {
       <label className="block text-sm font-medium text-im8-burgundy mb-1">{label}</label>
       <input type={type} value={value} onChange={e => onChange(e.target.value)}
         className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40" />
+    </div>
+  );
+}
+
+// Collapsible summary shown in the Overview tab and reused on the brief editor.
+// Pulls contract sequence, duration, rate, and confirmed deliverables from the deal
+// so support staff can see (and reference) the agreed terms at a glance.
+export const DELIVERABLE_LABELS: Record<string, string> = {
+  IGR: "Instagram Reels",
+  IGS: "Instagram Stories",
+  UGC: "UGC Videos",
+  TIKTOK: "TikTok Videos",
+  YT: "YouTube Videos",
+  WHITELIST: "Whitelisting",
+};
+
+function ContractDeliverablesSummary({
+  contractSequence, totalMonths, monthlyRateCents, isGifted,
+  deliverables, campaignStart, campaignEnd, canViewRates,
+}: {
+  contractSequence: number | null;
+  totalMonths: number | null;
+  monthlyRateCents: number | null;
+  isGifted: boolean;
+  deliverables: Array<{ code: string; count: number }> | null;
+  campaignStart: string | null;
+  campaignEnd: string | null;
+  canViewRates: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const seq = contractSequence ?? 1;
+  const months = totalMonths ?? 3;
+  const rateUsd = monthlyRateCents ? monthlyRateCents / 100 : null;
+  const items = (deliverables ?? []).filter(d => d && d.code);
+  const deliverablesSummary = items.length
+    ? items.map(d => `${d.count}× ${d.code}`).join(", ")
+    : "No deliverables confirmed yet";
+
+  const rateText = isGifted
+    ? "Gifted"
+    : rateUsd && canViewRates
+      ? `$${rateUsd.toLocaleString()}/mo × ${months}mo`
+      : `${months} months`;
+
+  return (
+    <div className="border border-im8-stone/30 rounded-xl overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-4 py-3 bg-im8-sand/40 hover:bg-im8-sand/70 transition-colors text-left"
+      >
+        <div className="flex items-center gap-3 flex-wrap">
+          <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">
+            Contract {seq}
+          </span>
+          <span className="text-sm text-im8-burgundy font-medium">{rateText}</span>
+          <span className="text-xs text-im8-burgundy/60">· {deliverablesSummary}</span>
+        </div>
+        <span className="text-im8-burgundy/40 text-xs shrink-0">{open ? "Hide ▲" : "Show details ▼"}</span>
+      </button>
+      {open && (
+        <div className="px-4 py-4 bg-white space-y-3 border-t border-im8-stone/20">
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <div className="text-xs text-im8-burgundy/50 uppercase tracking-wide">Contract</div>
+              <div className="text-im8-burgundy font-medium">Contract {seq}</div>
+            </div>
+            <div>
+              <div className="text-xs text-im8-burgundy/50 uppercase tracking-wide">Duration</div>
+              <div className="text-im8-burgundy font-medium">{months} month{months === 1 ? "" : "s"}</div>
+            </div>
+            {canViewRates && !isGifted && rateUsd !== null && (
+              <>
+                <div>
+                  <div className="text-xs text-im8-burgundy/50 uppercase tracking-wide">Monthly rate</div>
+                  <div className="text-im8-burgundy font-medium">${rateUsd.toLocaleString()}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-im8-burgundy/50 uppercase tracking-wide">Total fee</div>
+                  <div className="text-im8-burgundy font-medium">${(rateUsd * months).toLocaleString()}</div>
+                </div>
+              </>
+            )}
+            {(campaignStart || campaignEnd) && (
+              <div className="col-span-2">
+                <div className="text-xs text-im8-burgundy/50 uppercase tracking-wide">Campaign window</div>
+                <div className="text-im8-burgundy font-medium">
+                  {campaignStart ? new Date(campaignStart).toLocaleDateString() : "TBD"}
+                  {" → "}
+                  {campaignEnd ? new Date(campaignEnd).toLocaleDateString() : "TBD"}
+                </div>
+              </div>
+            )}
+          </div>
+          <div>
+            <div className="text-xs text-im8-burgundy/50 uppercase tracking-wide mb-1">Confirmed deliverables</div>
+            {items.length === 0 ? (
+              <p className="text-xs text-im8-burgundy/40 italic">
+                No deliverables confirmed yet. Update them when the deal is marked agreed.
+              </p>
+            ) : (
+              <ul className="space-y-1">
+                {items.map((d, i) => (
+                  <li key={i} className="text-sm text-im8-burgundy flex items-center gap-2">
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-im8-red/10 text-im8-red font-semibold w-10 text-center">
+                      {d.count}×
+                    </span>
+                    {DELIVERABLE_LABELS[d.code] ?? d.code}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
