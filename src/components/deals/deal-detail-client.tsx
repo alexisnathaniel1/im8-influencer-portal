@@ -55,13 +55,24 @@ interface SavedAddress {
 
 const STATUS_FLOW = ["contacted", "negotiating", "agreed", "pending_approval", "approved", "contracted", "live", "completed"];
 
+type DeliverableRow = {
+  id: string;
+  deliverable_type: string;
+  sequence: number | null;
+  title: string | null;
+  status: string;
+  due_date: string | null;
+  brief_doc_url: string | null;
+};
+
 export default function DealDetailClient({
-  deal, briefs, submissions, giftingRequests, partnerShippingAddress, canViewRates = true,
+  deal, briefs, submissions, giftingRequests, deliverables = [], partnerShippingAddress, canViewRates = true,
 }: {
   deal: Deal;
   briefs: Brief[];
   submissions: Submission[];
   giftingRequests: GiftingRequest[];
+  deliverables?: DeliverableRow[];
   partnerShippingAddress: ShippingAddress | null;
   canViewRates?: boolean;
 }) {
@@ -477,6 +488,21 @@ export default function DealDetailClient({
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* Per-deliverable brief URLs — Denis pastes a Google Doc link per row */}
+          {deliverables.length > 0 && (
+            <div className="bg-white rounded-xl border border-im8-stone/30 p-5 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold text-im8-burgundy">Per-deliverable briefs</h3>
+                  <p className="text-xs text-im8-burgundy/50">
+                    Paste a Google Doc link for each individual deliverable. These appear to the creator when they upload content for that row.
+                  </p>
+                </div>
+              </div>
+              <DeliverableBriefList deliverables={deliverables} />
             </div>
           )}
         </div>
@@ -1846,5 +1872,73 @@ function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) =
       </span>
       <span className="text-sm font-medium text-im8-burgundy">{label}</span>
     </button>
+  );
+}
+
+// Per-deliverable brief-URL editor. Renders one row per deliverable with an
+// inline Google Doc URL input. Saves on blur / Enter.
+function DeliverableBriefList({ deliverables }: { deliverables: DeliverableRow[] }) {
+  return (
+    <div className="divide-y divide-im8-stone/20 -mx-5">
+      {deliverables.map(d => (
+        <DeliverableBriefRow key={d.id} deliverable={d} />
+      ))}
+    </div>
+  );
+}
+
+function DeliverableBriefRow({ deliverable }: { deliverable: DeliverableRow }) {
+  const [url, setUrl] = useState(deliverable.brief_doc_url ?? "");
+  const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [error, setError] = useState("");
+
+  async function save(next: string) {
+    if (next === (deliverable.brief_doc_url ?? "")) return;  // no change
+    setStatus("saving"); setError("");
+    try {
+      const res = await fetch(`/api/deliverables/${deliverable.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ brief_doc_url: next || null }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error || `Error ${res.status}`);
+        setStatus("error");
+        return;
+      }
+      setStatus("saved");
+      setTimeout(() => setStatus("idle"), 1500);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Network error");
+      setStatus("error");
+    }
+  }
+
+  const label = `${deliverable.deliverable_type}${deliverable.sequence ? ` #${deliverable.sequence}` : ""}`;
+  return (
+    <div className="px-5 py-3 flex items-center gap-3">
+      <div className="shrink-0 w-24">
+        <span className="inline-block px-2 py-0.5 rounded text-xs font-bold font-mono bg-purple-100 text-purple-700">
+          {label}
+        </span>
+      </div>
+      <input
+        type="url"
+        value={url}
+        onChange={e => setUrl(e.target.value)}
+        onBlur={() => save(url.trim())}
+        onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+        placeholder="https://docs.google.com/document/d/…"
+        className={`flex-1 min-w-0 px-3 py-1.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-im8-red/30 ${status === "error" ? "border-red-300 bg-red-50" : "border-im8-stone/40 text-im8-burgundy"}`}
+      />
+      {url && (
+        <a href={url} target="_blank" rel="noopener noreferrer"
+          className="shrink-0 text-xs text-im8-red hover:underline">Open ↗</a>
+      )}
+      <span className="shrink-0 text-xs text-im8-burgundy/40 w-14 text-right">
+        {status === "saving" ? "Saving…" : status === "saved" ? "Saved ✓" : status === "error" ? <span title={error} className="text-red-600">Error</span> : ""}
+      </span>
+    </div>
   );
 }

@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 
 type Deal = { id: string; influencer_name: string; platform_primary: string; status: string };
-type Deliverable = { id: string; deliverable_type: string; title: string | null; deal_id: string; sequence: number | null };
+type Deliverable = { id: string; deliverable_type: string; title: string | null; deal_id: string; sequence: number | null; brief_doc_url: string | null };
 
 function SubmitForm() {
   const searchParams = useSearchParams();
@@ -136,25 +136,37 @@ function SubmitForm() {
         </div>
 
         {/* Deliverable selector */}
-        {deliverables.length > 0 && (
-          <div>
-            <label className="block text-sm font-medium text-im8-burgundy mb-1">
-              Which deliverable is this for? <span className="text-im8-burgundy/40 font-normal">(optional)</span>
-            </label>
-            <select
-              value={selectedDeliverableId}
-              onChange={e => setSelectedDeliverableId(e.target.value)}
-              className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40 bg-white"
-            >
-              <option value="">Not tied to a specific deliverable</option>
-              {deliverables.map(d => (
-                <option key={d.id} value={d.id}>
-                  {d.deliverable_type}{d.sequence ? ` #${d.sequence}` : ""}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
+        {deliverables.length > 0 && (() => {
+          const selected = deliverables.find(d => d.id === selectedDeliverableId);
+          return (
+            <div>
+              <label className="block text-sm font-medium text-im8-burgundy mb-1">
+                Which deliverable is this for? <span className="text-im8-burgundy/40 font-normal">(optional)</span>
+              </label>
+              <select
+                value={selectedDeliverableId}
+                onChange={e => setSelectedDeliverableId(e.target.value)}
+                className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40 bg-white"
+              >
+                <option value="">Not tied to a specific deliverable</option>
+                {deliverables.map(d => (
+                  <option key={d.id} value={d.id}>
+                    {d.deliverable_type}{d.sequence ? ` #${d.sequence}` : ""}
+                  </option>
+                ))}
+              </select>
+              {selected?.brief_doc_url && (
+                <div className="mt-2 flex items-center gap-2 px-3 py-2 bg-im8-sand/60 border border-im8-stone/20 rounded-lg text-sm">
+                  <span className="text-xs text-im8-burgundy/50 uppercase tracking-wide font-semibold">Brief</span>
+                  <a href={selected.brief_doc_url} target="_blank" rel="noopener noreferrer"
+                    className="text-im8-red hover:underline font-medium truncate">
+                    Open brief for {selected.deliverable_type}{selected.sequence ? ` #${selected.sequence}` : ""} ↗
+                  </a>
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* File drop zone */}
         <div

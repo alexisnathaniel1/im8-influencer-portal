@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
 
   const { data } = await admin
     .from("deliverables")
-    .select("id, deliverable_type, title, status, sequence")
+    .select("id, deliverable_type, title, status, sequence, brief_doc_url")
     .eq("deal_id", dealId)
     .not("status", "in", '("completed")')
     .order("deliverable_type", { ascending: true })

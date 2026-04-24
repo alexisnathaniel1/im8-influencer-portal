@@ -24,7 +24,7 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
 
   if (!deal) notFound();
 
-  const [{ data: briefs }, { data: submissions }, { data: giftingRequests }] = await Promise.all([
+  const [{ data: briefs }, { data: submissions }, { data: giftingRequests }, { data: deliverables }] = await Promise.all([
     admin.from("briefs").select("*").eq("deal_id", id).order("created_at"),
     admin
       .from("submissions")
@@ -36,6 +36,13 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
       .select("*")
       .eq("deal_id", id)
       .order("created_at", { ascending: false }),
+    admin
+      .from("deliverables")
+      .select("id, deliverable_type, sequence, title, status, due_date, brief_doc_url")
+      .eq("deal_id", id)
+      .order("deliverable_type", { ascending: true })
+      .order("sequence", { ascending: true, nullsFirst: false })
+      .order("created_at", { ascending: true }),
   ]);
 
   // Fetch partner shipping address if linked to a profile
@@ -87,6 +94,7 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
         briefs={briefs ?? []}
         submissions={submissions ?? []}
         giftingRequests={giftingRequests ?? []}
+        deliverables={deliverables ?? []}
         partnerShippingAddress={partnerShippingAddress}
         canViewRates={showRates}
       />
