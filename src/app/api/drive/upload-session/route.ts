@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { initiateResumableUpload, extractFolderId } from "@/lib/google/drive";
+import { initiateResumableUpload, extractFolderId, createInfluencerFolder } from "@/lib/google/drive";
 
 export async function POST(request: Request) {
   try {
@@ -41,17 +41,30 @@ export async function POST(request: Request) {
       // Fall back to the influencer's own Drive folder
       const { data: profile } = await admin
         .from("profiles")
-        .select("drive_folder_url")
+        .select("full_name, email, drive_folder_url")
         .eq("id", user.id)
         .single();
 
       if (profile?.drive_folder_url) {
         folderId = extractFolderId(profile.drive_folder_url);
       }
+
+      // Auto-create a Drive folder if the creator doesn't have one yet
+      if (!folderId && process.env.GOOGLE_DRIVE_MASTER_FOLDER_ID && process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
+        try {
+          const folderName = `IM8_${(profile?.full_name || dealName).toUpperCase().replace(/\s+/g, "_")}`;
+          const creatorEmail = profile?.email ?? "";
+          const newFolderUrl = await createInfluencerFolder(folderName, creatorEmail);
+          await admin.from("profiles").update({ drive_folder_url: newFolderUrl }).eq("id", user.id);
+          folderId = extractFolderId(newFolderUrl);
+        } catch (err) {
+          console.error("[upload-session] Auto folder creation failed:", err);
+        }
+      }
     }
 
     if (!folderId) {
-      return NextResponse.json({ error: "No Drive folder found. Please contact your IM8 manager." }, { status: 400 });
+      return NextResponse.json({ error: "No Drive folder found. Please contact your IM8 manager to set up your content folder." }, { status: 400 });
     }
 
     // Block duplicate file uploads for the same brief

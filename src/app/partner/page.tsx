@@ -36,7 +36,7 @@ export default async function PartnerPage() {
   const admin = createAdminClient();
   const { data: profile } = await admin
     .from("profiles")
-    .select("email, full_name, partner_type")
+    .select("email, full_name, partner_type, drive_folder_url")
     .eq("id", user.id)
     .single();
 
@@ -51,10 +51,15 @@ export default async function PartnerPage() {
     .not("status", "in", '("declined","rejected")')
     .order("contract_sequence", { ascending: true });
 
-  // Two separate queries to avoid PostgREST escaping issues with email in .or()
+  // Three separate queries to avoid PostgREST escaping issues with email in .or()
+  // byProfileId: submissions the user filed themselves (agency or creator)
+  // byEmail: submissions filed by their email address (self-submissions before account creation)
+  // byInfluencerEmail: submissions where this user IS the creator, even if an admin/agency submitted
   const SELECT_FIELDS = "id, influencer_name, platform_primary, status, positioning, niche_tags, niche, proposed_rate_cents, proposed_deliverables, negotiation_counter, agency_response, created_at";
 
-  const [{ data: byProfileId }, { data: byEmail }] = await Promise.all([
+  const emptyResult = { data: [] } as { data: { id: string; [k: string]: unknown }[] };
+
+  const [{ data: byProfileId }, { data: byEmail }, { data: byInfluencerEmail }] = await Promise.all([
     admin
       .from("discovery_profiles")
       .select(SELECT_FIELDS)
@@ -66,12 +71,23 @@ export default async function PartnerPage() {
           .select(SELECT_FIELDS)
           .ilike("submitter_email", email)
           .order("created_at", { ascending: false })
-      : ({ data: [] } as { data: { id: string; [k: string]: unknown }[] }),
+      : emptyResult,
+    email
+      ? admin
+          .from("discovery_profiles")
+          .select(SELECT_FIELDS)
+          .ilike("influencer_email", email)
+          .order("created_at", { ascending: false })
+      : emptyResult,
   ]);
 
   // Merge and deduplicate by id
   const seen = new Set<string>();
-  const submissions = [...(byProfileId ?? []), ...(byEmail ?? [])].filter(s => {
+  const submissions = [
+    ...(byProfileId ?? []),
+    ...(byEmail ?? []),
+    ...(byInfluencerEmail ?? []),
+  ].filter(s => {
     if (seen.has(s.id)) return false;
     seen.add(s.id);
     return true;
@@ -222,17 +238,42 @@ export default async function PartnerPage() {
                   )}
                 </div>
               </div>
-              <div className="flex flex-wrap gap-3">
-                <Link href="/partner/briefs" className="text-sm px-4 py-2 bg-im8-burgundy text-white rounded-lg hover:bg-im8-red transition-colors">
-                  View briefs
-                </Link>
-                <Link href="/partner/submissions" className="text-sm px-4 py-2 border border-im8-stone/40 text-im8-burgundy rounded-lg hover:bg-im8-sand transition-colors">
-                  My submissions
-                </Link>
-                <Link href="/partner/edited-videos" className="text-sm px-4 py-2 border border-im8-stone/40 text-im8-burgundy rounded-lg hover:bg-im8-sand transition-colors">
-                  Edited videos
-                </Link>
-              </div>
+              {["approved", "contracted", "live"].includes(deal.status) ? (
+                <div className="flex flex-wrap gap-3">
+                  <Link href="/partner/briefs" className="text-sm px-4 py-2 bg-im8-burgundy text-white rounded-lg hover:bg-im8-red transition-colors">
+                    View briefs
+                  </Link>
+                  <Link href={`/partner/submit?dealId=${deal.id}`} className="text-sm px-4 py-2 border border-im8-stone/40 text-im8-burgundy rounded-lg hover:bg-im8-sand transition-colors">
+                    Upload content
+                  </Link>
+                  <Link href="/partner/submissions" className="text-sm px-4 py-2 border border-im8-stone/40 text-im8-burgundy rounded-lg hover:bg-im8-sand transition-colors">
+                    My submissions
+                  </Link>
+                  <Link href="/partner/edited-videos" className="text-sm px-4 py-2 border border-im8-stone/40 text-im8-burgundy rounded-lg hover:bg-im8-sand transition-colors">
+                    Edited videos
+                  </Link>
+                  {deal.drive_folder_id && (
+                    <a
+                      href={`https://drive.google.com/drive/folders/${deal.drive_folder_id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm px-4 py-2 border border-im8-stone/40 text-im8-burgundy rounded-lg hover:bg-im8-sand transition-colors"
+                    >
+                      📁 Drive folder
+                    </a>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-im8-burgundy/50 italic">
+                  {deal.status === "pending_approval"
+                    ? "Your proposal is being reviewed by the IM8 team. We'll be in touch soon."
+                    : deal.status === "contacted" || deal.status === "negotiating"
+                    ? "Terms are being finalised — we'll reach out when ready."
+                    : deal.status === "agreed"
+                    ? "Terms agreed — contract being prepared."
+                    : "Your collaboration is complete. Thank you for partnering with IM8!"}
+                </p>
+              )}
             </div>
           ))}
           <hr className="border-im8-stone/20" />

@@ -94,7 +94,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
             discovery_profile_id: id,
             status: "pending_approval",
             influencer_name: before.influencer_name,
-            influencer_email: before.submitter_email ?? "",
+            // Use the creator's own email (stored when counter-proposal was sent)
+            // falling back to submitter_email for self-submitted profiles where
+            // both fields represent the same person.
+            influencer_email: (before.influencer_email as string | null) || (before.submitter_email as string | null) || "",
             agency_name: before.agency_name ?? null,
             platform_primary: before.platform_primary ?? "instagram",
             instagram_handle: before.instagram_handle ?? null,

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createInfluencerFolder, createSubFolder, extractFolderId } from "@/lib/google/drive";
 
 const ADMIN_DOMAINS = ["@prenetics.com", "@im8health.com"];
 
@@ -66,6 +67,8 @@ export async function POST(request: NextRequest) {
     // in /partner and they get full dashboard access without re-filling intake.
     if (!isStaffDomain && userEmail) {
       await linkOrphanDiscoveryProfilesToUser(admin, userEmail, userId);
+      // Also link any deals whose influencer_email matches, and provision Drive.
+      await linkDealsToUser(admin, userEmail, userId);
     }
 
     return NextResponse.json({ role, full_name: fullName, partner_type: partnerType });
@@ -90,6 +93,7 @@ export async function POST(request: NextRequest) {
   // (catches the case where a profile exists but was created before Discovery entries).
   if (!isStaffDomain && userEmail) {
     await linkOrphanDiscoveryProfilesToUser(admin, userEmail, userId);
+    await linkDealsToUser(admin, userEmail, userId);
   }
 
   return NextResponse.json({
@@ -97,6 +101,79 @@ export async function POST(request: NextRequest) {
     full_name: patch.full_name ?? existing.full_name,
     partner_type: patch.partner_type ?? existing.partner_type,
   });
+}
+
+// Link any deals whose influencer_email matches the signed-in user to their
+// profile. This covers the case where a deal was created before the creator
+// had a portal account (e.g. admin-added via New Partnership, or approved from
+// Discovery before the creator signed up). Also provisions a Google Drive folder
+// so the creator can upload content immediately.
+async function linkDealsToUser(
+  admin: ReturnType<typeof createAdminClient>,
+  email: string,
+  userId: string,
+) {
+  try {
+    const { data: deals } = await admin
+      .from("deals")
+      .select("id, influencer_name, drive_folder_id")
+      .ilike("influencer_email", email)
+      .is("influencer_profile_id", null);
+
+    if (!deals || deals.length === 0) return;
+
+    // Link all matching deals to this user
+    await admin
+      .from("deals")
+      .update({ influencer_profile_id: userId })
+      .in("id", deals.map(d => d.id));
+
+    // Provision a Drive folder for the creator if not already present
+    const driveConfigured =
+      !!process.env.GOOGLE_DRIVE_MASTER_FOLDER_ID &&
+      !!process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+
+    if (!driveConfigured) return;
+
+    const { data: profile } = await admin
+      .from("profiles")
+      .select("full_name, email, drive_folder_url")
+      .eq("id", userId)
+      .single();
+
+    let driveFolderUrl: string | null = profile?.drive_folder_url ?? null;
+
+    if (!driveFolderUrl) {
+      try {
+        const folderName = `IM8_${(deals[0].influencer_name || (profile?.full_name ?? "creator")).toUpperCase().replace(/\s+/g, "_")}`;
+        const creatorEmail = profile?.email ?? email;
+        driveFolderUrl = await createInfluencerFolder(folderName, creatorEmail);
+        await admin.from("profiles").update({ drive_folder_url: driveFolderUrl }).eq("id", userId);
+      } catch (err) {
+        console.error("[ensure-profile] Drive folder creation failed (non-fatal):", err);
+        return;
+      }
+    }
+
+    // Create deal-level subfolders for any deal that doesn't have one yet
+    const parentFolderId = driveFolderUrl ? extractFolderId(driveFolderUrl) : null;
+    if (parentFolderId) {
+      for (const deal of deals) {
+        if (!deal.drive_folder_id) {
+          try {
+            const subFolderName = (deal.influencer_name || "content").replace(/\s+/g, "_");
+            const { folderId } = await createSubFolder(parentFolderId, subFolderName);
+            await admin.from("deals").update({ drive_folder_id: folderId }).eq("id", deal.id);
+          } catch (err) {
+            console.error("[ensure-profile] Deal subfolder creation failed (non-fatal):", err, deal.id);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error("[ensure-profile] Failed to link deals:", err);
+    // Non-fatal — signup still succeeds
+  }
 }
 
 // Link any discovery_profiles rows submitted against this email to the
@@ -109,12 +186,23 @@ async function linkOrphanDiscoveryProfilesToUser(
   userId: string,
 ) {
   try {
-    const { data: rows } = await admin
-      .from("discovery_profiles")
-      .select("id, submitted_by_profile_id")
-      .ilike("submitter_email", email);
+    // Match on submitter_email (self-submitted or agency-submitted rows)
+    // AND on influencer_email (admin-submitted rows where the creator's email
+    // was captured from the counter-proposal "to" field or intake form).
+    // Two separate queries to avoid PostgREST .or() escaping issues.
+    const [{ data: bySubmitter }, { data: byInfluencer }] = await Promise.all([
+      admin.from("discovery_profiles").select("id, submitted_by_profile_id").ilike("submitter_email", email),
+      admin.from("discovery_profiles").select("id, submitted_by_profile_id").ilike("influencer_email", email),
+    ]);
 
-    if (!rows || rows.length === 0) return;
+    const seen = new Set<string>();
+    const rows = [...(bySubmitter ?? []), ...(byInfluencer ?? [])].filter(r => {
+      if (seen.has(r.id)) return false;
+      seen.add(r.id);
+      return true;
+    });
+
+    if (rows.length === 0) return;
 
     const orphanIds = rows
       .filter(r => r.submitted_by_profile_id !== userId)

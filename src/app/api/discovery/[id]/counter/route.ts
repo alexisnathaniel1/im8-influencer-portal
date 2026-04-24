@@ -53,13 +53,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const isAgency = !!profile.agency_name;
   const submitterName = profile.submitter_name || (isAgency ? profile.agency_name : "there") || "there";
 
-  // Save the updated counter-proposal fields to the discovery profile
+  // Save the updated counter-proposal fields to the discovery profile.
+  // Also store the recipient email as influencer_email so the creator can be
+  // auto-linked to their portal account when they sign up via this email.
   const rate_cents = rate_usd ? Math.round(rate_usd * 100) : null;
   await admin.from("discovery_profiles").update({
     proposed_rate_cents: rate_cents ?? undefined,
     proposed_deliverables: deliverables,
     negotiation_counter: notes ?? null,
     total_months: total_months,
+    influencer_email: to,
   }).eq("id", id);
 
   // Send the email.
