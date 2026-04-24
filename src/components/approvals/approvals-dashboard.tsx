@@ -47,11 +47,13 @@ export default function ApprovalsDashboard({
   packets,
   approvers,
   canViewRates = true,
+  userId,
 }: {
   agreedDeals: Deal[];
   packets: Packet[];
   approvers: Approver[];
   canViewRates?: boolean;
+  userId: string;
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -116,17 +118,55 @@ export default function ApprovalsDashboard({
     if (!openPacket) return;
     if (kind === "comment" && !commentBody.trim()) return;
     setPostingComment(true);
+
+    // 1. Post the comment/thread entry (visible in side panel)
     await fetch(`/api/approvals/${openPacket.id}/comments`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ body: commentBody || kindLabel(kind), kind }),
     });
-    // Refresh comments
+
+    // 2. For approval/rejection/revision actions, also submit a formal decision
+    //    so the decide route can update deal status and packet counts.
+    if (kind !== "comment") {
+      const decisionMap: Record<string, string> = {
+        approval: "approved",
+        rejection: "rejected",
+        revision_request: "revision_requested",
+      };
+      const decisionValue = decisionMap[kind];
+      // Apply the same decision to every deal in this packet
+      const decisions: Record<string, { decision: string; comment: string }> = {};
+      for (const dealId of openPacket.deal_ids) {
+        decisions[dealId] = { decision: decisionValue, comment: commentBody };
+      }
+      const decideRes = await fetch(`/api/approvals/${openPacket.id}/decide`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ approverId: userId, decisions }),
+      });
+      if (decideRes.ok) {
+        const decideData = await decideRes.json().catch(() => ({}));
+        // Update the open packet's counts optimistically so the panel header reflects them
+        const updatedStatus = decideData.packetStatus as string | undefined;
+        if (updatedStatus) {
+          setOpenPacket(prev => prev ? {
+            ...prev,
+            status: updatedStatus,
+            approved_count: kind === "approval" ? prev.approved_count + 1 : prev.approved_count,
+            rejected_count: kind === "rejection" ? prev.rejected_count + 1 : prev.rejected_count,
+          } : prev);
+        }
+      }
+    }
+
+    // 3. Refresh comment thread
     const res = await fetch(`/api/approvals/${openPacket.id}/comments`);
     const data = await res.json().catch(() => ({ comments: [] }));
     setComments(data.comments ?? []);
     setCommentBody("");
     setPostingComment(false);
+    // Refresh page data (updates packet list counts and deals list)
     startTransition(() => router.refresh());
   }
 

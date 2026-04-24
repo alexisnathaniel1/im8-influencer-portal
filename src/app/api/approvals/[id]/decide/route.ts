@@ -26,15 +26,19 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   // Recalculate packet status
   const { data: allDecisions } = await admin.from("approval_decisions").select("*").eq("packet_id", id);
-  const required = packet.approver_ids?.length ?? 1;
+  const approverIds: string[] = packet.approver_ids ?? [];
+  // required = number of distinct approvers who must approve (at least 1)
+  const required = Math.max(approverIds.length, 1);
   const dealIds: string[] = packet.deal_ids ?? [];
 
-  // Per-deal: deal is approved if all approvers approved it
+  // Per-deal: deal is approved if all required approvers have approved it
   const dealApproved: Record<string, boolean> = {};
   for (const dealId of dealIds) {
     const dealDecs = (allDecisions ?? []).filter(d => d.deal_id === dealId);
-    const approvedCount = dealDecs.filter(d => d.decision === "approved").length;
-    dealApproved[dealId] = approvedCount >= required;
+    const distinctApprovedIds = new Set(
+      dealDecs.filter(d => d.decision === "approved").map(d => d.approver_id)
+    );
+    dealApproved[dealId] = distinctApprovedIds.size >= required;
   }
 
   // Transition individual deals

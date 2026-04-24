@@ -38,7 +38,7 @@ export default async function ApprovalsPage() {
         <h1 className="text-3xl font-bold text-im8-burgundy">Approvals</h1>
         <p className="text-im8-burgundy/60 mt-1">Bundle agreed deals for management sign-off</p>
       </div>
-      <ApprovalsDashboard agreedDeals={agreedDeals ?? []} packets={packets ?? []} approvers={approvers ?? []} canViewRates={showRates} />
+      <ApprovalsDashboard agreedDeals={agreedDeals ?? []} packets={packets ?? []} approvers={approvers ?? []} canViewRates={showRates} userId={user.id} />
     </div>
   );
 }
