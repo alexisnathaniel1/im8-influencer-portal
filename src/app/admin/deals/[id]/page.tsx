@@ -64,7 +64,7 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
   }
 
   return (
-    <div className="space-y-6 animate-fade-in max-w-4xl">
+    <div className="space-y-6 animate-fade-in max-w-6xl">
       <div className="flex items-center gap-3 flex-wrap">
         <Link href="/admin/deals" className="text-im8-burgundy/50 hover:text-im8-burgundy text-sm">← Partner Tracker</Link>
         <span className="text-im8-burgundy/30">/</span>

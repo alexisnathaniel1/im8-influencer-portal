@@ -32,6 +32,27 @@ function NewPartnershipForm() {
     followerCount: "",
   });
   const [nicheTags, setNicheTags] = useState<string[]>([]);
+  const [deliverableCounts, setDeliverableCounts] = useState<Record<string, number>>({});
+
+  const DELIVERABLE_OPTIONS = [
+    { code: "IGR", label: "Instagram Reels" },
+    { code: "IGS", label: "Instagram Stories" },
+    { code: "UGC", label: "UGC Videos" },
+    { code: "TIKTOK", label: "TikTok Videos" },
+    { code: "YT", label: "YouTube Videos" },
+    { code: "WHITELIST", label: "Whitelisting" },
+  ];
+
+  function setDeliverableCount(code: string, count: number) {
+    setDeliverableCounts(prev => {
+      if (count <= 0) {
+        const next = { ...prev };
+        delete next[code];
+        return next;
+      }
+      return { ...prev, [code]: count };
+    });
+  }
 
   useEffect(() => {
     if (profileId) {
@@ -67,6 +88,10 @@ function NewPartnershipForm() {
     const totalMonths = parseInt(form.totalMonths) || 3;
     const followerCount = form.followerCount ? parseInt(form.followerCount) : null;
 
+    const deliverables = Object.entries(deliverableCounts)
+      .filter(([, count]) => count > 0)
+      .map(([code, count]) => ({ code, count }));
+
     const res = await fetch("/api/deals/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -83,6 +108,7 @@ function NewPartnershipForm() {
         totalMonths,
         followerCount,
         nicheTags,
+        deliverables,
         discoveryProfileId: profileId,
       }),
     });
@@ -207,6 +233,38 @@ function NewPartnershipForm() {
                 ${totalUsd.toLocaleString()} total over {months} month{months === 1 ? "" : "s"}
               </p>
             )}
+          </div>
+
+          <hr className="border-im8-stone/20" />
+
+          {/* Deliverables */}
+          <div className="space-y-3">
+            <p className="text-xs font-semibold text-im8-burgundy/50 uppercase tracking-wide">Deliverables</p>
+            <p className="text-xs text-im8-burgundy/50 -mt-1">Optional — you can also set these later from the deal page.</p>
+            <div className="space-y-2">
+              {DELIVERABLE_OPTIONS.map(({ code, label }) => {
+                const count = deliverableCounts[code] ?? 0;
+                return (
+                  <div key={code} className="flex items-center gap-3">
+                    <span className="text-sm text-im8-burgundy flex-1">{label}</span>
+                    <div className="flex items-center gap-1">
+                      <button type="button"
+                        onClick={() => setDeliverableCount(code, Math.max(0, count - 1))}
+                        disabled={count === 0}
+                        className={`w-7 h-7 rounded border text-sm font-medium transition-colors ${count > 0 ? "border-im8-stone/40 hover:bg-im8-sand text-im8-burgundy" : "border-im8-stone/20 text-im8-burgundy/20 cursor-not-allowed"}`}>
+                        −
+                      </button>
+                      <span className={`w-8 text-center text-sm font-medium ${count > 0 ? "text-im8-burgundy" : "text-im8-burgundy/30"}`}>{count}</span>
+                      <button type="button"
+                        onClick={() => setDeliverableCount(code, count + 1)}
+                        className="w-7 h-7 rounded border border-im8-stone/40 hover:bg-im8-sand text-im8-burgundy text-sm font-medium transition-colors">
+                        +
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           {error && (

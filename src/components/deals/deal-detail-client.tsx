@@ -59,16 +59,12 @@ export default function DealDetailClient({
     influencerEmail: (deal.influencer_email as string) ?? "",
     agencyName: (deal.agency_name as string) ?? "",
     platformPrimary: (deal.platform_primary as string) ?? "instagram",
-    monthlyRateCents: deal.monthly_rate_cents ? String(Number(deal.monthly_rate_cents) / 100) : "",
-    totalMonths: String(deal.total_months ?? 3),
     rationale: (deal.rationale as string) ?? "",
     igHandle: (deal.instagram_handle as string) ?? "",
     tiktokHandle: (deal.tiktok_handle as string) ?? "",
     youtubeHandle: (deal.youtube_handle as string) ?? "",
     followerCount: deal.follower_count ? String(deal.follower_count) : "",
     nicheTags: (deal.niche_tags as string[] | null) ?? [],
-    isGifted: Boolean(deal.is_gifted),
-    // gifted_product / gifted_quantity / product_sent_at are owned by the Gifting tab now
     needsApproval: deal.needs_approval !== false,
   });
 
@@ -117,16 +113,12 @@ export default function DealDetailClient({
         influencer_email: form.influencerEmail,
         agency_name: form.agencyName || null,
         platform_primary: form.platformPrimary,
-        monthly_rate_cents: form.monthlyRateCents ? Math.round(parseFloat(form.monthlyRateCents) * 100) : null,
-        total_months: parseInt(form.totalMonths),
         rationale: form.rationale,
         instagram_handle: form.igHandle.trim().replace(/^@/, "") || null,
         tiktok_handle: form.tiktokHandle.trim().replace(/^@/, "") || null,
         youtube_handle: form.youtubeHandle.trim().replace(/^@/, "") || null,
         follower_count: form.followerCount ? parseInt(form.followerCount) : null,
         niche_tags: form.nicheTags,
-        is_gifted: form.isGifted,
-        // gifted_product / gifted_quantity / product_sent_at live in the Gifting tab now
         needs_approval: form.needsApproval,
       }),
     });
@@ -226,49 +218,16 @@ export default function DealDetailClient({
                 ))}
               </select>
             </div>
-            {canViewRates && (
-              <>
-                <div>
-                  <label className="block text-sm font-medium text-im8-burgundy mb-1">
-                    Monthly rate (USD) {!form.isGifted && "*"}
-                  </label>
-                  <input
-                    type="number" value={form.monthlyRateCents}
-                    onChange={e => setForm(f => ({ ...f, monthlyRateCents: e.target.value }))}
-                    disabled={form.isGifted}
-                    placeholder={form.isGifted ? "N/A (gifted)" : ""}
-                    className={`w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40 ${form.isGifted ? "bg-im8-sand/40 text-im8-burgundy/40" : ""}`}
-                  />
-                </div>
-                <Field label="Total months *" value={form.totalMonths}
-                  onChange={v => setForm(f => ({ ...f, totalMonths: v }))} type="number" />
-              </>
-            )}
           </div>
 
-          {/* Gifted Collaboration — lives below the rate row so rate/months are still visible */}
-          <div className="flex items-center gap-3 px-4 py-3 bg-im8-sand/40 rounded-xl border border-im8-stone/20">
-            <Toggle
-              on={form.isGifted}
-              onChange={v => setForm(f => ({ ...f, isGifted: v }))}
-              label="Gifted Collaboration"
-            />
-            {form.isGifted && (
-              <span className="text-xs text-im8-burgundy/60">
-                No monthly payment — product only. Shipping lives on the Gifting tab.
-              </span>
-            )}
-          </div>
-
-          {/* Contract & Deliverables — collapsible summary */}
-          <ContractDeliverablesSummary
+          {/* Contract & Deliverables — editable accordion (rate, months, gifted, deliverables) */}
+          <EditableContractSection
+            dealId={deal.id as string}
             contractSequence={deal.contract_sequence as number | null}
-            totalMonths={deal.total_months as number | null}
-            monthlyRateCents={deal.monthly_rate_cents as number | null}
-            isGifted={form.isGifted}
-            deliverables={deal.deliverables as Array<{ code: string; count: number }> | null}
-            campaignStart={deal.campaign_start as string | null}
-            campaignEnd={deal.campaign_end as string | null}
+            initialRate={deal.monthly_rate_cents ? String(Number(deal.monthly_rate_cents) / 100) : ""}
+            initialMonths={String(deal.total_months ?? 3)}
+            initialIsGifted={Boolean(deal.is_gifted)}
+            initialDeliverables={(deal.deliverables as Array<{ code: string; count: number }>) ?? []}
             canViewRates={canViewRates}
           />
 
@@ -337,6 +296,9 @@ export default function DealDetailClient({
               {saving ? "Saving..." : saved ? "Saved ✓" : "Save changes"}
             </button>
           </div>
+
+          {/* Version history */}
+          <VersionHistorySection dealId={deal.id as string} />
         </div>
       )}
 
@@ -999,9 +961,7 @@ function Field({ label, value, onChange, type = "text" }: {
   );
 }
 
-// Collapsible summary shown in the Overview tab and reused on the brief editor.
-// Pulls contract sequence, duration, rate, and confirmed deliverables from the deal
-// so support staff can see (and reference) the agreed terms at a glance.
+// Deliverable label map — exported so the brief editor can reuse it.
 export const DELIVERABLE_LABELS: Record<string, string> = {
   IGR: "Instagram Reels",
   IGS: "Instagram Stories",
@@ -1011,33 +971,77 @@ export const DELIVERABLE_LABELS: Record<string, string> = {
   WHITELIST: "Whitelisting",
 };
 
-function ContractDeliverablesSummary({
-  contractSequence, totalMonths, monthlyRateCents, isGifted,
-  deliverables, campaignStart, campaignEnd, canViewRates,
+// Editable contract accordion — rate, months, gifted toggle, deliverables picker + save.
+function EditableContractSection({
+  dealId, contractSequence, initialRate, initialMonths, initialIsGifted,
+  initialDeliverables, canViewRates,
 }: {
+  dealId: string;
   contractSequence: number | null;
-  totalMonths: number | null;
-  monthlyRateCents: number | null;
-  isGifted: boolean;
-  deliverables: Array<{ code: string; count: number }> | null;
-  campaignStart: string | null;
-  campaignEnd: string | null;
+  initialRate: string;
+  initialMonths: string;
+  initialIsGifted: boolean;
+  initialDeliverables: Array<{ code: string; count: number }>;
   canViewRates: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [rate, setRate] = useState(initialRate);
+  const [months, setMonths] = useState(initialMonths);
+  const [isGifted, setIsGifted] = useState(initialIsGifted);
+  const [deliverableCounts, setDeliverableCounts] = useState<Record<string, number>>(() => {
+    const counts: Record<string, number> = {};
+    for (const d of initialDeliverables) {
+      if (d && d.code && d.count > 0) counts[d.code] = d.count;
+    }
+    return counts;
+  });
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
   const seq = contractSequence ?? 1;
-  const months = totalMonths ?? 3;
-  const rateUsd = monthlyRateCents ? monthlyRateCents / 100 : null;
-  const items = (deliverables ?? []).filter(d => d && d.code);
-  const deliverablesSummary = items.length
-    ? items.map(d => `${d.count}× ${d.code}`).join(", ")
-    : "No deliverables confirmed yet";
+  const rateNum = parseFloat(rate) || 0;
+  const monthsNum = parseInt(months) || 3;
+  const activeDeliverables = Object.entries(deliverableCounts)
+    .filter(([, count]) => count > 0)
+    .map(([code, count]) => ({ code, count }));
 
   const rateText = isGifted
     ? "Gifted"
-    : rateUsd && canViewRates
-      ? `$${rateUsd.toLocaleString()}/mo × ${months}mo`
-      : `${months} months`;
+    : rateNum && canViewRates
+      ? `$${rateNum.toLocaleString()}/mo × ${monthsNum}mo`
+      : `${monthsNum} months`;
+
+  const deliverablesSummary = activeDeliverables.length
+    ? activeDeliverables.map(d => `${d.count}× ${d.code}`).join(", ")
+    : "No deliverables set";
+
+  function setCount(code: string, count: number) {
+    setDeliverableCounts(prev => {
+      if (count <= 0) {
+        const next = { ...prev };
+        delete next[code];
+        return next;
+      }
+      return { ...prev, [code]: count };
+    });
+  }
+
+  async function save() {
+    setSaving(true);
+    await fetch(`/api/deals/${dealId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        monthly_rate_cents: isGifted ? null : (rateNum ? Math.round(rateNum * 100) : null),
+        total_months: monthsNum,
+        is_gifted: isGifted,
+        deliverables: activeDeliverables,
+      }),
+    });
+    setSaving(false);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2500);
+  }
 
   return (
     <div className="border border-im8-stone/30 rounded-xl overflow-hidden">
@@ -1053,61 +1057,197 @@ function ContractDeliverablesSummary({
           <span className="text-sm text-im8-burgundy font-medium">{rateText}</span>
           <span className="text-xs text-im8-burgundy/60">· {deliverablesSummary}</span>
         </div>
-        <span className="text-im8-burgundy/40 text-xs shrink-0">{open ? "Hide ▲" : "Show details ▼"}</span>
+        <span className="text-im8-burgundy/40 text-xs shrink-0">{open ? "Hide ▲" : "Edit ▼"}</span>
       </button>
+
       {open && (
-        <div className="px-4 py-4 bg-white space-y-3 border-t border-im8-stone/20">
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            <div>
-              <div className="text-xs text-im8-burgundy/50 uppercase tracking-wide">Contract</div>
-              <div className="text-im8-burgundy font-medium">Contract {seq}</div>
-            </div>
-            <div>
-              <div className="text-xs text-im8-burgundy/50 uppercase tracking-wide">Duration</div>
-              <div className="text-im8-burgundy font-medium">{months} month{months === 1 ? "" : "s"}</div>
-            </div>
-            {canViewRates && !isGifted && rateUsd !== null && (
-              <>
-                <div>
-                  <div className="text-xs text-im8-burgundy/50 uppercase tracking-wide">Monthly rate</div>
-                  <div className="text-im8-burgundy font-medium">${rateUsd.toLocaleString()}</div>
-                </div>
-                <div>
-                  <div className="text-xs text-im8-burgundy/50 uppercase tracking-wide">Total fee</div>
-                  <div className="text-im8-burgundy font-medium">${(rateUsd * months).toLocaleString()}</div>
-                </div>
-              </>
-            )}
-            {(campaignStart || campaignEnd) && (
-              <div className="col-span-2">
-                <div className="text-xs text-im8-burgundy/50 uppercase tracking-wide">Campaign window</div>
-                <div className="text-im8-burgundy font-medium">
-                  {campaignStart ? new Date(campaignStart).toLocaleDateString() : "TBD"}
-                  {" → "}
-                  {campaignEnd ? new Date(campaignEnd).toLocaleDateString() : "TBD"}
-                </div>
+        <div className="px-4 py-4 bg-white space-y-4 border-t border-im8-stone/20">
+          {/* Rate + duration */}
+          {canViewRates ? (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-im8-burgundy/70 mb-1">Monthly rate (USD)</label>
+                <input
+                  type="number" value={rate}
+                  onChange={e => setRate(e.target.value)}
+                  disabled={isGifted}
+                  placeholder={isGifted ? "N/A (gifted)" : "e.g. 3000"}
+                  className={`w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-im8-red/40 ${isGifted ? "bg-im8-sand/40 text-im8-burgundy/40" : "text-im8-burgundy"}`}
+                />
               </div>
+              <div>
+                <label className="block text-xs font-medium text-im8-burgundy/70 mb-1">Duration (months)</label>
+                <input
+                  type="number" min="1" max="24" value={months}
+                  onChange={e => setMonths(e.target.value)}
+                  className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40"
+                />
+              </div>
+            </div>
+          ) : (
+            <div>
+              <label className="block text-xs font-medium text-im8-burgundy/70 mb-1">Duration (months)</label>
+              <input
+                type="number" min="1" max="24" value={months}
+                onChange={e => setMonths(e.target.value)}
+                className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40"
+              />
+            </div>
+          )}
+
+          {/* Total summary (canViewRates + not gifted) */}
+          {canViewRates && !isGifted && rateNum > 0 && (
+            <p className="text-xs text-im8-burgundy/50 -mt-1">
+              ${(rateNum * monthsNum).toLocaleString()} total over {monthsNum} month{monthsNum === 1 ? "" : "s"}
+            </p>
+          )}
+
+          {/* Gifted toggle */}
+          <div className="flex items-center gap-3 px-3 py-2.5 bg-im8-sand/50 rounded-lg border border-im8-stone/20">
+            <Toggle on={isGifted} onChange={setIsGifted} label="Gifted Collaboration" />
+            {isGifted && (
+              <span className="text-xs text-im8-burgundy/60">No monthly payment — product only. Manage shipping on the Gifting tab.</span>
             )}
           </div>
+
+          {/* Deliverables picker */}
           <div>
-            <div className="text-xs text-im8-burgundy/50 uppercase tracking-wide mb-1">Confirmed deliverables</div>
-            {items.length === 0 ? (
-              <p className="text-xs text-im8-burgundy/40 italic">
-                No deliverables confirmed yet. Update them when the deal is marked agreed.
-              </p>
-            ) : (
-              <ul className="space-y-1">
-                {items.map((d, i) => (
-                  <li key={i} className="text-sm text-im8-burgundy flex items-center gap-2">
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-im8-red/10 text-im8-red font-semibold w-10 text-center">
-                      {d.count}×
-                    </span>
-                    {DELIVERABLE_LABELS[d.code] ?? d.code}
-                  </li>
-                ))}
-              </ul>
-            )}
+            <div className="text-xs font-semibold text-im8-burgundy/60 uppercase tracking-wide mb-2">Deliverables</div>
+            <div className="space-y-2.5">
+              {Object.entries(DELIVERABLE_LABELS).map(([code, label]) => {
+                const count = deliverableCounts[code] ?? 0;
+                return (
+                  <div key={code} className="flex items-center gap-3">
+                    <span className="text-sm text-im8-burgundy flex-1">{label}</span>
+                    <div className="flex items-center gap-1.5">
+                      <button type="button"
+                        onClick={() => setCount(code, Math.max(0, count - 1))}
+                        disabled={count === 0}
+                        className={`w-7 h-7 rounded border text-sm font-medium transition-colors ${count > 0 ? "border-im8-stone/40 hover:bg-im8-sand text-im8-burgundy" : "border-im8-stone/20 text-im8-burgundy/20 cursor-not-allowed"}`}>
+                        −
+                      </button>
+                      <span className={`w-8 text-center text-sm font-semibold tabular-nums ${count > 0 ? "text-im8-burgundy" : "text-im8-burgundy/25"}`}>
+                        {count}
+                      </span>
+                      <button type="button"
+                        onClick={() => setCount(code, count + 1)}
+                        className="w-7 h-7 rounded border border-im8-stone/40 hover:bg-im8-sand text-im8-burgundy text-sm font-medium transition-colors">
+                        +
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
+
+          <div className="flex justify-end pt-1 border-t border-im8-stone/10">
+            <button type="button" onClick={save} disabled={saving}
+              className={`px-4 py-2 text-sm text-white rounded-lg transition-colors disabled:opacity-50 ${saved ? "bg-green-600 hover:bg-green-700" : "bg-im8-red hover:bg-im8-burgundy"}`}>
+              {saving ? "Saving…" : saved ? "Saved ✓" : "Save contract terms"}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Collapsible version history — lazy-loads audit events on first open.
+function VersionHistorySection({ dealId }: { dealId: string }) {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [events, setEvents] = useState<Array<{
+    id: string;
+    action: string;
+    after: Record<string, unknown> | null;
+    created_at: string;
+    actor: { full_name: string } | null;
+  }> | null>(null);
+
+  async function load() {
+    if (events !== null) return;
+    setLoading(true);
+    const res = await fetch(`/api/deals/${dealId}/history`);
+    if (res.ok) {
+      const { events: e } = await res.json();
+      setEvents(e);
+    } else {
+      setEvents([]);
+    }
+    setLoading(false);
+  }
+
+  function toggle() {
+    if (!open) load();
+    setOpen(o => !o);
+  }
+
+  const FIELD_LABELS: Record<string, string> = {
+    influencer_name: "Name", influencer_email: "Email", agency_name: "Agency",
+    platform_primary: "Platform", monthly_rate_cents: "Monthly rate", total_months: "Duration",
+    is_gifted: "Gifted collaboration", deliverables: "Deliverables", rationale: "Rationale",
+    instagram_handle: "Instagram", tiktok_handle: "TikTok", youtube_handle: "YouTube",
+    follower_count: "Followers", niche_tags: "Niche tags",
+    campaign_start: "Campaign start", campaign_end: "Campaign end",
+    contract_signed_at: "Date signed", contract_url: "Contract URL",
+    payment_terms: "Payment terms", exclusivity_clause: "Exclusivity",
+    contract_requirements: "Requirements", usage_rights_months: "Usage rights",
+    needs_approval: "Needs approval",
+  };
+
+  function describe(action: string, after: Record<string, unknown> | null) {
+    if (action.startsWith("status_changed_to_")) {
+      const s = action.replace("status_changed_to_", "").replace(/_/g, " ");
+      return `Status → ${s}`;
+    }
+    if (!after || Object.keys(after).length === 0) return action.replace(/_/g, " ");
+    const fields = Object.keys(after).map(k => FIELD_LABELS[k] ?? k);
+    return `Updated: ${fields.join(", ")}`;
+  }
+
+  return (
+    <div className="border border-im8-stone/20 rounded-xl overflow-hidden">
+      <button
+        type="button" onClick={toggle}
+        className="w-full flex items-center justify-between px-4 py-3 bg-im8-sand/20 hover:bg-im8-sand/50 transition-colors text-left"
+      >
+        <span className="text-sm font-medium text-im8-burgundy/70">Version history</span>
+        <span className="text-im8-burgundy/40 text-xs shrink-0">{open ? "Hide ▲" : "Show ▼"}</span>
+      </button>
+
+      {open && (
+        <div className="px-4 py-3 bg-white border-t border-im8-stone/20">
+          {loading && (
+            <div className="flex items-center gap-2 py-2">
+              <div className="w-4 h-4 border-2 border-im8-red border-t-transparent rounded-full animate-spin" />
+              <span className="text-sm text-im8-burgundy/50">Loading…</span>
+            </div>
+          )}
+          {!loading && events && events.length === 0 && (
+            <p className="text-sm text-im8-burgundy/40 italic py-2">No edit history recorded yet.</p>
+          )}
+          {!loading && events && events.length > 0 && (
+            <div className="space-y-1 max-h-72 overflow-y-auto -mx-1 px-1">
+              {events.map((ev, i) => (
+                <div key={ev.id}
+                  className={`flex items-start gap-3 py-2 ${i < events.length - 1 ? "border-b border-im8-stone/10" : ""}`}>
+                  <div className="w-1.5 h-1.5 rounded-full bg-im8-stone/50 mt-1.5 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm text-im8-burgundy">
+                      {describe(ev.action, ev.after)}
+                    </div>
+                    <div className="text-xs text-im8-burgundy/45 mt-0.5">
+                      {ev.actor?.full_name ?? "Unknown"} · {new Date(ev.created_at).toLocaleString("en-AU", {
+                        day: "numeric", month: "short", year: "numeric",
+                        hour: "2-digit", minute: "2-digit",
+                      })}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

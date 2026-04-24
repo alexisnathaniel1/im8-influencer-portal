@@ -34,6 +34,7 @@ export async function POST(request: NextRequest) {
     total_months: body.totalMonths ?? 3,
     follower_count: body.followerCount ?? null,
     niche_tags: Array.isArray(body.nicheTags) ? body.nicheTags : [],
+    deliverables: Array.isArray(body.deliverables) ? body.deliverables : [],
     contract_sequence: 1,
     discovery_profile_id: body.discoveryProfileId || null,
     assigned_to: user.id,
