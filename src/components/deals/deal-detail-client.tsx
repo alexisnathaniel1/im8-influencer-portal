@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import NicheMultiSelect from "@/components/shared/niche-multi-select";
@@ -38,6 +38,21 @@ interface ShippingAddress {
   country?: string;
 }
 
+interface SavedAddress {
+  id: string;
+  label: string;
+  is_primary: boolean;
+  is_legacy?: boolean;
+  recipient_name: string;
+  phone?: string;
+  address_line1: string;
+  address_line2?: string;
+  city: string;
+  state?: string;
+  postal_code: string;
+  country: string;
+}
+
 const STATUS_FLOW = ["contacted", "negotiating", "agreed", "pending_approval", "approved", "contracted", "live", "completed"];
 
 export default function DealDetailClient({
@@ -54,6 +69,7 @@ export default function DealDetailClient({
   const [tab, setTab] = useState<"overview" | "contract" | "briefs" | "submissions" | "gifting" | "edited-videos">("overview");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [creatingBrief, setCreatingBrief] = useState(false);
   const [form, setForm] = useState({
     influencerName: (deal.influencer_name as string) ?? "",
     influencerEmail: (deal.influencer_email as string) ?? "",
@@ -383,16 +399,25 @@ export default function DealDetailClient({
       {tab === "briefs" && (
         <div className="space-y-4">
           <div className="flex justify-end">
-            <button onClick={async () => {
-              const res = await fetch("/api/briefs", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ dealId: deal.id }),
-              });
-              const { brief } = await res.json();
-              if (brief?.id) router.push(`/admin/briefs/${brief.id}`);
-            }} className="px-4 py-2 bg-im8-red text-white text-sm rounded-lg hover:bg-im8-burgundy transition-colors">
-              + Create brief
+            <button
+              disabled={creatingBrief}
+              onClick={async () => {
+                setCreatingBrief(true);
+                const res = await fetch("/api/briefs", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ dealId: deal.id }),
+                });
+                if (!res.ok) { setCreatingBrief(false); return; }
+                const { brief } = await res.json();
+                if (brief?.id) {
+                  router.push(`/admin/briefs/${brief.id}`);
+                } else {
+                  setCreatingBrief(false);
+                }
+              }}
+              className="px-4 py-2 bg-im8-red text-white text-sm rounded-lg hover:bg-im8-burgundy disabled:opacity-60 transition-colors">
+              {creatingBrief ? "Creating…" : "+ Create brief"}
             </button>
           </div>
           {briefs.length === 0 ? (
@@ -630,7 +655,7 @@ function GiftingTab({
   initialProductSent: { product: string; quantity: string; sentAt: string };
 }) {
   const router = useRouter();
-  const addr = partnerShippingAddress ?? {};
+  const [primaryAddress, setPrimaryAddress] = useState<SavedAddress | null>(null);
   const [requests, setRequests] = useState(initialRequests);
   const [showForm, setShowForm] = useState(false);
   const [sending, setSending] = useState(false);
@@ -661,14 +686,14 @@ function GiftingTab({
   }
 
   const [form, setForm] = useState({
-    recipient_name: addr.recipient_name ?? "",
-    phone: addr.phone ?? "",
-    address_line1: addr.address_line1 ?? "",
-    address_line2: addr.address_line2 ?? "",
-    city: addr.city ?? "",
-    state: addr.state ?? "",
-    postal_code: addr.postal_code ?? "",
-    country: addr.country ?? "Singapore",
+    recipient_name: "",
+    phone: "",
+    address_line1: "",
+    address_line2: "",
+    city: "",
+    state: "",
+    postal_code: "",
+    country: "Singapore",
     notes: "",
   });
 
@@ -716,42 +741,10 @@ function GiftingTab({
     delivered: "bg-emerald-100 text-emerald-700",
   };
 
-  const hasAddress = !!(partnerShippingAddress?.address_line1);
-
   return (
     <div className="space-y-5">
-      {/* 1. Shipping address status */}
-      <div className={`rounded-xl border p-5 ${hasAddress ? "bg-green-50/50 border-green-200" : "bg-amber-50/60 border-amber-200"}`}>
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-xs font-semibold uppercase tracking-wide text-im8-burgundy/60">Shipping address</span>
-              <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${hasAddress ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>
-                {hasAddress ? "✓ On file" : "Not saved yet"}
-              </span>
-            </div>
-            {hasAddress ? (
-              <div className="text-sm text-im8-burgundy space-y-0.5">
-                {partnerShippingAddress?.recipient_name && <div className="font-medium">{partnerShippingAddress.recipient_name}</div>}
-                <div className="text-im8-burgundy/70">
-                  {partnerShippingAddress?.address_line1}
-                  {partnerShippingAddress?.address_line2 ? `, ${partnerShippingAddress.address_line2}` : ""}
-                </div>
-                <div className="text-im8-burgundy/70">
-                  {[partnerShippingAddress?.city, partnerShippingAddress?.state, partnerShippingAddress?.postal_code].filter(Boolean).join(", ")}
-                  {partnerShippingAddress?.country ? ` · ${partnerShippingAddress.country}` : ""}
-                </div>
-                {partnerShippingAddress?.phone && <div className="text-im8-burgundy/50 text-xs">{partnerShippingAddress.phone}</div>}
-              </div>
-            ) : (
-              <p className="text-sm text-amber-800">
-                The creator hasn&apos;t added a shipping address to their portal yet. You can still send a
-                gifting request below — enter it manually.
-              </p>
-            )}
-          </div>
-        </div>
-      </div>
+      {/* 1. Shipping addresses — managed list */}
+      <ShippingAddressManager dealId={dealId} onPrimaryChange={setPrimaryAddress} />
 
       {/* 2. Product sent — quick log (replaces the old Overview "Product sent" block) */}
       <div className="bg-white rounded-xl border border-im8-stone/30 p-5 space-y-4">
@@ -834,7 +827,24 @@ function GiftingTab({
       )}
 
       {!showForm && (
-        <button onClick={() => setShowForm(true)}
+        <button
+          onClick={() => {
+            // Auto-fill form from primary address when opening
+            if (primaryAddress) {
+              setForm({
+                recipient_name: primaryAddress.recipient_name,
+                phone: primaryAddress.phone ?? "",
+                address_line1: primaryAddress.address_line1,
+                address_line2: primaryAddress.address_line2 ?? "",
+                city: primaryAddress.city,
+                state: primaryAddress.state ?? "",
+                postal_code: primaryAddress.postal_code,
+                country: primaryAddress.country,
+                notes: "",
+              });
+            }
+            setShowForm(true);
+          }}
           className="w-full py-3 border-2 border-dashed border-im8-stone/40 rounded-xl text-sm font-medium text-im8-burgundy/60 hover:border-im8-red/40 hover:text-im8-red transition-colors">
           + New gifting request
         </button>
@@ -845,9 +855,9 @@ function GiftingTab({
           <div>
             <h3 className="font-semibold text-im8-burgundy">New gifting request</h3>
             <p className="text-xs text-im8-burgundy/50 mt-0.5">
-              {partnerShippingAddress?.address_line1
-                ? "Pre-filled from creator's saved address — update if needed."
-                : "Creator hasn't saved a shipping address yet — fill in manually."}
+              {primaryAddress
+                ? "Pre-filled from primary address — edit as needed."
+                : "No primary address saved — fill in manually or add one above."}
             </p>
           </div>
 
@@ -1426,6 +1436,202 @@ function LinkProfileSection({ dealId, currentProfileId, driveFolderId }: {
       )}
 
       {msg && <p className={`text-xs ${status === "error" || subFolderStatus === "error" ? "text-red-500" : "text-green-700"}`}>{msg}</p>}
+    </div>
+  );
+}
+
+const COUNTRIES = ["Singapore","Australia","United Kingdom","United States","Canada","Hong Kong","New Zealand","Malaysia","Other"];
+
+function ShippingAddressManager({
+  dealId, onPrimaryChange,
+}: {
+  dealId: string;
+  onPrimaryChange: (addr: SavedAddress | null) => void;
+}) {
+  const [addresses, setAddresses] = useState<SavedAddress[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [newAddr, setNewAddr] = useState({
+    label: "Home", recipient_name: "", phone: "",
+    address_line1: "", address_line2: "", city: "",
+    state: "", postal_code: "", country: "Singapore",
+    is_primary: true,
+  });
+
+  async function load() {
+    const res = await fetch(`/api/shipping-addresses?dealId=${dealId}`);
+    if (res.ok) {
+      const { addresses: list } = await res.json();
+      setAddresses(list ?? []);
+      const primary = list?.find((a: SavedAddress) => a.is_primary) ?? list?.[0] ?? null;
+      onPrimaryChange(primary);
+    }
+    setLoaded(true);
+  }
+
+  // Load on mount
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [dealId]);
+
+  async function setPrimary(id: string) {
+    await fetch(`/api/shipping-addresses/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ is_primary: true }),
+    });
+    load();
+  }
+
+  async function deleteAddr(id: string) {
+    setDeletingId(id);
+    await fetch(`/api/shipping-addresses/${id}`, { method: "DELETE" });
+    setDeletingId(null);
+    setConfirmDeleteId(null);
+    load();
+  }
+
+  async function addAddress(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    await fetch("/api/shipping-addresses", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...newAddr, deal_id: dealId }),
+    });
+    setSaving(false);
+    setShowForm(false);
+    setNewAddr({ label: "Home", recipient_name: "", phone: "", address_line1: "", address_line2: "", city: "", state: "", postal_code: "", country: "Singapore", is_primary: false });
+    load();
+  }
+
+  const addrInput = (label: string, key: keyof typeof newAddr, opts?: { placeholder?: string; required?: boolean; type?: string }) => (
+    <div>
+      <label className="block text-xs font-medium text-im8-burgundy/60 mb-1">{label}{opts?.required ? " *" : ""}</label>
+      <input
+        type={opts?.type ?? "text"}
+        required={opts?.required}
+        placeholder={opts?.placeholder}
+        value={String(newAddr[key])}
+        onChange={e => setNewAddr(a => ({ ...a, [key]: e.target.value }))}
+        className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40"
+      />
+    </div>
+  );
+
+  return (
+    <div className="bg-white rounded-xl border border-im8-stone/30 p-5 space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-im8-burgundy">Shipping addresses</h3>
+        {!showForm && (
+          <button type="button" onClick={() => setShowForm(true)}
+            className="text-xs text-im8-red hover:underline font-medium">
+            + Add address
+          </button>
+        )}
+      </div>
+
+      {loaded && addresses.length === 0 && !showForm && (
+        <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
+          No shipping address saved yet. Add one below or the creator can add theirs via their portal.
+        </div>
+      )}
+
+      {addresses.map(addr => (
+        <div key={addr.id}
+          className={`rounded-xl border px-4 py-3 ${addr.is_primary ? "border-im8-red/25 bg-im8-red/5" : "border-im8-stone/30 bg-im8-sand/20"}`}>
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-0.5">
+                <span className="text-xs font-semibold text-im8-burgundy">{addr.label}</span>
+                {addr.is_primary && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-im8-red text-white font-semibold leading-none">Primary</span>
+                )}
+                {addr.is_legacy && (
+                  <span className="text-[10px] text-im8-burgundy/40">from creator portal</span>
+                )}
+              </div>
+              <div className="text-sm text-im8-burgundy font-medium">{addr.recipient_name}</div>
+              <div className="text-xs text-im8-burgundy/60 mt-0.5">
+                {addr.address_line1}{addr.address_line2 ? `, ${addr.address_line2}` : ""}{", "}
+                {[addr.city, addr.state, addr.postal_code].filter(Boolean).join(", ")}
+                {addr.country ? ` · ${addr.country}` : ""}
+              </div>
+              {addr.phone && <div className="text-xs text-im8-burgundy/40 mt-0.5">{addr.phone}</div>}
+            </div>
+
+            {!addr.is_legacy && (
+              <div className="flex flex-col items-end gap-1.5 shrink-0">
+                {!addr.is_primary && (
+                  <button type="button" onClick={() => setPrimary(addr.id)}
+                    className="text-xs text-im8-burgundy/50 hover:text-im8-red transition-colors">
+                    Set primary
+                  </button>
+                )}
+                {confirmDeleteId === addr.id ? (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-red-500">Delete?</span>
+                    <button type="button" onClick={() => deleteAddr(addr.id)} disabled={deletingId === addr.id}
+                      className="text-[10px] font-semibold text-red-600 hover:text-red-800 disabled:opacity-50">
+                      {deletingId === addr.id ? "…" : "Yes"}
+                    </button>
+                    <button type="button" onClick={() => setConfirmDeleteId(null)}
+                      className="text-[10px] text-im8-burgundy/40 hover:text-im8-burgundy">No</button>
+                  </div>
+                ) : (
+                  <button type="button" onClick={() => setConfirmDeleteId(addr.id)}
+                    className="text-xs text-im8-burgundy/25 hover:text-red-500 transition-colors">
+                    Delete
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      ))}
+
+      {showForm && (
+        <form onSubmit={addAddress} className="border border-im8-stone/30 rounded-xl p-4 space-y-3 bg-im8-sand/10">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <label className="block text-xs font-medium text-im8-burgundy/60 mb-1">Label</label>
+              <select value={newAddr.label} onChange={e => setNewAddr(a => ({ ...a, label: e.target.value }))}
+                className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none">
+                {["Home", "Office", "Other"].map(l => <option key={l}>{l}</option>)}
+              </select>
+            </div>
+            {addrInput("Recipient name", "recipient_name", { required: true })}
+            {addrInput("Phone", "phone", { placeholder: "+65 9123 4567" })}
+            <div className="col-span-2">{addrInput("Address line 1", "address_line1", { required: true, placeholder: "Street / unit" })}</div>
+            <div className="col-span-2">{addrInput("Address line 2", "address_line2", { placeholder: "Floor, building (optional)" })}</div>
+            {addrInput("City", "city", { required: true })}
+            {addrInput("Postal code", "postal_code", { required: true })}
+            <div className="col-span-2">
+              <label className="block text-xs font-medium text-im8-burgundy/60 mb-1">Country *</label>
+              <select required value={newAddr.country} onChange={e => setNewAddr(a => ({ ...a, country: e.target.value }))}
+                className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none">
+                {COUNTRIES.map(c => <option key={c}>{c}</option>)}
+              </select>
+            </div>
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={newAddr.is_primary}
+              onChange={e => setNewAddr(a => ({ ...a, is_primary: e.target.checked }))}
+              className="w-4 h-4 accent-im8-red" />
+            <span className="text-sm text-im8-burgundy">Set as primary (auto-fills gifting requests)</span>
+          </label>
+          <div className="flex items-center justify-between pt-1">
+            <button type="button" onClick={() => setShowForm(false)}
+              className="text-sm text-im8-burgundy/50 hover:text-im8-burgundy">Cancel</button>
+            <button type="submit" disabled={saving}
+              className="px-4 py-2 bg-im8-red text-white text-sm rounded-lg hover:bg-im8-burgundy disabled:opacity-50 transition-colors">
+              {saving ? "Saving…" : "Save address"}
+            </button>
+          </div>
+        </form>
+      )}
     </div>
   );
 }
