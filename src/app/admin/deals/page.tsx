@@ -6,8 +6,11 @@ import DealsFilterBar from "@/components/deals/deals-filter-bar";
 import PartnerGroupList, { type CreatorGroup } from "@/components/deals/partner-group-list";
 import { canViewRates } from "@/lib/permissions";
 
-// Statuses that belong in Partner Tracker (post-approval only)
-const TRACKER_STATUSES = ["approved", "contracted", "live", "completed", "cancelled"] as const;
+// Statuses that belong in Partner Tracker (post-approval only).
+// NOTE: "cancelled" requires the deal_status enum to include it
+// (run: ALTER TYPE deal_status ADD VALUE IF NOT EXISTS 'cancelled').
+// We query for it separately so a missing enum value doesn't crash the whole query.
+const TRACKER_STATUSES_CORE = ["approved", "contracted", "live", "completed"] as const;
 
 // Active deal statuses — these groups start expanded
 const ACTIVE_STATUSES = new Set(["approved", "contracted", "live"]);
@@ -61,7 +64,9 @@ export default async function DealsPage({
 
   const admin = createAdminClient();
 
-  // Determine which DB statuses to include based on the simplified filter value
+  // Determine which DB statuses to include based on the simplified filter value.
+  // We always use only the CORE statuses in the .in() call to avoid crashing if
+  // "cancelled" hasn't been added to the deal_status enum yet.
   let statusFilter: string[];
   const s = params.status ?? "";
   if (s === "pending_contract" || s === "approved") {
@@ -74,7 +79,7 @@ export default async function DealsPage({
     statusFilter = ["cancelled"];
   } else {
     // Default: all tracker statuses (excludes pre-approval pipeline)
-    statusFilter = [...TRACKER_STATUSES];
+    statusFilter = [...TRACKER_STATUSES_CORE];
   }
 
   let query = admin
