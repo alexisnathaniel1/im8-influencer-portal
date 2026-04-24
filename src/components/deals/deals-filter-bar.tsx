@@ -3,7 +3,13 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
-const STATUSES = ["contacted", "negotiating", "agreed", "pending_approval", "approved", "contracted", "live", "completed", "declined", "rejected"];
+// Simplified display statuses for the Partner Tracker (post-approval only)
+const STATUSES: { value: string; label: string }[] = [
+  { value: "pending_contract", label: "Pending Contract" },
+  { value: "active",           label: "Active" },
+  { value: "completed",        label: "Completed" },
+  { value: "cancelled",        label: "Cancelled" },
+];
 const PLATFORMS = ["instagram", "tiktok", "youtube", "facebook", "other"];
 
 export default function DealsFilterBar({ current }: {
@@ -42,7 +48,7 @@ export default function DealsFilterBar({ current }: {
           className="px-3 py-2 rounded-lg border border-im8-stone/40 text-sm text-im8-burgundy focus:outline-none bg-white">
           <option value="">All statuses</option>
           {STATUSES.map(s => (
-            <option key={s} value={s} className="capitalize">{s.replace("_", " ")}</option>
+            <option key={s.value} value={s.value}>{s.label}</option>
           ))}
         </select>
 
