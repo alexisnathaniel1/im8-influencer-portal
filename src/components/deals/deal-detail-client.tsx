@@ -496,20 +496,29 @@ export default function DealDetailClient({
             </div>
           )}
 
-          {/* Per-deliverable brief URLs — Denis pastes a Google Doc link per row */}
-          {deliverables.length > 0 && (
-            <div className="bg-white rounded-xl border border-im8-stone/30 p-5 space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-semibold text-im8-burgundy">Per-deliverable briefs</h3>
-                  <p className="text-xs text-im8-burgundy/50">
-                    Paste a Google Doc link for each individual deliverable. These appear to the creator when they upload content for that row.
-                  </p>
-                </div>
-              </div>
-              <DeliverableBriefList deliverables={deliverables} />
+          {/* Per-deliverable brief URLs — always visible */}
+          <div className="bg-white rounded-xl border border-im8-stone/30 p-5 space-y-3">
+            <div>
+              <h3 className="text-sm font-semibold text-im8-burgundy">Per-deliverable briefs</h3>
+              <p className="text-xs text-im8-burgundy/50">
+                Paste a Google Doc link for each deliverable. The creator sees it when they upload content for that row.
+              </p>
             </div>
-          )}
+            {deliverables.length > 0 ? (
+              <DeliverableBriefList deliverables={deliverables} />
+            ) : (
+              <p className="text-sm text-im8-burgundy/40 py-3 text-center">
+                No deliverables in the tracker yet.{" "}
+                <button
+                  onClick={() => setTab("contract")}
+                  className="text-im8-red hover:underline"
+                >
+                  Set deliverables in the Contract tab
+                </button>
+                {" "}— they&apos;ll appear here automatically once saved.
+              </p>
+            )}
+          </div>
         </div>
       )}
 
