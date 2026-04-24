@@ -406,11 +406,16 @@ export default function DealDetailClient({
                   <div>
                     <div className="font-medium text-im8-burgundy">{b.title as string}</div>
                     <div className="text-xs text-im8-burgundy/50 mt-1 capitalize">
-                      {b.status as string} · {b.platform as string} · Due {b.due_date ? new Date(b.due_date as string).toLocaleDateString() : "TBD"}
+                      {b.status as string}
+                      {b.platform ? ` · ${b.platform as string}` : ""}
+                      {b.due_date ? ` · Due ${new Date(b.due_date as string).toLocaleDateString()}` : ""}
                     </div>
                   </div>
-                  <Link href={`/admin/briefs/${b.id}`}
-                    className="text-sm text-im8-red hover:underline">Edit →</Link>
+                  <div className="flex items-center gap-4">
+                    <Link href={`/admin/briefs/${b.id}`}
+                      className="text-sm text-im8-red hover:underline">Edit →</Link>
+                    <DeleteBriefButton briefId={b.id as string} onDeleted={() => router.refresh()} />
+                  </div>
                 </div>
               ))}
             </div>
@@ -1422,6 +1427,39 @@ function LinkProfileSection({ dealId, currentProfileId, driveFolderId }: {
 
       {msg && <p className={`text-xs ${status === "error" || subFolderStatus === "error" ? "text-red-500" : "text-green-700"}`}>{msg}</p>}
     </div>
+  );
+}
+
+function DeleteBriefButton({ briefId, onDeleted }: { briefId: string; onDeleted: () => void }) {
+  const [confirming, setConfirming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  async function doDelete() {
+    setDeleting(true);
+    const res = await fetch(`/api/briefs/${briefId}`, { method: "DELETE" });
+    if (res.ok) onDeleted();
+    else setDeleting(false);
+  }
+
+  if (confirming) {
+    return (
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-red-500">Delete brief?</span>
+        <button onClick={doDelete} disabled={deleting}
+          className="text-xs font-semibold text-red-600 hover:text-red-800 disabled:opacity-50">
+          {deleting ? "…" : "Yes"}
+        </button>
+        <button onClick={() => setConfirming(false)}
+          className="text-xs text-im8-burgundy/40 hover:text-im8-burgundy">Cancel</button>
+      </div>
+    );
+  }
+
+  return (
+    <button onClick={() => setConfirming(true)}
+      className="text-xs text-im8-burgundy/30 hover:text-red-500 transition-colors">
+      Delete
+    </button>
   );
 }
 

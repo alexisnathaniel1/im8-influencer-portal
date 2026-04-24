@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, use } from "react";
-import { createClient } from "@/lib/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,19 +48,9 @@ export default function BriefEditorPage({ params }: { params: Promise<{ id: stri
   const [urlError, setUrlError] = useState("");
 
   useEffect(() => {
-    const supabase = createClient();
-    supabase
-      .from("briefs")
-      .select(`
-        *,
-        deal:deal_id(
-          influencer_name, platform_primary, contract_sequence,
-          total_months, monthly_rate_cents, is_gifted, deliverables
-        )
-      `)
-      .eq("id", id)
-      .single()
-      .then(({ data }) => {
+    fetch(`/api/briefs/${id}`)
+      .then(r => r.json())
+      .then(({ brief: data }) => {
         if (data) {
           setBrief(data as unknown as Brief);
           setBody(data.body_markdown || "");
