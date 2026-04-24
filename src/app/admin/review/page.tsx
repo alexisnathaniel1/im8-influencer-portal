@@ -5,9 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
-import { RatingCheckpoints, DEFAULT_RATINGS, type SubmissionRatings } from "@/components/rating-checkpoints";
 import { DriveVideo } from "@/components/drive-video";
-import { AIReviewCard, AIReviewBadge } from "@/components/ai-review-card";
 import Link from "next/link";
 
 function extractDriveFileId(url: string): string | null {
@@ -35,19 +33,9 @@ export default function AdminReviewPage() {
   const [sortBy, setSortBy] = useState<"newest" | "influencer">("newest");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [ratingsMap, setRatingsMap] = useState<Record<string, SubmissionRatings>>({});
-  const [aiReviewMap, setAiReviewMap] = useState<Record<string, { status: string; recommendation: string | null }>>({});
+  const [feedback, setFeedback] = useState<Record<string, string>>({});
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [bulkLoading, setBulkLoading] = useState(false);
-  const [savingRating, setSavingRating] = useState<string | null>(null);
-
-  function getRatings(subId: string): SubmissionRatings {
-    return ratingsMap[subId] ?? { ...DEFAULT_RATINGS };
-  }
-
-  function setRatingsForSub(subId: string, r: SubmissionRatings) {
-    setRatingsMap((prev) => ({ ...prev, [subId]: r }));
-  }
 
   async function fetchPending() {
     const supabase = createClient();
@@ -65,8 +53,6 @@ export default function AdminReviewPage() {
     if (error) { setLoading(false); return; }
 
     const rows: PendingSubmission[] = [];
-    const ids: string[] = [];
-
     for (const s of data || []) {
       const inf = s.influencer as unknown as { full_name: string } | null;
       const deal = s.deal as unknown as { influencer_name: string } | null;
@@ -84,39 +70,10 @@ export default function AdminReviewPage() {
         deal_id: (s as Record<string, unknown>).deal_id as string,
         brief_title: brief?.title ?? null,
       });
-      ids.push(s.id);
     }
 
     setSubmissions(rows);
     setLoading(false);
-
-    if (ids.length > 0) {
-      const { data: aiData } = await supabase
-        .from("ai_reviews")
-        .select("submission_id, status, recommendation, framework_score, authenticity_score, algorithm_score, framework_feedback, authenticity_feedback, algorithm_feedback, general_notes")
-        .in("submission_id", ids);
-
-      if (aiData) {
-        const aiMap: Record<string, { status: string; recommendation: string | null }> = {};
-        const autoRatings: Record<string, SubmissionRatings> = {};
-        for (const r of aiData) {
-          aiMap[r.submission_id] = { status: r.status, recommendation: r.recommendation };
-          if (r.status === "completed" && r.framework_score) {
-            autoRatings[r.submission_id] = {
-              framework_score: r.framework_score,
-              authenticity_score: r.authenticity_score ?? 3,
-              algorithm_score: r.algorithm_score ?? 3,
-              framework_feedback: r.framework_feedback || "",
-              authenticity_feedback: r.authenticity_feedback || "",
-              algorithm_feedback: r.algorithm_feedback || "",
-              general_notes: r.general_notes || "",
-            };
-          }
-        }
-        setAiReviewMap(aiMap);
-        setRatingsMap((prev) => ({ ...autoRatings, ...prev }));
-      }
-    }
   }
 
   useEffect(() => { fetchPending(); }, []);
@@ -139,28 +96,15 @@ export default function AdminReviewPage() {
     }).catch(console.error);
   }
 
-  async function saveRating(submissionId: string) {
-    setSavingRating(submissionId);
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      await supabase.from("submission_ratings").upsert({
-        submission_id: submissionId,
-        ...getRatings(submissionId),
-        rated_by: user.id,
-      }, { onConflict: "submission_id" });
-    }
-    setSavingRating(null);
-  }
-
   async function handleApprove(submissionId: string) {
     setActionLoading(submissionId);
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
-    await supabase.from("submissions").update({ status: "approved", reviewed_by: user?.id ?? null, reviewed_at: new Date().toISOString() }).eq("id", submissionId);
-    if (user) {
-      await supabase.from("submission_ratings").upsert({ submission_id: submissionId, ...getRatings(submissionId), rated_by: user.id }, { onConflict: "submission_id" });
-    }
+    await supabase.from("submissions").update({
+      status: "approved",
+      reviewed_by: user?.id ?? null,
+      reviewed_at: new Date().toISOString(),
+    }).eq("id", submissionId);
     setSubmissions((prev) => prev.filter((s) => s.id !== submissionId));
     setSelectedIds((prev) => { const next = new Set(prev); next.delete(submissionId); return next; });
     if (expandedId === submissionId) setExpandedId(null);
@@ -170,18 +114,14 @@ export default function AdminReviewPage() {
 
   async function handleReject(submissionId: string) {
     setActionLoading(submissionId);
-    const r = getRatings(submissionId);
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     await supabase.from("submissions").update({
       status: "rejected",
-      feedback: r.general_notes,
+      feedback: feedback[submissionId] || null,
       reviewed_by: user?.id ?? null,
       reviewed_at: new Date().toISOString(),
     }).eq("id", submissionId);
-    if (user) {
-      await supabase.from("submission_ratings").upsert({ submission_id: submissionId, ...r, rated_by: user.id }, { onConflict: "submission_id" });
-    }
     setSubmissions((prev) => prev.filter((s) => s.id !== submissionId));
     setSelectedIds((prev) => { const next = new Set(prev); next.delete(submissionId); return next; });
     if (expandedId === submissionId) setExpandedId(null);
@@ -190,12 +130,11 @@ export default function AdminReviewPage() {
 
   async function handleRevisionRequest(submissionId: string) {
     setActionLoading(submissionId);
-    const r = getRatings(submissionId);
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     await supabase.from("submissions").update({
       status: "revision_requested",
-      feedback: r.general_notes,
+      feedback: feedback[submissionId] || null,
       reviewed_by: user?.id ?? null,
       reviewed_at: new Date().toISOString(),
     }).eq("id", submissionId);
@@ -211,7 +150,11 @@ export default function AdminReviewPage() {
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     const ids = Array.from(selectedIds);
-    await supabase.from("submissions").update({ status: "approved", reviewed_by: user?.id ?? null, reviewed_at: new Date().toISOString() }).in("id", ids);
+    await supabase.from("submissions").update({
+      status: "approved",
+      reviewed_by: user?.id ?? null,
+      reviewed_at: new Date().toISOString(),
+    }).in("id", ids);
     setSubmissions((prev) => prev.filter((s) => !selectedIds.has(s.id)));
     setSelectedIds(new Set());
     setBulkLoading(false);
@@ -257,7 +200,6 @@ export default function AdminReviewPage() {
         <div className="space-y-3">
           {sorted.map((sub) => {
             const isExpanded = expandedId === sub.id;
-            const r = getRatings(sub.id);
             const fileId = sub.drive_file_id || (sub.drive_url ? extractDriveFileId(sub.drive_url) : null);
             return (
               <Card key={sub.id} padding="sm">
@@ -278,9 +220,6 @@ export default function AdminReviewPage() {
                       <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${sub.content_type === "final" ? "bg-im8-flamingo/20 text-im8-red" : "bg-im8-sand text-im8-burgundy"}`}>
                         {sub.content_type}
                       </span>
-                      {aiReviewMap[sub.id] && (
-                        <AIReviewBadge status={aiReviewMap[sub.id].status} recommendation={aiReviewMap[sub.id].recommendation} />
-                      )}
                       {sub.platform && <span className="text-xs text-im8-burgundy/50 capitalize">{sub.platform}</span>}
                     </div>
                     <div className="flex items-center gap-4 mt-1">
@@ -302,7 +241,7 @@ export default function AdminReviewPage() {
                 </div>
 
                 {isExpanded && (
-                  <div className="mt-4 pt-4 border-t border-im8-sand">
+                  <div className="mt-4 pt-4 border-t border-im8-sand space-y-4">
                     {fileId && (
                       <DriveVideo
                         fileId={fileId}
@@ -311,32 +250,22 @@ export default function AdminReviewPage() {
                         width="100%"
                         style={{ maxHeight: 360 }}
                         className="block"
-                        containerClassName="mb-4 rounded-lg overflow-hidden bg-black"
+                        containerClassName="rounded-lg overflow-hidden bg-black"
                         containerStyle={{ maxWidth: 640, minHeight: 80 }}
                       />
                     )}
-                    <AIReviewCard
-                      submissionId={sub.id}
-                      onReviewLoaded={(aiData) => {
-                        if (!ratingsMap[sub.id] && aiData.status === "completed" && aiData.framework_score) {
-                          setRatingsForSub(sub.id, {
-                            framework_score: aiData.framework_score,
-                            authenticity_score: aiData.authenticity_score ?? 3,
-                            algorithm_score: aiData.algorithm_score ?? 3,
-                            framework_feedback: aiData.framework_feedback || "",
-                            authenticity_feedback: aiData.authenticity_feedback || "",
-                            algorithm_feedback: aiData.algorithm_feedback || "",
-                            general_notes: aiData.general_notes || "",
-                          });
-                        }
-                        setAiReviewMap((prev) => ({ ...prev, [sub.id]: { status: aiData.status, recommendation: aiData.recommendation } }));
-                      }}
-                    />
-                    <div className="flex items-center justify-between mb-3">
-                      <p className="text-sm font-semibold text-im8-burgundy">Quality Rating</p>
-                      <Button size="sm" variant="outline" onClick={() => saveRating(sub.id)} loading={savingRating === sub.id}>Save Rating</Button>
+                    <div>
+                      <label className="block text-sm font-medium text-im8-burgundy mb-1">
+                        Feedback <span className="text-im8-burgundy/40 font-normal">(optional — shown to creator on reject or revision)</span>
+                      </label>
+                      <textarea
+                        value={feedback[sub.id] ?? ""}
+                        onChange={(e) => setFeedback(prev => ({ ...prev, [sub.id]: e.target.value }))}
+                        rows={3}
+                        placeholder="Add feedback notes here…"
+                        className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/30 resize-none"
+                      />
                     </div>
-                    <RatingCheckpoints ratings={r} onChange={(updated) => setRatingsForSub(sub.id, updated)} />
                   </div>
                 )}
               </Card>

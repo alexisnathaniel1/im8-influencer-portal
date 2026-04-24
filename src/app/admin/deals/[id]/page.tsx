@@ -28,7 +28,7 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
     admin.from("briefs").select("*").eq("deal_id", id).order("created_at"),
     admin
       .from("submissions")
-      .select("*, ai_reviews(status, recommendation, framework_score, authenticity_score, algorithm_score)")
+      .select("*")
       .eq("deal_id", id)
       .order("submitted_at", { ascending: false }),
     admin

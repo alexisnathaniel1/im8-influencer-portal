@@ -70,6 +70,7 @@ export default function DealDetailClient({
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [creatingBrief, setCreatingBrief] = useState(false);
+  const [briefCreateError, setBriefCreateError] = useState("");
   const [form, setForm] = useState({
     influencerName: (deal.influencer_name as string) ?? "",
     influencerEmail: (deal.influencer_email as string) ?? "",
@@ -398,25 +399,40 @@ export default function DealDetailClient({
       {/* Briefs tab */}
       {tab === "briefs" && (
         <div className="space-y-4">
-          <div className="flex justify-end">
+          <div className="flex items-center justify-between gap-4">
+            {briefCreateError && (
+              <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 flex-1">{briefCreateError}</p>
+            )}
             <button
               disabled={creatingBrief}
               onClick={async () => {
                 setCreatingBrief(true);
-                const res = await fetch("/api/briefs", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ dealId: deal.id }),
-                });
-                if (!res.ok) { setCreatingBrief(false); return; }
-                const { brief } = await res.json();
-                if (brief?.id) {
-                  router.push(`/admin/briefs/${brief.id}`);
-                } else {
+                setBriefCreateError("");
+                try {
+                  const res = await fetch("/api/briefs", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ dealId: deal.id }),
+                  });
+                  if (!res.ok) {
+                    const data = await res.json().catch(() => ({}));
+                    setBriefCreateError(data.error || `Error ${res.status} — could not create brief`);
+                    setCreatingBrief(false);
+                    return;
+                  }
+                  const { brief } = await res.json();
+                  if (brief?.id) {
+                    router.push(`/admin/briefs/${brief.id}`);
+                  } else {
+                    setBriefCreateError("Brief created but no ID returned — please refresh");
+                    setCreatingBrief(false);
+                  }
+                } catch (err) {
+                  setBriefCreateError(err instanceof Error ? err.message : "Network error — please try again");
                   setCreatingBrief(false);
                 }
               }}
-              className="px-4 py-2 bg-im8-red text-white text-sm rounded-lg hover:bg-im8-burgundy disabled:opacity-60 transition-colors">
+              className="ml-auto px-4 py-2 bg-im8-red text-white text-sm rounded-lg hover:bg-im8-burgundy disabled:opacity-60 transition-colors">
               {creatingBrief ? "Creating…" : "+ Create brief"}
             </button>
           </div>
@@ -474,22 +490,21 @@ export default function DealDetailClient({
               No submissions yet.
             </div>
           ) : (
-            submissions.map(s => {
-              const ai = (s.ai_reviews as Record<string, unknown>[] | null)?.[0];
-              return (
-                <div key={s.id as string} className="bg-white rounded-xl border border-im8-stone/30 p-5 flex items-center justify-between">
-                  <div>
-                    <div className="font-medium text-im8-burgundy text-sm">{s.file_name as string}</div>
-                    <div className="text-xs text-im8-burgundy/50 mt-1 capitalize">
-                      {s.status as string} · {s.content_type as string}
-                      {ai && ` · AI: ${ai.recommendation as string}`}
-                    </div>
+            submissions.map(s => (
+              <div key={s.id as string} className="bg-white rounded-xl border border-im8-stone/30 p-5 flex items-center justify-between">
+                <div>
+                  <div className="font-medium text-im8-burgundy text-sm">{s.file_name as string}</div>
+                  <div className="text-xs text-im8-burgundy/50 mt-1 capitalize">
+                    {s.status as string} · {s.content_type as string}
                   </div>
-                  <Link href={`/admin/review/${s.id}`}
-                    className="text-sm text-im8-red hover:underline">Review →</Link>
+                  {Boolean(s.feedback) && (
+                    <div className="mt-1 text-xs text-amber-700 bg-amber-50 px-2 py-1 rounded">{s.feedback as string}</div>
+                  )}
                 </div>
-              );
-            })
+                <Link href={`/admin/review`}
+                  className="text-sm text-im8-red hover:underline">Review queue →</Link>
+              </div>
+            ))
           )}
         </div>
       )}

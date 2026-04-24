@@ -48,15 +48,40 @@ export default async function PartnerBriefPage({ params }: { params: Promise<{ i
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-im8-stone/20 p-6 mb-6">
+        <div className="bg-white rounded-xl border border-im8-stone/20 p-6 mb-6 space-y-4">
           {brief.due_date && (
-            <p className="text-sm text-im8-burgundy/60 mb-4">
+            <p className="text-sm text-im8-burgundy/60">
               Due: <span className="font-medium text-im8-burgundy">{new Date(brief.due_date).toLocaleDateString()}</span>
             </p>
           )}
-          <div className="prose prose-sm max-w-none text-im8-burgundy whitespace-pre-wrap">
-            {brief.body_markdown || <span className="text-im8-burgundy/40 italic">No brief content yet.</span>}
-          </div>
+          {/* Google Doc link — primary content source */}
+          {(brief as Record<string, unknown>).google_doc_url ? (
+            <div className="flex items-center gap-3 p-4 bg-im8-sand/40 rounded-xl border border-im8-stone/20">
+              <svg className="w-6 h-6 text-im8-burgundy/60 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-im8-burgundy">Content brief (Google Docs)</p>
+                <p className="text-xs text-im8-burgundy/50 truncate">{(brief as Record<string, unknown>).google_doc_url as string}</p>
+              </div>
+              <a
+                href={(brief as Record<string, unknown>).google_doc_url as string}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="shrink-0 px-4 py-2 bg-im8-red text-white text-sm font-medium rounded-lg hover:bg-im8-burgundy transition-colors"
+              >
+                Open brief →
+              </a>
+            </div>
+          ) : (
+            <p className="text-im8-burgundy/40 italic text-sm">Brief document not yet attached. Check back soon.</p>
+          )}
+          {/* Inline notes (optional fallback) */}
+          {brief.body_markdown && (
+            <div className="prose prose-sm max-w-none text-im8-burgundy whitespace-pre-wrap border-t border-im8-stone/10 pt-4">
+              {brief.body_markdown}
+            </div>
+          )}
         </div>
 
         {submissions && submissions.length > 0 && (

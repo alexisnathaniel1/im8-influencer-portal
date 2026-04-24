@@ -24,7 +24,7 @@ export default async function PartnerBriefsPage() {
   const { data: briefs } = dealIds.length > 0
     ? await supabase
         .from("briefs")
-        .select("id, title, platform, deliverable_type, due_date, status, created_at, deal:deal_id(influencer_name)")
+        .select("id, title, platform, deliverable_type, due_date, status, google_doc_url, created_at, deal:deal_id(influencer_name)")
         .in("deal_id", dealIds)
         .neq("status", "draft")
         .order("created_at", { ascending: false })
@@ -45,12 +45,9 @@ export default async function PartnerBriefsPage() {
         <div className="space-y-3">
           {briefs.map((brief) => {
             const deal = brief.deal as unknown as { influencer_name: string } | null;
+            const googleDocUrl = (brief as Record<string, unknown>).google_doc_url as string | null;
             return (
-              <Link
-                key={brief.id}
-                href={`/partner/briefs/${brief.id}`}
-                className="block bg-white rounded-xl border border-im8-stone/30 p-5 hover:border-im8-red/30 transition-colors"
-              >
+              <div key={brief.id} className="bg-white rounded-xl border border-im8-stone/30 p-5 space-y-3">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="font-semibold text-im8-burgundy">{brief.title}</p>
@@ -67,7 +64,24 @@ export default async function PartnerBriefsPage() {
                     {brief.status}
                   </span>
                 </div>
-              </Link>
+                <div className="flex items-center gap-3">
+                  {googleDocUrl ? (
+                    <a
+                      href={googleDocUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-im8-red text-white text-sm font-medium rounded-lg hover:bg-im8-burgundy transition-colors"
+                    >
+                      Open brief →
+                    </a>
+                  ) : (
+                    <span className="text-xs text-im8-burgundy/40 italic">Brief document coming soon</span>
+                  )}
+                  <Link href={`/partner/briefs/${brief.id}`} className="text-sm text-im8-burgundy/50 hover:text-im8-red">
+                    Details & submissions
+                  </Link>
+                </div>
+              </div>
             );
           })}
         </div>
