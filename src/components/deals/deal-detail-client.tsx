@@ -221,7 +221,11 @@ export default function DealDetailClient({
               <Field label="Email" value={form.influencerEmail}
                 onChange={v => setForm(f => ({ ...f, influencerEmail: v }))} type="email" />
               {form.influencerEmail && (
-                <InviteButton email={form.influencerEmail} dealId={deal.id as string} />
+                <InviteButton
+                  email={form.influencerEmail}
+                  dealId={deal.id as string}
+                  alreadyLinked={Boolean(deal.influencer_profile_id)}
+                />
               )}
             </div>
             <Field label="Agency" value={form.agencyName}
@@ -1436,7 +1440,7 @@ function StageButton({ status, dealId, onRefresh, onMarkAgreed, needsApproval }:
   return null;
 }
 
-function InviteButton({ email, dealId }: { email: string; dealId: string }) {
+function InviteButton({ email, dealId, alreadyLinked }: { email: string; dealId: string; alreadyLinked?: boolean }) {
   const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState("");
 
@@ -1455,17 +1459,33 @@ function InviteButton({ email, dealId }: { email: string; dealId: string }) {
     }
   }
 
+  // Already linked — show a muted "Portal linked" indicator but keep a
+  // "Resend invite" affordance in case the creator lost the link.
+  if (alreadyLinked) {
+    return (
+      <div className="mt-1.5 flex items-center gap-2">
+        <span className="text-xs px-2 py-1 rounded-lg bg-green-50 border border-green-200 text-green-700 font-medium">
+          ✓ Portal linked
+        </span>
+        <button type="button" onClick={sendInvite} disabled={status === "sending" || status === "sent"}
+          className="text-xs text-im8-burgundy/50 hover:text-im8-red hover:underline">
+          {status === "sending" ? "Sending…" : status === "sent" ? "Resent ✓" : "Resend invite"}
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="mt-1.5">
       <button type="button" onClick={sendInvite} disabled={status === "sending" || status === "sent"}
-        className={`text-xs px-2.5 py-1 rounded-lg border transition-colors disabled:opacity-60 ${
+        className={`text-sm px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-60 inline-flex items-center gap-1.5 ${
           status === "sent"
-            ? "border-green-300 bg-green-50 text-green-700"
+            ? "bg-green-600 text-white"
             : status === "error"
-            ? "border-red-300 bg-red-50 text-red-600"
-            : "border-im8-stone/40 text-im8-burgundy/60 hover:text-im8-burgundy hover:border-im8-stone/70"
+            ? "bg-red-50 text-red-700 border border-red-300"
+            : "bg-im8-red text-white hover:bg-im8-burgundy"
         }`}>
-        {status === "sending" ? "Sending..." : status === "sent" ? `Invite sent to ${email} ✓` : status === "error" ? "Failed — retry" : "Send portal invite"}
+        {status === "sending" ? "Sending…" : status === "sent" ? `✓ Invite sent to ${email}` : status === "error" ? "Failed — retry" : "✉ Send portal invite"}
       </button>
       {status === "error" && errorMsg && (
         <p className="text-xs text-red-500 mt-1">{errorMsg}</p>

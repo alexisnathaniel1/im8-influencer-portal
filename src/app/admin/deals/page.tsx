@@ -33,13 +33,35 @@ type DealRow = {
   is_gifted: boolean | null;
   campaign_start: string | null;
   updated_at: string;
+  instagram_handle: string | null;
+  tiktok_handle: string | null;
+  youtube_handle: string | null;
   assigned_to: { full_name: string } | null;
 };
+
+// Build a social profile URL from the first available handle.
+function primarySocialUrl(d: DealRow): { url: string; label: string } | null {
+  const platform = d.platform_primary;
+  if (platform === "instagram" && d.instagram_handle) {
+    return { url: `https://instagram.com/${d.instagram_handle.replace(/^@/, "")}`, label: "Instagram" };
+  }
+  if (platform === "tiktok" && d.tiktok_handle) {
+    return { url: `https://tiktok.com/@${d.tiktok_handle.replace(/^@/, "")}`, label: "TikTok" };
+  }
+  if (platform === "youtube" && d.youtube_handle) {
+    return { url: `https://youtube.com/@${d.youtube_handle.replace(/^@/, "")}`, label: "YouTube" };
+  }
+  // Fall back to any handle
+  if (d.instagram_handle) return { url: `https://instagram.com/${d.instagram_handle.replace(/^@/, "")}`, label: "Instagram" };
+  if (d.tiktok_handle) return { url: `https://tiktok.com/@${d.tiktok_handle.replace(/^@/, "")}`, label: "TikTok" };
+  if (d.youtube_handle) return { url: `https://youtube.com/@${d.youtube_handle.replace(/^@/, "")}`, label: "YouTube" };
+  return null;
+}
 
 export default async function DealsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; q?: string; platform?: string; type?: string; contractFrom?: string; contractTo?: string; openAgency?: string }>;
+  searchParams: Promise<{ status?: string; q?: string; platform?: string; type?: string; contractFrom?: string; contractTo?: string }>;
 }) {
   const params = await searchParams;
 
@@ -95,41 +117,6 @@ export default async function DealsPage({
     return bLatest - aLatest;
   });
 
-  // Outer grouping by agency. Deals with no agency go into a synthetic
-  // "__individual__" bucket rendered last.
-  const INDIVIDUAL_KEY = "__individual__";
-  type AgencyGroup = {
-    key: string;            // normalized agency name or INDIVIDUAL_KEY
-    label: string;          // display name
-    creators: typeof creatorGroups;
-    contractCount: number;
-    latestUpdate: number;
-    hasActive: boolean;
-  };
-  const agencyMap = new Map<string, AgencyGroup>();
-  for (const cg of creatorGroups) {
-    const raw = (cg.agency ?? "").trim();
-    const key = raw ? raw.toLowerCase() : INDIVIDUAL_KEY;
-    const label = raw || "Individual creators";
-    if (!agencyMap.has(key)) {
-      agencyMap.set(key, { key, label, creators: [], contractCount: 0, latestUpdate: 0, hasActive: false });
-    }
-    const ag = agencyMap.get(key)!;
-    ag.creators.push(cg);
-    ag.contractCount += cg.deals.length;
-    const latestForCreator = Math.max(...cg.deals.map(d => new Date(d.updated_at).getTime()));
-    if (latestForCreator > ag.latestUpdate) ag.latestUpdate = latestForCreator;
-    if (cg.deals.some(d => ["live", "contracted", "approved"].includes(d.status))) ag.hasActive = true;
-  }
-
-  // Sort agencies: real agencies by latest activity (desc), individuals last.
-  const agencyList = Array.from(agencyMap.values()).sort((a, b) => {
-    if (a.key === INDIVIDUAL_KEY && b.key !== INDIVIDUAL_KEY) return 1;
-    if (b.key === INDIVIDUAL_KEY && a.key !== INDIVIDUAL_KEY) return -1;
-    return b.latestUpdate - a.latestUpdate;
-  });
-
-  const openAgency = params.openAgency ?? null;
   const totalPartners = creatorGroups.length;
   const totalContracts = deals.length;
 
@@ -150,138 +137,120 @@ export default async function DealsPage({
 
       <DealsFilterBar current={params} />
 
-      {agencyList.length === 0 ? (
+      {creatorGroups.length === 0 ? (
         <div className="bg-white rounded-xl border border-im8-stone/30 p-12 text-center text-im8-burgundy/40">
           No partnerships match these filters.
         </div>
       ) : (
-        <div className="space-y-4">
-          {agencyList.map((ag, agIdx) => {
-            const isIndividual = ag.key === INDIVIDUAL_KEY;
-            // First real agency is open by default; explicit ?openAgency= overrides.
-            const shouldOpen = openAgency
-              ? openAgency === ag.key
-              : !isIndividual && agIdx === 0;
-            const creatorCount = ag.creators.length;
+        <div className="space-y-3">
+          {creatorGroups.map(g => {
+            const mostRecentDeal = g.deals[g.deals.length - 1];
+            const isActivePartner = g.deals.some(d => ["live", "contracted", "approved"].includes(d.status));
+            const social = primarySocialUrl(mostRecentDeal);
             return (
-              <details
-                key={ag.key}
-                open={shouldOpen}
-                className="group bg-white rounded-xl border border-im8-stone/30 overflow-hidden"
-              >
-                <summary className="cursor-pointer list-none flex items-center justify-between gap-4 px-5 py-4 bg-im8-burgundy/5 hover:bg-im8-burgundy/10 transition-colors border-b border-im8-stone/30">
-                  <div className="min-w-0 flex items-center gap-3">
-                    <span className="text-im8-burgundy/50 text-xs transition-transform group-open:rotate-90">▶</span>
-                    <div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h2 className="text-lg font-bold text-im8-burgundy truncate">{ag.label}</h2>
-                        {ag.hasActive && (
-                          <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">
-                            Active
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-xs text-im8-burgundy/60 mt-0.5">
-                        {creatorCount} {isIndividual ? "partner" : "creator"}{creatorCount === 1 ? "" : "s"} · {ag.contractCount} contract{ag.contractCount === 1 ? "" : "s"}
-                      </div>
+              <div key={g.key} className="bg-white rounded-xl border border-im8-stone/30 overflow-hidden">
+                {/* Creator header — flat, one per creator */}
+                <div className="flex items-center justify-between gap-4 px-5 py-3 bg-im8-sand/40 border-b border-im8-stone/20">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {/* Creator name: links to social profile if we have a handle, else to deal detail */}
+                      {social ? (
+                        <a
+                          href={social.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-base font-bold text-im8-burgundy hover:text-im8-red hover:underline truncate"
+                          title={`Open ${social.label} profile ↗`}
+                        >
+                          {g.label}
+                        </a>
+                      ) : (
+                        <h3 className="text-base font-bold text-im8-burgundy truncate">{g.label}</h3>
+                      )}
+                      {g.agency && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-im8-stone/20 text-im8-burgundy/70 font-medium">
+                          {g.agency}
+                        </span>
+                      )}
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-im8-burgundy/10 text-im8-burgundy font-medium">
+                        {g.deals.length} contract{g.deals.length === 1 ? "" : "s"}
+                      </span>
+                      {isActivePartner && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">
+                          Active
+                        </span>
+                      )}
                     </div>
                   </div>
-                </summary>
-
-                <div className="divide-y divide-im8-stone/20">
-                  {ag.creators.map(g => {
-                    const mostRecentDeal = g.deals[g.deals.length - 1];
-                    const isActivePartner = g.deals.some(d => ["live", "contracted", "approved"].includes(d.status));
-                    return (
-                      <div key={g.key} className="bg-white">
-                        {/* Creator header */}
-                        <div className="flex items-center justify-between gap-4 px-5 py-3 bg-im8-sand/40 border-b border-im8-stone/20">
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <h3 className="text-base font-bold text-im8-burgundy truncate">{g.label}</h3>
-                              <span className="text-xs px-2 py-0.5 rounded-full bg-im8-burgundy/10 text-im8-burgundy font-medium">
-                                {g.deals.length} contract{g.deals.length === 1 ? "" : "s"}
-                              </span>
-                              {isActivePartner && (
-                                <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">
-                                  Active
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                          <Link
-                            href={`/admin/deals/new-contract?from=${mostRecentDeal.id}`}
-                            className="shrink-0 text-xs px-3 py-1.5 bg-im8-burgundy text-white rounded-lg hover:bg-im8-red transition-colors font-medium"
-                          >
-                            + New contract
-                          </Link>
-                        </div>
-
-                        {/* Contracts table */}
-                        <table className="w-full text-sm">
-                          <thead className="bg-white border-b border-im8-stone/20">
-                            <tr>
-                              {["Contract", "Platform", "Status", "Type", ...(showRates ? ["Rate/mo"] : []), "Duration", "Start", "Owner", "Updated", ""].map(h => (
-                                <th key={h} className="text-left px-4 py-2 text-[10px] font-semibold text-im8-burgundy/50 uppercase tracking-wide">{h}</th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-im8-stone/20">
-                            {g.deals.map(d => (
-                              <tr key={d.id} className="hover:bg-im8-sand/20 transition-colors">
-                                <td className="px-4 py-3">
-                                  <Link href={`/admin/deals/${d.id}`} className="inline-flex items-center gap-2 group">
-                                    <span className="text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 font-semibold">
-                                      Contract {d.contract_sequence ?? 1}
-                                    </span>
-                                    <span className="text-xs text-im8-burgundy/40 group-hover:text-im8-red group-hover:underline">
-                                      View →
-                                    </span>
-                                  </Link>
-                                </td>
-                                <td className="px-4 py-3 text-im8-burgundy/60 capitalize text-xs">{d.platform_primary}</td>
-                                <td className="px-4 py-3">
-                                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${STATUS_COLORS[d.status] ?? ""}`}>
-                                    {d.status.replace("_", " ")}
-                                  </span>
-                                </td>
-                                <td className="px-4 py-3">
-                                  {d.is_gifted
-                                    ? <span className="text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 font-medium">Gifted</span>
-                                    : <span className="text-xs text-im8-burgundy/40">Paid</span>}
-                                </td>
-                                {showRates && (
-                                  <td className="px-4 py-3 text-im8-burgundy text-xs">
-                                    {d.is_gifted ? "—" : d.monthly_rate_cents ? `$${(d.monthly_rate_cents / 100).toLocaleString()}` : "—"}
-                                  </td>
-                                )}
-                                <td className="px-4 py-3 text-im8-burgundy/70 text-xs">
-                                  {d.total_months ? `${d.total_months}mo` : "—"}
-                                </td>
-                                <td className="px-4 py-3 text-im8-burgundy/60 text-xs">
-                                  {d.campaign_start ? new Date(d.campaign_start).toLocaleDateString() : "—"}
-                                </td>
-                                <td className="px-4 py-3 text-im8-burgundy/60 text-xs">
-                                  {d.assigned_to?.full_name ?? "—"}
-                                </td>
-                                <td className="px-4 py-3 text-im8-burgundy/40 text-xs">
-                                  {new Date(d.updated_at).toLocaleDateString()}
-                                </td>
-                                <td className="px-4 py-3 text-right">
-                                  <DealDeleteButton
-                                    dealId={d.id}
-                                    contractLabel={`Contract ${d.contract_sequence ?? 1} (${g.label})`}
-                                  />
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    );
-                  })}
+                  <Link
+                    href={`/admin/deals/new-contract?from=${mostRecentDeal.id}`}
+                    className="shrink-0 text-xs px-3 py-1.5 bg-im8-burgundy text-white rounded-lg hover:bg-im8-red transition-colors font-medium"
+                  >
+                    + New contract
+                  </Link>
                 </div>
-              </details>
+
+                {/* Contracts table */}
+                <table className="w-full text-sm">
+                  <thead className="bg-white border-b border-im8-stone/20">
+                    <tr>
+                      {["Contract", "Platform", "Status", "Type", ...(showRates ? ["Rate/mo"] : []), "Duration", "Start", "Owner", "Updated", ""].map(h => (
+                        <th key={h} className="text-left px-4 py-2 text-[10px] font-semibold text-im8-burgundy/50 uppercase tracking-wide">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-im8-stone/20">
+                    {g.deals.map(d => (
+                      <tr key={d.id} className="hover:bg-im8-sand/20 transition-colors">
+                        <td className="px-4 py-3">
+                          <Link href={`/admin/deals/${d.id}`} className="inline-flex items-center gap-2 group">
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 font-semibold">
+                              Contract {d.contract_sequence ?? 1}
+                            </span>
+                            <span className="text-xs text-im8-burgundy/40 group-hover:text-im8-red group-hover:underline">
+                              View →
+                            </span>
+                          </Link>
+                        </td>
+                        <td className="px-4 py-3 text-im8-burgundy/60 capitalize text-xs">{d.platform_primary}</td>
+                        <td className="px-4 py-3">
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${STATUS_COLORS[d.status] ?? ""}`}>
+                            {d.status.replace("_", " ")}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          {d.is_gifted
+                            ? <span className="text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 font-medium">Gifted</span>
+                            : <span className="text-xs text-im8-burgundy/40">Paid</span>}
+                        </td>
+                        {showRates && (
+                          <td className="px-4 py-3 text-im8-burgundy text-xs">
+                            {d.is_gifted ? "—" : d.monthly_rate_cents ? `$${(d.monthly_rate_cents / 100).toLocaleString()}` : "—"}
+                          </td>
+                        )}
+                        <td className="px-4 py-3 text-im8-burgundy/70 text-xs">
+                          {d.total_months ? `${d.total_months}mo` : "—"}
+                        </td>
+                        <td className="px-4 py-3 text-im8-burgundy/60 text-xs">
+                          {d.campaign_start ? new Date(d.campaign_start).toLocaleDateString() : "—"}
+                        </td>
+                        <td className="px-4 py-3 text-im8-burgundy/60 text-xs">
+                          {d.assigned_to?.full_name ?? "—"}
+                        </td>
+                        <td className="px-4 py-3 text-im8-burgundy/40 text-xs">
+                          {new Date(d.updated_at).toLocaleDateString()}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <DealDeleteButton
+                            dealId={d.id}
+                            contractLabel={`Contract ${d.contract_sequence ?? 1} (${g.label})`}
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             );
           })}
         </div>
