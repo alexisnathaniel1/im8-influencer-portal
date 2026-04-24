@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import NicheMultiSelect from "@/components/shared/niche-multi-select";
+import { CURRENCIES, currencySymbol } from "@/lib/currencies";
 
 const DEAL_STATUSES = [
   { value: "live",       label: "Live — partnership is active now" },
@@ -30,6 +31,7 @@ function NewPartnershipForm() {
     monthlyRateUsd: "",
     totalMonths: "3",
     followerCount: "",
+    currencyCode: "USD",
   });
   const [nicheTags, setNicheTags] = useState<string[]>([]);
   const [deliverableCounts, setDeliverableCounts] = useState<Record<string, number>>({});
@@ -118,6 +120,7 @@ function NewPartnershipForm() {
         status: form.status,
         monthlyRateCents,
         totalMonths,
+        currencyCode: form.currencyCode,
         followerCount,
         nicheTags,
         deliverables,
@@ -222,15 +225,25 @@ function NewPartnershipForm() {
                 ))}
               </select>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-[auto_1fr_1fr] gap-3">
               <div>
-                <label className="block text-sm font-medium text-im8-burgundy mb-1">Monthly rate (USD)</label>
+                <label className="block text-sm font-medium text-im8-burgundy mb-1">Currency</label>
+                <select value={form.currencyCode}
+                  onChange={e => setForm(f => ({ ...f, currencyCode: e.target.value }))}
+                  className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none bg-white">
+                  {CURRENCIES.map(c => (
+                    <option key={c.code} value={c.code}>{c.code}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-im8-burgundy mb-1">Monthly rate</label>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-im8-burgundy/50">$</span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-im8-burgundy/50">{currencySymbol(form.currencyCode)}</span>
                   <input type="number" min="0" value={form.monthlyRateUsd}
                     onChange={e => setForm(f => ({ ...f, monthlyRateUsd: e.target.value }))}
                     placeholder="e.g. 3000"
-                    className="w-full pl-7 pr-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40" />
+                    className="w-full pl-8 pr-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40" />
                 </div>
               </div>
               <div>
@@ -242,7 +255,7 @@ function NewPartnershipForm() {
             </div>
             {monthlyRate > 0 && (
               <p className="text-xs text-im8-burgundy/50 -mt-1">
-                ${totalUsd.toLocaleString()} total over {months} month{months === 1 ? "" : "s"}
+                {currencySymbol(form.currencyCode)}{totalUsd.toLocaleString()} total over {months} month{months === 1 ? "" : "s"}
               </p>
             )}
           </div>

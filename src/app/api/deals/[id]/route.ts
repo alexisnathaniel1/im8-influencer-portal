@@ -18,7 +18,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     "is_gifted", "gifted_product", "gifted_quantity", "product_sent_at", "needs_approval",
     "niche_tags", "follower_count",
     "contract_url", "payment_terms", "contract_requirements", "usage_rights_months",
-    "discount_code", "affiliate_link",
+    "discount_code", "affiliate_link", "currency_code",
   ];
   const updates = Object.fromEntries(Object.entries(body).filter(([k]) => allowed.includes(k)));
 

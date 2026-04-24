@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import NicheMultiSelect from "@/components/shared/niche-multi-select";
+import { CURRENCIES, currencySymbol } from "@/lib/currencies";
 
 type Deal = Record<string, unknown>;
 type Brief = Record<string, unknown>;
@@ -259,6 +260,7 @@ export default function DealDetailClient({
             initialRate={deal.monthly_rate_cents ? String(Number(deal.monthly_rate_cents) / 100) : ""}
             initialMonths={String(deal.total_months ?? 3)}
             initialIsGifted={Boolean(deal.is_gifted)}
+            initialCurrencyCode={(deal.currency_code as string) ?? "USD"}
             initialDeliverables={(deal.deliverables as Array<{ code: string; count: number }>) ?? []}
             canViewRates={canViewRates}
           />
@@ -1084,13 +1086,14 @@ export function formatDeliverables(items: Array<{ code: string; count: number }>
 // Editable contract accordion — rate, months, gifted toggle, deliverables picker + save.
 function EditableContractSection({
   dealId, contractSequence, initialRate, initialMonths, initialIsGifted,
-  initialDeliverables, canViewRates,
+  initialCurrencyCode, initialDeliverables, canViewRates,
 }: {
   dealId: string;
   contractSequence: number | null;
   initialRate: string;
   initialMonths: string;
   initialIsGifted: boolean;
+  initialCurrencyCode: string;
   initialDeliverables: Array<{ code: string; count: number }>;
   canViewRates: boolean;
 }) {
@@ -1098,6 +1101,7 @@ function EditableContractSection({
   const [rate, setRate] = useState(initialRate);
   const [months, setMonths] = useState(initialMonths);
   const [isGifted, setIsGifted] = useState(initialIsGifted);
+  const [currencyCode, setCurrencyCode] = useState(initialCurrencyCode);
   const [deliverableCounts, setDeliverableCounts] = useState<Record<string, number>>(() => {
     const counts: Record<string, number> = {};
     for (const d of initialDeliverables) {
@@ -1120,7 +1124,7 @@ function EditableContractSection({
   const rateText = isGifted
     ? "Gifted"
     : rateNum && canViewRates
-      ? `$${rateNum.toLocaleString()}/mo × ${monthsNum}mo`
+      ? `${currencySymbol(currencyCode)}${rateNum.toLocaleString()}/mo × ${monthsNum}mo`
       : `${monthsNum} months`;
 
   const deliverablesSummary = formatDeliverables(activeDeliverables);
@@ -1146,6 +1150,7 @@ function EditableContractSection({
         monthly_rate_cents: isGifted ? null : (rateNum ? Math.round(rateNum * 100) : null),
         total_months: monthsNum,
         is_gifted: isGifted,
+        currency_code: currencyCode,
         deliverables: activeDeliverables,
       }),
     });
@@ -1197,16 +1202,30 @@ function EditableContractSection({
         <div className="px-4 py-4 bg-white space-y-4 border-t border-im8-stone/20">
           {/* Rate + duration */}
           {canViewRates ? (
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-[auto_1fr_1fr] gap-3">
               <div>
-                <label className="block text-xs font-medium text-im8-burgundy/70 mb-1">Monthly rate (USD)</label>
-                <input
-                  type="number" value={rate}
-                  onChange={e => setRate(e.target.value)}
+                <label className="block text-xs font-medium text-im8-burgundy/70 mb-1">Currency</label>
+                <select value={currencyCode}
+                  onChange={e => setCurrencyCode(e.target.value)}
                   disabled={isGifted}
-                  placeholder={isGifted ? "N/A (gifted)" : "e.g. 3000"}
-                  className={`w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-im8-red/40 ${isGifted ? "bg-im8-sand/40 text-im8-burgundy/40" : "text-im8-burgundy"}`}
-                />
+                  className={`w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-im8-red/40 ${isGifted ? "bg-im8-sand/40 text-im8-burgundy/40" : "text-im8-burgundy"}`}>
+                  {CURRENCIES.map(c => (
+                    <option key={c.code} value={c.code}>{c.code}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-im8-burgundy/70 mb-1">Monthly rate</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-im8-burgundy/50">{currencySymbol(currencyCode)}</span>
+                  <input
+                    type="number" value={rate}
+                    onChange={e => setRate(e.target.value)}
+                    disabled={isGifted}
+                    placeholder={isGifted ? "N/A (gifted)" : "e.g. 3000"}
+                    className={`w-full pl-8 pr-3 py-2 border border-im8-stone/40 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-im8-red/40 ${isGifted ? "bg-im8-sand/40 text-im8-burgundy/40" : "text-im8-burgundy"}`}
+                  />
+                </div>
               </div>
               <div>
                 <label className="block text-xs font-medium text-im8-burgundy/70 mb-1">Duration (months)</label>
@@ -1231,7 +1250,7 @@ function EditableContractSection({
           {/* Total summary (canViewRates + not gifted) */}
           {canViewRates && !isGifted && rateNum > 0 && (
             <p className="text-xs text-im8-burgundy/50 -mt-1">
-              ${(rateNum * monthsNum).toLocaleString()} total over {monthsNum} month{monthsNum === 1 ? "" : "s"}
+              {currencySymbol(currencyCode)}{(rateNum * monthsNum).toLocaleString()} total over {monthsNum} month{monthsNum === 1 ? "" : "s"}
             </p>
           )}
 

@@ -32,6 +32,7 @@ export async function POST(request: NextRequest) {
     status: body.status ?? "live",
     monthly_rate_cents: body.monthlyRateCents ?? null,
     total_months: body.totalMonths ?? 3,
+    currency_code: body.currencyCode || "USD",
     follower_count: body.followerCount ?? null,
     niche_tags: Array.isArray(body.nicheTags) ? body.nicheTags : [],
     deliverables: Array.isArray(body.deliverables) ? body.deliverables : [],
