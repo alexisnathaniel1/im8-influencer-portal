@@ -562,7 +562,7 @@ export default function IntakeForm({
         {!isAdmin && (
           <p className="text-center text-im8-stone/60 text-xs mt-6">
             We review all submissions and respond within 5 business days. Questions?{" "}
-            <a href="mailto:creators@im8health.com" className="underline">creators@im8health.com</a>
+            <a href="mailto:partners@im8health.com" className="underline">partners@im8health.com</a>
           </p>
         )}
       </div>

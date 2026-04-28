@@ -23,7 +23,7 @@ const STATUS_COLORS: Record<string, string> = {
   approved: "bg-green-100 text-green-700",
   shortlisted: "bg-green-100 text-green-700",
   rejected: "bg-red-100 text-red-700",
-  converted: "bg-purple-100 text-purple-700",
+  converted: "bg-im8-burgundy/10 text-im8-burgundy",
 };
 
 const STANDARD_DELIVERABLES = "3 IG Reels · 3 IG Stories · Raw footage · Whitelisting · Paid ad usage rights · Link in bio · 3 UGC Videos for ads — across 3 months";
@@ -40,7 +40,40 @@ export default async function PartnerPage() {
     .eq("id", user.id)
     .single();
 
-  const email = profile?.email ?? user.email ?? "";
+  // Use both profile.email and the auth user's email — they sometimes differ
+  // (profile.email is set on signup; user.email is what they auth with) and we
+  // need to match either against discovery_profiles.submitter_email.
+  const emailCandidates = Array.from(
+    new Set(
+      [profile?.email, user.email]
+        .filter((e): e is string => typeof e === "string" && e.length > 0)
+        .map(e => e.trim().toLowerCase()),
+    ),
+  );
+  const email = emailCandidates[0] ?? "";
+
+  // ── Self-heal: claim any orphan discovery_profiles that match this user's
+  // emails and weren't yet linked to their profile id. This catches the case
+  // where the row was created before signup, before ensure-profile last ran,
+  // or where the email changed casing between submit and signup.
+  if (emailCandidates.length > 0) {
+    const orphanIds = new Set<string>();
+    for (const e of emailCandidates) {
+      const [{ data: bySubmit }, { data: byInfl }] = await Promise.all([
+        admin.from("discovery_profiles").select("id, submitted_by_profile_id").ilike("submitter_email", e),
+        admin.from("discovery_profiles").select("id, submitted_by_profile_id").ilike("influencer_email", e),
+      ]);
+      for (const r of [...(bySubmit ?? []), ...(byInfl ?? [])]) {
+        if (r.submitted_by_profile_id !== user.id) orphanIds.add(r.id);
+      }
+    }
+    if (orphanIds.size > 0) {
+      await admin
+        .from("discovery_profiles")
+        .update({ submitted_by_profile_id: user.id })
+        .in("id", Array.from(orphanIds));
+    }
+  }
 
   // Fetch all deals where this user is the linked partner (both active + completed).
   // Shown as Contract 1, Contract 2, etc. so partners see their full history.
@@ -107,35 +140,28 @@ export default async function PartnerPage() {
 
   const emptyResult = { data: [] as { id: string; [k: string]: unknown }[], error: null };
 
-  const [
-    { data: byProfileId, error: e1 },
-    { data: byEmail, error: e2 },
-    { data: byInfluencerEmail, error: e3 },
-  ] = await Promise.all([
+  // Run byEmail / byInfluencerEmail against EACH email candidate to catch the
+  // case where profile.email and auth user.email differ.
+  const byEmailQueries = emailCandidates.flatMap(e => [
+    admin.from("discovery_profiles").select(SELECT_FIELDS).ilike("submitter_email", e).order("created_at", { ascending: false }),
+    admin.from("discovery_profiles").select(SELECT_FIELDS).ilike("influencer_email", e).order("created_at", { ascending: false }),
+  ]);
+
+  const [byProfileIdRes, ...emailResults] = await Promise.all([
     admin
       .from("discovery_profiles")
       .select(SELECT_FIELDS)
       .eq("submitted_by_profile_id", user.id)
       .order("created_at", { ascending: false }),
-    email
-      ? admin
-          .from("discovery_profiles")
-          .select(SELECT_FIELDS)
-          .ilike("submitter_email", email)
-          .order("created_at", { ascending: false })
-      : emptyResult,
-    email
-      ? admin
-          .from("discovery_profiles")
-          .select(SELECT_FIELDS)
-          .ilike("influencer_email", email)
-          .order("created_at", { ascending: false })
-      : emptyResult,
+    ...(byEmailQueries.length > 0 ? byEmailQueries : [Promise.resolve(emptyResult)]),
   ]);
+  const { data: byProfileId, error: e1 } = byProfileIdRes;
+  const byEmail = emailResults.flatMap(r => r.data ?? []);
+  const byInfluencerEmail: typeof byEmail = []; // merged into byEmail above
+  const e2 = emailResults.find(r => r.error)?.error ?? null;
 
   if (e1) console.error("[partner/page] byProfileId failed:", e1.message, "uid:", user.id);
-  if (e2) console.error("[partner/page] byEmail failed:", e2.message, "email:", email);
-  if (e3) console.error("[partner/page] byInfluencerEmail failed:", e3.message, "email:", email);
+  if (e2) console.error("[partner/page] email match failed:", e2.message, "candidates:", emailCandidates);
 
   // Merge and deduplicate by id
   const seen = new Set<string>();
@@ -174,7 +200,7 @@ export default async function PartnerPage() {
   const DEAL_STATUS_COLORS: Record<string, string> = {
     contacted: "bg-gray-100 text-gray-600", negotiating: "bg-blue-100 text-blue-700",
     agreed: "bg-yellow-100 text-yellow-700", pending_approval: "bg-orange-100 text-orange-700",
-    approved: "bg-green-100 text-green-700", contracted: "bg-purple-100 text-purple-700",
+    approved: "bg-green-100 text-green-700", contracted: "bg-emerald-100 text-emerald-700",
     live: "bg-emerald-100 text-emerald-700",
   };
 
@@ -273,7 +299,7 @@ export default async function PartnerPage() {
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 font-semibold">
+                    <span className="text-xs px-2 py-0.5 rounded-[6px] bg-im8-burgundy/10 text-im8-burgundy font-semibold whitespace-nowrap">
                       Contract {deal.contract_sequence ?? 1}
                     </span>
                     <span className="font-semibold text-im8-burgundy text-lg">{deal.influencer_name}</span>
