@@ -29,17 +29,19 @@ type DiscoveryProfile = {
   comments_count?: number;
   created_at: string;
   negotiation_counter: string | null;
+  creator_counter_note: string | null;
   agency_response: string | null;
   total_months: number | null;
 };
 
 // Filter tabs ordered to reflect the pipeline stages.
-const STATUSES = ["new", "negotiation_needed", "approved", "converted", "rejected"];
+const STATUSES = ["new", "negotiation_needed", "creator_countered", "approved", "converted", "rejected"];
 const STATUS_LABELS: Record<string, string> = {
   new: "Submitted",
   submitted: "Submitted",
   reviewing: "Under Review",          // legacy
   negotiation_needed: "Negotiation Needed",
+  creator_countered: "Creator Counter",  // creator pushed back with new terms
   approved: "Approved",               // transient — shown on rows but not a tab
   shortlisted: "Approved",            // legacy alias
   rejected: "Rejected",
@@ -49,14 +51,15 @@ const STATUS_LABELS: Record<string, string> = {
 // Off-brand semantic palette is fine here — the user explicitly carved out
 // status pills as the one place these colours are allowed.
 const STATUS_COLORS: Record<string, string> = {
-  new: "bg-blue-100 text-blue-700",                  // just submitted
-  submitted: "bg-blue-100 text-blue-700",            // just submitted
-  reviewing: "bg-yellow-100 text-yellow-700",        // under review
-  negotiation_needed: "bg-amber-100 text-amber-700", // action required
-  approved: "bg-green-100 text-green-700",           // good to go
-  shortlisted: "bg-green-100 text-green-700",        // good to go (alias)
-  rejected: "bg-red-100 text-red-700",               // declined
-  converted: "bg-im8-burgundy/15 text-im8-burgundy", // already pending MGMT
+  new: "bg-blue-100 text-blue-700",                       // just submitted
+  submitted: "bg-blue-100 text-blue-700",                 // just submitted
+  reviewing: "bg-yellow-100 text-yellow-700",             // under review
+  negotiation_needed: "bg-amber-100 text-amber-700",      // admin sent counter
+  creator_countered: "bg-fuchsia-100 text-fuchsia-700",   // creator countered back
+  approved: "bg-green-100 text-green-700",                // good to go
+  shortlisted: "bg-green-100 text-green-700",             // good to go (alias)
+  rejected: "bg-red-100 text-red-700",                    // declined
+  converted: "bg-im8-burgundy/15 text-im8-burgundy",      // already pending MGMT
 };
 
 function ScoreBadge({ score }: { score: number | null }) {
@@ -600,12 +603,35 @@ export default function DiscoveryBoard({
                 </div>
               )}
 
-              {/* Counter-proposal (negotiation_needed only) */}
-              {openProfile.status === "negotiation_needed" && (
+              {/* Creator countered — pinned banner above the counter form
+                  showing the new terms they pushed back with. */}
+              {openProfile.status === "creator_countered" && (
+                <div className="border border-fuchsia-200 bg-fuchsia-50 rounded-xl p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold text-fuchsia-700 uppercase tracking-wide">
+                      {openProfile.agency_name ? "Agency" : "Creator"} sent a counter back
+                    </p>
+                    <span className="text-[10px] text-fuchsia-700/70">Awaiting your response</span>
+                  </div>
+                  <p className="text-xs text-fuchsia-900">
+                    Their new terms are loaded into the form below — review, then either Approve, send another
+                    counter (Save & Send), or Decline.
+                  </p>
+                  {openProfile.creator_counter_note && (
+                    <div className="bg-white border border-fuchsia-200 rounded-lg p-3 text-sm text-fuchsia-900 whitespace-pre-wrap">
+                      <span className="text-[10px] font-bold text-fuchsia-700 uppercase tracking-wide block mb-1">Note from {openProfile.agency_name ? "agency" : "creator"}</span>
+                      {openProfile.creator_counter_note}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Counter-proposal — open for negotiation_needed AND creator_countered */}
+              {(openProfile.status === "negotiation_needed" || openProfile.status === "creator_countered") && (
                 <div className="border border-orange-200 bg-orange-50 rounded-xl p-4 space-y-4">
                   <div className="flex items-center justify-between">
                     <p className="text-xs font-bold text-orange-700 uppercase tracking-wide">
-                      Counter-proposal to {openProfile.agency_name ? "agency" : "creator"}
+                      {openProfile.status === "creator_countered" ? "Reply with a counter" : `Counter-proposal to ${openProfile.agency_name ? "agency" : "creator"}`}
                     </p>
                     {openProfile.agency_response && (
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${openProfile.agency_response === "accepted" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>

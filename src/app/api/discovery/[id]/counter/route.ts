@@ -56,6 +56,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   // Save the updated counter-proposal fields to the discovery profile.
   // Also store the recipient email as influencer_email so the creator can be
   // auto-linked to their portal account when they sign up via this email.
+  // Status flips to 'negotiation_needed' on every counter — covers both the
+  // initial admin counter from 'new' AND admin's reply to a creator counter
+  // (resetting from 'creator_countered' back to admin-side pending).
+  // agency_response is reset so the partner-side block shows the new
+  // counter, not the previous accept/decline state.
   const rate_cents = rate_usd ? Math.round(rate_usd * 100) : null;
   await admin.from("discovery_profiles").update({
     proposed_rate_cents: rate_cents ?? undefined,
@@ -63,6 +68,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     negotiation_counter: notes ?? null,
     total_months: total_months,
     influencer_email: to,
+    status: "negotiation_needed",
+    agency_response: null,
+    creator_counter_note: null,
   }).eq("id", id);
 
   // Send the email.

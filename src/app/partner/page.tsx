@@ -33,19 +33,20 @@ const DELIVERABLE_LABELS: Record<string, string> = {
 };
 const BINARY_DELIVERABLE_CODES = new Set(["WHITELIST", "PAID_AD", "RAW_FOOTAGE", "LINK_BIO"]);
 
-function formatDeliverables(items: Array<{ code: string; count: number }> | null | undefined): string {
-  if (!items || items.length === 0) return "Standard package";
-  const parts = items
-    .map(item => {
-      if (!item?.code) return null;
-      if (BINARY_DELIVERABLE_CODES.has(item.code)) {
-        return item.count > 0 ? DELIVERABLE_LABELS[item.code] ?? item.code : null;
-      }
-      if (item.count <= 0) return null;
-      return `${item.count}× ${DELIVERABLE_LABELS[item.code] ?? item.code}`;
-    })
-    .filter((s): s is string => !!s);
-  return parts.length ? parts.join(" · ") : "Standard package";
+type DeliverableItem = { code: string; count: number };
+function splitDeliverables(items: DeliverableItem[] | null | undefined): {
+  content: Array<{ code: string; count: number; label: string }>;
+  rights: Array<{ code: string; label: string }>;
+} {
+  const content: Array<{ code: string; count: number; label: string }> = [];
+  const rights: Array<{ code: string; label: string }> = [];
+  for (const it of items ?? []) {
+    if (!it?.code || it.count <= 0) continue;
+    const label = DELIVERABLE_LABELS[it.code] ?? it.code;
+    if (BINARY_DELIVERABLE_CODES.has(it.code)) rights.push({ code: it.code, label });
+    else content.push({ code: it.code, count: it.count, label });
+  }
+  return { content, rights };
 }
 
 export default async function PartnerPage() {
@@ -163,6 +164,7 @@ export default async function PartnerPage() {
     proposed_deliverables: Array<{ code: string; count: number }> | null;
     total_months: number | null;
     negotiation_counter: string | null;
+    creator_counter_note: string | null;
     agency_response: string | null;
     created_at: string;
   }>;
@@ -442,47 +444,106 @@ export default async function PartnerPage() {
                   const months = s.total_months ?? 3;
                   const monthlyUsd = s.proposed_rate_cents ? s.proposed_rate_cents / 100 : null;
                   const totalUsd = monthlyUsd !== null ? monthlyUsd * months : null;
-                  const deliverablesText = formatDeliverables(s.proposed_deliverables);
+                  const { content, rights } = splitDeliverables(s.proposed_deliverables);
+                  const isCreatorCountered = s.status === "creator_countered";
+                  const headingLabel = isCreatorCountered
+                    ? "Your counter to IM8"
+                    : isNegotiating ? "IM8's counter-proposal" : "Submitted terms";
                   return (
-                    <div className="bg-im8-sand/50 rounded-lg p-4 space-y-2 text-sm border border-im8-stone/20">
-                      <p className="text-xs font-semibold text-im8-burgundy/50 uppercase tracking-wide">
-                        {isNegotiating ? "Current proposal" : "Submitted terms"}
+                    <div className="bg-im8-offwhite rounded-xl p-5 border border-im8-stone/30">
+                      <p className="text-[10px] font-bold text-im8-muted uppercase tracking-[0.12em] mb-4">
+                        {headingLabel}
                       </p>
-                      <div className="flex gap-6 flex-wrap">
-                        {monthlyUsd !== null ? (
-                          <div>
-                            <span className="text-im8-burgundy/50 text-xs">Monthly rate</span>
-                            <p className="font-semibold text-im8-burgundy">${monthlyUsd.toFixed(0)}/mo</p>
-                            {totalUsd !== null && (
-                              <p className="text-xs text-im8-burgundy/50">${totalUsd.toFixed(0)} over {months} month{months === 1 ? "" : "s"}</p>
-                            )}
-                          </div>
-                        ) : null}
-                        <div className="flex-1">
-                          <span className="text-im8-burgundy/50 text-xs">Deliverables</span>
-                          <p className="text-im8-burgundy/80 text-xs mt-0.5">{deliverablesText}</p>
+
+                      {/* Rate + duration */}
+                      <div className="grid grid-cols-2 gap-6 pb-4 mb-4 border-b border-im8-stone/30">
+                        <div>
+                          <p className="text-[11px] text-im8-muted uppercase tracking-wide mb-1">Monthly rate</p>
+                          {monthlyUsd !== null ? (
+                            <>
+                              <p className="text-lg font-bold text-im8-burgundy">${monthlyUsd.toLocaleString()}<span className="text-sm font-normal text-im8-muted">/mo</span></p>
+                              {totalUsd !== null && (
+                                <p className="text-xs text-im8-muted mt-0.5">${totalUsd.toLocaleString()} over {months} month{months === 1 ? "" : "s"}</p>
+                              )}
+                            </>
+                          ) : (
+                            <p className="text-sm text-im8-muted italic">To be confirmed</p>
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-[11px] text-im8-muted uppercase tracking-wide mb-1">Duration</p>
+                          <p className="text-lg font-bold text-im8-burgundy">{months} <span className="text-sm font-normal text-im8-muted">month{months === 1 ? "" : "s"}</span></p>
                         </div>
                       </div>
+
+                      {/* Content deliverables */}
+                      {content.length > 0 && (
+                        <div className="mb-4">
+                          <p className="text-[11px] text-im8-muted uppercase tracking-wide mb-2">Content deliverables</p>
+                          <div className="space-y-1.5">
+                            {content.map((d, i) => (
+                              <div key={`${d.code}-${i}`} className="flex items-center justify-between text-sm">
+                                <span className="text-im8-burgundy">{d.label}</span>
+                                <span className="font-bold text-im8-burgundy">{d.count}×</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Rights & extras */}
+                      {rights.length > 0 && (
+                        <div>
+                          <p className="text-[11px] text-im8-muted uppercase tracking-wide mb-2">Usage rights & extras</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {rights.map(r => (
+                              <span key={r.code} className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-white text-im8-burgundy border border-im8-stone/40">
+                                <span className="text-green-600 font-bold">✓</span>
+                                {r.label}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {content.length === 0 && rights.length === 0 && (
+                        <p className="text-sm text-im8-muted italic">No deliverables specified.</p>
+                      )}
                     </div>
                   );
                 })()}
 
-                {/* Negotiation counter from IM8 — note + accept/decline. The
-                    actual rate/deliverables now live in the Current proposal
-                    block above so this section only carries the message and
-                    the response control. */}
+                {/* Negotiation counter from IM8 — note + accept/decline/counter. */}
                 {isNegotiating && (
                   <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
-                    <p className="text-xs font-semibold text-amber-800 uppercase tracking-wide">IM8 counter-proposal</p>
-                    {s.negotiation_counter && (
+                    <p className="text-xs font-semibold text-amber-800 uppercase tracking-wide">Note from IM8</p>
+                    {s.negotiation_counter ? (
                       <p className="text-sm text-amber-900 whitespace-pre-wrap leading-relaxed">{s.negotiation_counter}</p>
+                    ) : (
+                      <p className="text-sm text-amber-900/70 italic">No additional note from IM8.</p>
                     )}
                     {s.agency_response ? (
                       <div className={`text-sm font-medium px-3 py-2 rounded-lg ${s.agency_response === "accepted" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
                         You {s.agency_response === "accepted" ? "accepted" : "declined"} this proposal.
                       </div>
                     ) : (
-                      <NegotiationResponse profileId={s.id} />
+                      <NegotiationResponse
+                        profileId={s.id}
+                        initialRate={s.proposed_rate_cents ? s.proposed_rate_cents / 100 : null}
+                        initialMonths={s.total_months ?? 3}
+                        initialDeliverables={s.proposed_deliverables ?? []}
+                      />
+                    )}
+                  </div>
+                )}
+
+                {/* Creator already countered — waiting for IM8's response. */}
+                {s.status === "creator_countered" && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                    <p className="text-xs font-semibold text-blue-800 uppercase tracking-wide mb-2">Counter sent to IM8</p>
+                    <p className="text-sm text-blue-900">Your counter-proposal has been sent. The IM8 team will review and reply soon.</p>
+                    {s.creator_counter_note && (
+                      <p className="text-sm text-blue-900/80 mt-2 pt-2 border-t border-blue-200 whitespace-pre-wrap"><span className="font-medium">Your note:</span> {s.creator_counter_note}</p>
                     )}
                   </div>
                 )}
