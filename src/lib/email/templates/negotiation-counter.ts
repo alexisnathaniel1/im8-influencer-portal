@@ -28,7 +28,16 @@ export function negotiationCounterTemplate(params: {
     deliverables, notes, portalUrl, loginUrl, signupUrl,
   } = params;
   const totalUsd = rateUsd ? rateUsd * totalMonths : null;
-  void isAgency;
+
+  // Agencies submit on behalf of named creators, so the email refers to the
+  // creator by name. Individual creators are submitting themselves, so the
+  // copy is more personal — "your profile" instead of "{name}'s profile".
+  const introTextLine = isAgency
+    ? `Thank you for submitting ${influencerName} to IM8. We've reviewed the profile and have a counter-proposal for your consideration.`
+    : `Thank you for submitting your profile to IM8. We've reviewed it and have a counter-proposal for your consideration.`;
+  const introHtmlLine = isAgency
+    ? `Thank you for submitting <strong>${influencerName}</strong> to IM8. We've reviewed the profile and have a counter-proposal for your consideration.`
+    : `Thank you for submitting your profile to IM8. We've reviewed it and have a counter-proposal for your consideration.`;
 
   const rateText = rateUsd
     ? `$${rateUsd.toLocaleString()}/month ($${totalUsd!.toLocaleString()} total over ${totalMonths} month${totalMonths === 1 ? "" : "s"})`
@@ -39,7 +48,7 @@ export function negotiationCounterTemplate(params: {
   const text = [
     `Hi ${submitterName},`,
     ``,
-    `Thank you for submitting ${influencerName} to IM8. We've reviewed the profile and have a counter-proposal for your consideration.`,
+    introTextLine,
     ``,
     `── COUNTER-PROPOSAL ──`,
     `Creator: ${influencerName}`,
@@ -127,10 +136,7 @@ export function negotiationCounterTemplate(params: {
   const body = `
     <p style="margin:0 0 20px">Hi <strong>${submitterName}</strong>,</p>
 
-    <p style="margin:0 0 20px">
-      Thank you for submitting <strong>${influencerName}</strong> to IM8.
-      We've reviewed the profile and have a counter-proposal for your consideration.
-    </p>
+    <p style="margin:0 0 20px">${introHtmlLine}</p>
 
     ${proposalCard}
     ${notesHtml}
