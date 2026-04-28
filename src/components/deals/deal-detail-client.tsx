@@ -184,26 +184,35 @@ export default function DealDetailClient({
   return (
     <div className="space-y-6">
       {/* Status bar */}
-      <div className="bg-white rounded-xl border border-im8-stone/30 p-5 flex items-center justify-between">
-        <div className="flex items-center gap-4 overflow-x-auto pb-1">
+      <div className="bg-white rounded-xl border border-im8-stone/30 px-5 pt-4 pb-4 space-y-4">
+        {/* Pipeline — all stages visible, wraps on small screens */}
+        <div className="flex flex-wrap items-center gap-y-2">
           {STATUS_FLOW.map((s, i) => {
             const currentIdx = STATUS_FLOW.indexOf(status);
             const isDone = i < currentIdx;
             const isCurrent = i === currentIdx;
             return (
-              <div key={s} className="flex items-center gap-2 shrink-0">
-                <div className={`w-2 h-2 rounded-full ${isCurrent ? "bg-im8-red" : isDone ? "bg-green-500" : "bg-im8-stone"}`} />
-                <span className={`text-xs capitalize ${isCurrent ? "font-semibold text-im8-burgundy" : isDone ? "text-green-600" : "text-im8-burgundy/40"}`}>
-                  {s.replace("_", " ")}
-                </span>
-                {i < STATUS_FLOW.length - 1 && <span className="text-im8-stone ml-2">→</span>}
+              <div key={s} className="flex items-center">
+                <div className="flex items-center gap-1.5">
+                  <div className={`w-2 h-2 rounded-full shrink-0 ${isCurrent ? "bg-im8-red" : isDone ? "bg-emerald-500" : "bg-im8-stone/60"}`} />
+                  <span className={`text-[12px] capitalize whitespace-nowrap ${isCurrent ? "font-bold text-im8-burgundy" : isDone ? "font-medium text-emerald-600" : "text-im8-burgundy/35"}`}>
+                    {s.replace(/_/g, " ")}
+                  </span>
+                </div>
+                {i < STATUS_FLOW.length - 1 && (
+                  <span className="mx-2 text-im8-stone/40 text-xs select-none">›</span>
+                )}
               </div>
             );
           })}
         </div>
-        <div className="flex items-center gap-3 shrink-0">
-          {role === "admin" && (
+
+        {/* Actions row — override + advance button */}
+        <div className="flex items-center justify-between gap-3 border-t border-im8-stone/20 pt-3">
+          {role === "admin" ? (
             <StatusOverrideSelect status={status} dealId={deal.id as string} onRefresh={() => router.refresh()} />
+          ) : (
+            <div />
           )}
           <StageButton status={status} dealId={deal.id as string} onRefresh={() => router.refresh()} onMarkAgreed={markAgreed} needsApproval={form.needsApproval} role={role} />
         </div>
