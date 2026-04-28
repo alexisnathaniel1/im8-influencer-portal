@@ -2,6 +2,7 @@ import { emailShell, ctaButton, sectionLabel } from "./base";
 import { formatDeliverablesSummary } from "@/lib/deliverables";
 
 type DealForApproval = {
+  id?: string;
   influencer_name: string;
   agency_name?: string | null;
   platform_primary?: string | null;
@@ -64,12 +65,17 @@ export function approvalRequestTemplate(params: {
     const deliverables = formatDeliverablesSummary(d.deliverables ?? null);
     const platformLabel = d.platform_primary ? d.platform_primary.charAt(0).toUpperCase() + d.platform_primary.slice(1) : "—";
 
+    // Per-creator anchor on the review page so clicking the name in the
+    // email scrolls straight to that creator's card.
+    const creatorAnchor = d.id ? `${reviewUrl}#creator-${d.id}` : reviewUrl;
+    const nameHtml = `<a href="${creatorAnchor}" style="color:#50000B;text-decoration:underline;text-decoration-color:rgba(80,0,11,0.35);text-underline-offset:3px">${d.influencer_name}</a>`;
+
     return `
       <div style="background:#FAF6F2;border:1px solid #E1CBB9;border-radius:12px;padding:20px 24px;margin:0 0 16px">
         <!-- Header -->
         <div style="margin-bottom:14px">
           <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:18px;font-weight:700;color:#50000B">
-            ${d.influencer_name}
+            ${nameHtml}
             ${d.contract_sequence ? `<span style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:11px;font-weight:700;color:#A40011;background:#FFFFFF;border:1px solid #E1CBB9;padding:2px 8px;border-radius:6px;margin-left:8px;vertical-align:middle">Contract ${d.contract_sequence}</span>` : ""}
           </p>
           <p style="margin:4px 0 0;font-size:13px;color:#8C7A6E">

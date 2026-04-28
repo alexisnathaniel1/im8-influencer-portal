@@ -279,9 +279,9 @@ export default function ApprovalsDashboard({
                       <div className="flex items-center gap-2 flex-wrap">
                         <Link
                           href={`/admin/deals/${d.id}`}
-                          className="font-semibold text-im8-burgundy text-sm hover:text-im8-red hover:underline"
+                          className="font-semibold text-im8-red text-sm underline decoration-im8-red/40 underline-offset-2 hover:decoration-im8-red"
                         >
-                          {d.influencer_name}
+                          {d.influencer_name} ↗
                         </Link>
                         <span className="text-[10px] px-1.5 py-0.5 rounded-[6px] bg-im8-burgundy/10 text-im8-burgundy font-semibold">
                           Contract {d.contract_sequence ?? 1}
@@ -526,11 +526,11 @@ export default function ApprovalsDashboard({
                         <div>
                           <Link
                             href={`/admin/deals/${d.id}`}
-                            className="font-semibold text-im8-burgundy hover:text-im8-red hover:underline inline-flex items-center gap-2"
+                            className="font-semibold text-im8-red underline decoration-im8-red/40 underline-offset-2 hover:decoration-im8-red inline-flex items-center gap-2"
                             onClick={() => setOpenPacket(null)}
                           >
-                            {d.influencer_name}
-                            <span className="text-[10px] px-1.5 py-0.5 rounded-[6px] bg-im8-burgundy/10 text-im8-burgundy font-semibold">
+                            {d.influencer_name} ↗
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-[6px] bg-im8-burgundy/10 text-im8-burgundy font-semibold no-underline">
                               Contract {d.contract_sequence ?? 1}
                             </span>
                           </Link>
