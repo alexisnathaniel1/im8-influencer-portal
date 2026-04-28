@@ -201,7 +201,7 @@ export default function DealDetailClient({
             );
           })}
         </div>
-        <StageButton status={status} dealId={deal.id as string} onRefresh={() => router.refresh()} onMarkAgreed={markAgreed} needsApproval={form.needsApproval} />
+        <StageButton status={status} dealId={deal.id as string} onRefresh={() => router.refresh()} onMarkAgreed={markAgreed} needsApproval={form.needsApproval} role={role} />
       </div>
 
       {/* Tabs */}
@@ -1424,8 +1424,8 @@ function VersionHistorySection({ dealId }: { dealId: string }) {
   );
 }
 
-function StageButton({ status, dealId, onRefresh, onMarkAgreed, needsApproval }: {
-  status: string; dealId: string; onRefresh: () => void; onMarkAgreed: () => void; needsApproval: boolean;
+function StageButton({ status, dealId, onRefresh, onMarkAgreed, needsApproval, role = "" }: {
+  status: string; dealId: string; onRefresh: () => void; onMarkAgreed: () => void; needsApproval: boolean; role?: string;
 }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -1471,8 +1471,8 @@ function StageButton({ status, dealId, onRefresh, onMarkAgreed, needsApproval }:
     );
   if (status === "agreed" && !needsApproval)
     return btn("Mark approved →", () => advance("approved"), "bg-green-600 hover:bg-green-700");
-  if (status === "approved")
-    return btn("Move to contracted →", () => advance("contracted"), "bg-purple-600 hover:bg-purple-700");
+  if (status === "approved" && role !== "support")
+    return btn("Move to contracted →", () => advance("contracted"), "bg-emerald-600 hover:bg-emerald-700");
   if (status === "contracted")
     return btn("Mark live →", () => advance("live"), "bg-emerald-600 hover:bg-emerald-700");
   if (status === "live")
