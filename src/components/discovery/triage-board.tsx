@@ -46,14 +46,14 @@ const STATUS_LABELS: Record<string, string> = {
   converted: "Pending MGMT Approval",
 };
 const STATUS_COLORS: Record<string, string> = {
-  new: "bg-blue-100 text-blue-700",
-  submitted: "bg-blue-100 text-blue-700",
+  new: "bg-yellow-100 text-yellow-700",
+  submitted: "bg-yellow-100 text-yellow-700",
   reviewing: "bg-yellow-100 text-yellow-700",
-  negotiation_needed: "bg-orange-100 text-orange-700",
+  negotiation_needed: "bg-amber-100 text-amber-700",
   approved: "bg-green-100 text-green-700",
   shortlisted: "bg-green-100 text-green-700",
   rejected: "bg-red-100 text-red-700",
-  converted: "bg-purple-100 text-purple-700",
+  converted: "bg-yellow-100 text-yellow-700",
 };
 
 function ScoreBadge({ score }: { score: number | null }) {
@@ -287,17 +287,15 @@ export default function DiscoveryBoard({
         </div>
       ) : (
         <div className="bg-white rounded-xl border border-im8-stone/30 overflow-hidden">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm table-auto">
             <thead className="bg-white border-b border-im8-stone/20">
               <tr className="text-left text-im8-muted text-[11px] uppercase tracking-[0.07em] font-semibold">
-                <th className="px-5 py-2.5">Creator</th>
-                <th className="px-5 py-2.5">Status</th>
-                <th className="px-5 py-2.5">Niche</th>
-                <th className="px-5 py-2.5">Followers</th>
-                <th className="px-5 py-2.5">Rate</th>
-                <th className="px-5 py-2.5">AI</th>
-                <th className="px-5 py-2.5">Comments</th>
-                <th className="px-5 py-2.5 text-right">Actions</th>
+                <th className="px-4 py-2.5 whitespace-nowrap">Creator</th>
+                <th className="px-4 py-2.5 whitespace-nowrap">Status</th>
+                <th className="px-4 py-2.5 whitespace-nowrap">Niche</th>
+                <th className="px-4 py-2.5 whitespace-nowrap">Followers</th>
+                <th className="px-4 py-2.5 whitespace-nowrap">Rate</th>
+                <th className="px-4 py-2.5 text-right whitespace-nowrap">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -306,37 +304,28 @@ export default function DiscoveryBoard({
                 return (
                   <tr key={p.id} className="border-b border-im8-stone/20 hover:bg-im8-offwhite cursor-pointer transition-colors"
                       onClick={() => openRow(p)}>
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-im8-burgundy">{p.influencer_name}</div>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-xs text-im8-burgundy/50 capitalize">{p.platform_primary}</span>
-                        {p.source === "manual"
-                          ? <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-600 font-medium">Manual</span>
-                          : <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-500 font-medium">Form</span>}
-                      </div>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="font-medium text-im8-burgundy truncate max-w-[200px]">{p.influencer_name}</div>
+                      <div className="text-xs text-im8-burgundy/50 capitalize mt-0.5">{p.platform_primary}</div>
                     </td>
-                    <td className="px-4 py-3">
-                      <span className={`text-[11px] px-2 py-0.5 rounded-[6px] font-medium ${STATUS_COLORS[p.status] ?? ""}`}>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <span className={`text-[11px] px-2 py-0.5 rounded-[6px] font-medium whitespace-nowrap ${STATUS_COLORS[p.status] ?? ""}`}>
                         {STATUS_LABELS[p.status] ?? p.status}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-im8-burgundy/70">
-                      {niches.slice(0, 2).join(", ") || "—"}
+                    <td className="px-4 py-3 text-im8-burgundy/70 whitespace-nowrap">
+                      <span className="truncate inline-block max-w-[160px] align-bottom">
+                        {niches.slice(0, 2).join(", ") || "—"}
+                      </span>
                       {niches.length > 2 && <span className="text-im8-burgundy/40"> +{niches.length - 2}</span>}
                     </td>
-                    <td className="px-4 py-3 text-im8-burgundy/70">
+                    <td className="px-4 py-3 text-im8-burgundy/70 whitespace-nowrap">
                       {p.follower_count ? `${(p.follower_count / 1000).toFixed(0)}K` : "—"}
                     </td>
-                    <td className="px-4 py-3 text-im8-burgundy/70">
+                    <td className="px-4 py-3 text-im8-burgundy/70 whitespace-nowrap">
                       {p.proposed_rate_cents ? `$${(p.proposed_rate_cents / 100).toFixed(0)}/mo` : "—"}
                     </td>
-                    <td className="px-4 py-3">
-                      <ScoreBadge score={p.ai_score} />
-                    </td>
-                    <td className="px-4 py-3 text-im8-burgundy/70 text-xs">
-                      {p.comments_count ? `${p.comments_count} 💬` : <span className="text-im8-burgundy/30">—</span>}
-                    </td>
-                    <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
+                    <td className="px-4 py-3 text-right whitespace-nowrap" onClick={e => e.stopPropagation()}>
                       <div className="inline-flex gap-1 items-center">
                         {p.status !== "approved" && p.status !== "converted" && p.status !== "rejected" && (
                           <button onClick={() => updateStatus(p.id, "approved")} disabled={updating === p.id}
