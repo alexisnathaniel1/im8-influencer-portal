@@ -25,34 +25,42 @@ interface InfluencerEntry {
   proposedDeliverables: ProposedDeliverable[];
 }
 
-async function isDuplicate(
+/**
+ * Returns the id of an existing matching discovery_profile (by handle or
+ * name+agency), or null if there's no match. Returning the id (rather than a
+ * boolean) lets the caller claim the existing row for the current user
+ * instead of silently dropping the submission.
+ */
+async function findExistingProfile(
   supabase: ReturnType<typeof createAdminClient>,
   inf: InfluencerEntry,
   agencyName: string | null,
-): Promise<boolean> {
+): Promise<string | null> {
   const handleChecks: Array<{ col: string; val: string }> = [];
   if (inf.igHandle?.trim()) handleChecks.push({ col: "instagram_handle", val: inf.igHandle.trim().replace(/^@/, "") });
   if (inf.tiktokHandle?.trim()) handleChecks.push({ col: "tiktok_handle", val: inf.tiktokHandle.trim().replace(/^@/, "") });
   if (inf.youtubeHandle?.trim()) handleChecks.push({ col: "youtube_handle", val: inf.youtubeHandle.trim().replace(/^@/, "") });
 
   for (const { col, val } of handleChecks) {
-    const { count } = await supabase
+    const { data } = await supabase
       .from("discovery_profiles")
-      .select("*", { count: "exact", head: true })
-      .ilike(col, val);
-    if ((count ?? 0) > 0) return true;
+      .select("id")
+      .ilike(col, val)
+      .limit(1);
+    if (data && data.length > 0) return data[0].id;
   }
 
   if (inf.influencerName?.trim() && agencyName) {
-    const { count } = await supabase
+    const { data } = await supabase
       .from("discovery_profiles")
-      .select("*", { count: "exact", head: true })
+      .select("id")
       .ilike("influencer_name", inf.influencerName.trim())
-      .ilike("agency_name", agencyName.trim());
-    if ((count ?? 0) > 0) return true;
+      .ilike("agency_name", agencyName.trim())
+      .limit(1);
+    if (data && data.length > 0) return data[0].id;
   }
 
-  return false;
+  return null;
 }
 
 export async function POST(request: NextRequest) {
@@ -91,14 +99,33 @@ export async function POST(request: NextRequest) {
     const source: "manual" | "inbound_form" | "agency_email" = (isAdminUser && requestedSource === "admin_manual") ? "manual" : "inbound_form";
     const inserted: Array<{ id: string; name: string; data: InfluencerEntry }> = [];
     const duplicates: string[] = [];
+    const claimed: string[] = [];
     const errors: Array<{ name: string; error: string }> = [];
 
     for (const inf of influencers) {
       if (!inf.influencerName?.trim()) continue;
 
-      const dup = await isDuplicate(supabase, inf, submitterAgency);
-      if (dup) {
-        duplicates.push(inf.influencerName);
+      const existingId = await findExistingProfile(supabase, inf, submitterAgency);
+      if (existingId) {
+        // A profile with the same handle / name+agency already exists (e.g. an
+        // admin pre-added the creator, or they previously submitted under a
+        // different account). Instead of silently dropping the submission,
+        // claim the existing row for the current user so it appears on their
+        // /partner dashboard. Only safe to do for non-admin submissions —
+        // admins manually re-submitting wouldn't want to overwrite ownership.
+        if (!isAdminUser) {
+          await supabase
+            .from("discovery_profiles")
+            .update({
+              submitted_by_profile_id: user.id,
+              submitter_email: submitterEmail,
+              submitter_name: submitterName,
+            })
+            .eq("id", existingId);
+          claimed.push(inf.influencerName);
+        } else {
+          duplicates.push(inf.influencerName);
+        }
         continue;
       }
 
@@ -199,6 +226,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       submitted: inserted.length,
+      claimed: claimed.length,
+      claimedNames: claimed,
       duplicates: duplicates.length,
       duplicateNames: duplicates,
       insertErrors: errors,

@@ -4,7 +4,6 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
 import NegotiationResponse from "./negotiation-response";
 import ShippingPrompt, { type MissingCreator } from "@/components/partner/shipping-prompt";
-import ClaimSubmissionForm from "./claim-submission-form";
 
 const STATUS_LABELS: Record<string, string> = {
   new: "Submitted",
@@ -29,11 +28,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 const STANDARD_DELIVERABLES = "3 IG Reels · 3 IG Stories · Raw footage · Whitelisting · Paid ad usage rights · Link in bio · 3 UGC Videos for ads — across 3 months";
 
-export default async function PartnerPage({
-  searchParams,
-}: {
-  searchParams?: Promise<{ claim?: string }>;
-}) {
+export default async function PartnerPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
@@ -44,33 +39,6 @@ export default async function PartnerPage({
     .select("email, full_name, partner_type, drive_folder_url")
     .eq("id", user.id)
     .single();
-
-  // ── Manual claim: ?claim=email@example.com or ?claim=Full+Name lets a
-  // creator force-link a submission whose email/name differs from theirs.
-  const claimParam = (await searchParams)?.claim?.trim();
-  if (claimParam) {
-    const claimLower = claimParam.toLowerCase();
-    const isEmail = claimLower.includes("@");
-    const wildcardPattern = `%${claimLower}%`;
-    const claimQueries = isEmail
-      ? [
-          admin.from("discovery_profiles").select("id").ilike("submitter_email", wildcardPattern),
-          admin.from("discovery_profiles").select("id").ilike("influencer_email", wildcardPattern),
-        ]
-      : [
-          admin.from("discovery_profiles").select("id").ilike("submitter_name", wildcardPattern),
-          admin.from("discovery_profiles").select("id").ilike("influencer_name", wildcardPattern),
-        ];
-    const claimResults = await Promise.all(claimQueries);
-    const claimIds = Array.from(new Set(claimResults.flatMap(r => (r.data ?? []).map(d => d.id))));
-    if (claimIds.length > 0) {
-      await admin
-        .from("discovery_profiles")
-        .update({ submitted_by_profile_id: user.id })
-        .in("id", claimIds);
-      console.log("[partner/page] Manually claimed", claimIds.length, "rows for user", user.id, "via", claimParam);
-    }
-  }
 
   // Use both profile.email and the auth user's email — they sometimes differ
   // (profile.email is set on signup; user.email is what they auth with) and we
@@ -460,15 +428,12 @@ export default async function PartnerPage({
       </div>
 
       {(!submissions || submissions.length === 0) ? (
-        <div className="space-y-4">
-          <div className="bg-white rounded-xl border border-im8-stone/30 p-12 text-center">
-            <p className="text-im8-burgundy/60 mb-4">No submissions yet.</p>
-            <Link href="/intake"
-              className="inline-block px-5 py-2.5 bg-im8-red text-white text-sm font-medium rounded-lg hover:bg-im8-burgundy transition-colors">
-              Fill the intake form →
-            </Link>
-          </div>
-          <ClaimSubmissionForm />
+        <div className="bg-white rounded-xl border border-im8-stone/30 p-12 text-center">
+          <p className="text-im8-burgundy/60 mb-4">No submissions yet.</p>
+          <Link href="/intake"
+            className="inline-block px-5 py-2.5 bg-im8-red text-white text-sm font-medium rounded-lg hover:bg-im8-burgundy transition-colors">
+            Fill the intake form →
+          </Link>
         </div>
       ) : (
         <div className="space-y-4">
