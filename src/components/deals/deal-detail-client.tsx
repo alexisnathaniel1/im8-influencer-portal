@@ -201,7 +201,12 @@ export default function DealDetailClient({
             );
           })}
         </div>
-        <StageButton status={status} dealId={deal.id as string} onRefresh={() => router.refresh()} onMarkAgreed={markAgreed} needsApproval={form.needsApproval} role={role} />
+        <div className="flex items-center gap-3 shrink-0">
+          {role === "admin" && (
+            <StatusOverrideSelect status={status} dealId={deal.id as string} onRefresh={() => router.refresh()} />
+          )}
+          <StageButton status={status} dealId={deal.id as string} onRefresh={() => router.refresh()} onMarkAgreed={markAgreed} needsApproval={form.needsApproval} role={role} />
+        </div>
       </div>
 
       {/* Tabs */}
@@ -233,137 +238,149 @@ export default function DealDetailClient({
 
       {/* Overview tab */}
       {tab === "overview" && (
-        <div className="bg-white rounded-xl border border-im8-stone/30 p-6 space-y-5">
-          <div className="grid grid-cols-2 gap-5">
-            <Field label="Influencer name *" value={form.influencerName}
-              onChange={v => setForm(f => ({ ...f, influencerName: v }))} />
-            <div>
-              <Field label="Email" value={form.influencerEmail}
-                onChange={v => setForm(f => ({ ...f, influencerEmail: v }))} type="email" />
-              {form.influencerEmail && (
-                <InviteButton
-                  email={form.influencerEmail}
-                  dealId={deal.id as string}
-                  alreadyLinked={Boolean(deal.influencer_profile_id)}
-                />
-              )}
-            </div>
-            <Field label="Agency" value={form.agencyName}
-              onChange={v => setForm(f => ({ ...f, agencyName: v }))} />
-            <div>
-              <label className="block text-sm font-medium text-im8-burgundy mb-1">Platform</label>
-              <select value={form.platformPrimary} onChange={e => setForm(f => ({ ...f, platformPrimary: e.target.value }))}
-                className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none">
-                {["instagram", "tiktok", "youtube", "facebook", "other"].map(p => (
-                  <option key={p} value={p} className="capitalize">{p}</option>
-                ))}
-              </select>
-            </div>
-          </div>
+        <div className="space-y-5">
 
-          {/* Contract & Deliverables — editable accordion (rate, months, gifted, deliverables) */}
-          <div className="pt-1">
-            <h3 className="text-sm font-semibold text-im8-burgundy mb-2">Contract &amp; Deliverables</h3>
-            <p className="text-xs text-im8-burgundy/50 mb-3">
-              Set the rate, duration and content deliverables. Saving this will auto-generate per-deliverable brief rows in the Briefs tab.
-            </p>
-          </div>
-          <EditableContractSection
-            dealId={deal.id as string}
-            contractSequence={deal.contract_sequence as number | null}
-            initialRate={deal.monthly_rate_cents ? String(Number(deal.monthly_rate_cents) / 100) : ""}
-            initialMonths={String(deal.total_months ?? 3)}
-            initialIsGifted={Boolean(deal.is_gifted)}
-            initialCurrencyCode={(deal.currency_code as string) ?? "USD"}
-            initialDeliverables={(deal.deliverables as Array<{ code: string; count: number }>) ?? []}
-            canViewRates={canViewRates}
-          />
+          {/* ── Card 1: Influencer ── */}
+          <div className="bg-white rounded-xl border border-im8-stone/30 p-6 space-y-5">
+            <h3 className="text-[11px] font-bold text-im8-muted uppercase tracking-[0.1em]">Influencer</h3>
 
-          <div>
-            <label className="block text-sm font-medium text-im8-burgundy mb-1">Rationale * (shown to managers)</label>
-            <textarea value={form.rationale} onChange={e => setForm(f => ({ ...f, rationale: e.target.value }))}
-              rows={3} placeholder="Why this influencer? Niche fit, audience quality, past performance..."
-              className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40 resize-none" />
-          </div>
-
-          <div className="grid grid-cols-3 gap-4">
-            {[
-              { label: "Instagram", key: "igHandle" as const, prefix: "instagram.com/" },
-              { label: "TikTok", key: "tiktokHandle" as const, prefix: "tiktok.com/@" },
-              { label: "YouTube", key: "youtubeHandle" as const, prefix: "youtube.com/@" },
-            ].map(({ label, key, prefix }) => (
-              <div key={key}>
-                <label className="block text-sm font-medium text-im8-burgundy mb-1">{label}</label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={form[key]}
-                    placeholder="@handle"
-                    onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
-                    className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40"
+            <div className="grid grid-cols-2 gap-5">
+              <Field label="Influencer name *" value={form.influencerName}
+                onChange={v => setForm(f => ({ ...f, influencerName: v }))} />
+              <div>
+                <Field label="Email" value={form.influencerEmail}
+                  onChange={v => setForm(f => ({ ...f, influencerEmail: v }))} type="email" />
+                {form.influencerEmail && (
+                  <InviteButton
+                    email={form.influencerEmail}
+                    dealId={deal.id as string}
+                    alreadyLinked={Boolean(deal.influencer_profile_id)}
                   />
-                  {form[key] && (
-                    <a
-                      href={`https://${prefix}${form[key].replace(/^@/, "")}`}
-                      target="_blank" rel="noopener noreferrer"
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-im8-red hover:underline">
-                      ↗
-                    </a>
-                  )}
-                </div>
+                )}
               </div>
-            ))}
+              <Field label="Agency" value={form.agencyName}
+                onChange={v => setForm(f => ({ ...f, agencyName: v }))} />
+              <div>
+                <label className="block text-sm font-medium text-im8-burgundy mb-1">Platform</label>
+                <select value={form.platformPrimary} onChange={e => setForm(f => ({ ...f, platformPrimary: e.target.value }))}
+                  className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none">
+                  {["instagram", "tiktok", "youtube", "facebook", "other"].map(p => (
+                    <option key={p} value={p} className="capitalize">{p}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              {[
+                { label: "Instagram", key: "igHandle" as const, prefix: "instagram.com/" },
+                { label: "TikTok", key: "tiktokHandle" as const, prefix: "tiktok.com/@" },
+                { label: "YouTube", key: "youtubeHandle" as const, prefix: "youtube.com/@" },
+              ].map(({ label, key, prefix }) => (
+                <div key={key}>
+                  <label className="block text-sm font-medium text-im8-burgundy mb-1">{label}</label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={form[key]}
+                      placeholder="@handle"
+                      onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
+                      className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40"
+                    />
+                    {form[key] && (
+                      <a
+                        href={`https://${prefix}${form[key].replace(/^@/, "")}`}
+                        target="_blank" rel="noopener noreferrer"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-im8-red hover:underline">
+                        ↗
+                      </a>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-2 gap-5">
+              <div>
+                <label className="block text-sm font-medium text-im8-burgundy mb-1">Followers (approx)</label>
+                <input type="number" value={form.followerCount} placeholder="50000"
+                  onChange={e => setForm(f => ({ ...f, followerCount: e.target.value }))}
+                  className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-im8-burgundy mb-1">Niche tags</label>
+                <NicheMultiSelect
+                  value={form.nicheTags}
+                  onChange={next => setForm(f => ({ ...f, nicheTags: next }))}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-im8-burgundy mb-1">Rationale <span className="text-im8-burgundy/40 font-normal">(shown to managers)</span></label>
+              <textarea value={form.rationale} onChange={e => setForm(f => ({ ...f, rationale: e.target.value }))}
+                rows={3} placeholder="Why this influencer? Niche fit, audience quality, past performance..."
+                className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40 resize-none" />
+            </div>
+
+            <div className="flex justify-end pt-1">
+              <button onClick={saveOverview} disabled={saving}
+                className={`px-5 py-2 text-white text-sm rounded-lg disabled:opacity-50 transition-colors ${saved ? "bg-emerald-600 hover:bg-emerald-700" : "bg-im8-burgundy hover:bg-im8-red"}`}>
+                {saving ? "Saving..." : saved ? "Saved ✓" : "Save influencer details"}
+              </button>
+            </div>
           </div>
 
-          {/* Follower count + niche */}
-          <div className="grid grid-cols-2 gap-5">
+          {/* ── Card 2: Deal Terms ── */}
+          <div className="bg-white rounded-xl border border-im8-stone/30 p-6 space-y-5">
             <div>
-              <label className="block text-sm font-medium text-im8-burgundy mb-1">Followers (approx)</label>
-              <input type="number" value={form.followerCount} placeholder="50000"
-                onChange={e => setForm(f => ({ ...f, followerCount: e.target.value }))}
-                className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40" />
+              <h3 className="text-[11px] font-bold text-im8-muted uppercase tracking-[0.1em]">Deal Terms</h3>
+              <p className="text-xs text-im8-burgundy/40 mt-1">Rate, duration and deliverables. Saving auto-generates brief rows in the Briefs tab.</p>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-im8-burgundy mb-1">Niche tags</label>
-              <NicheMultiSelect
-                value={form.nicheTags}
-                onChange={next => setForm(f => ({ ...f, nicheTags: next }))}
-              />
+
+            <EditableContractSection
+              dealId={deal.id as string}
+              contractSequence={deal.contract_sequence as number | null}
+              initialRate={deal.monthly_rate_cents ? String(Number(deal.monthly_rate_cents) / 100) : ""}
+              initialMonths={String(deal.total_months ?? 3)}
+              initialIsGifted={Boolean(deal.is_gifted)}
+              initialCurrencyCode={(deal.currency_code as string) ?? "USD"}
+              initialDeliverables={(deal.deliverables as Array<{ code: string; count: number }>) ?? []}
+              canViewRates={canViewRates}
+            />
+
+            <div className="border-t border-im8-stone/20 pt-5 grid grid-cols-2 gap-5">
+              <div>
+                <label className="block text-sm font-medium text-im8-burgundy mb-1">Discount code</label>
+                <input type="text" value={form.discountCode} placeholder="DAVID10"
+                  onChange={e => setForm(f => ({ ...f, discountCode: e.target.value }))}
+                  className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40 font-mono" />
+                <p className="text-xs text-im8-burgundy/40 mt-0.5">Shown to the creator in their portal.</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-im8-burgundy mb-1">Referral link</label>
+                <input type="url" value={form.affiliateLink} placeholder="https://im8health.com/discount/DAVID10"
+                  onChange={e => setForm(f => ({ ...f, affiliateLink: e.target.value }))}
+                  className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40" />
+                {form.affiliateLink && (
+                  <a href={form.affiliateLink} target="_blank" rel="noopener noreferrer"
+                    className="text-xs text-im8-red hover:underline mt-0.5 inline-block">Test link ↗</a>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end">
+              <button onClick={saveOverview} disabled={saving}
+                className={`px-5 py-2 text-white text-sm rounded-lg disabled:opacity-50 transition-colors ${saved ? "bg-emerald-600 hover:bg-emerald-700" : "bg-im8-burgundy hover:bg-im8-red"}`}>
+                {saving ? "Saving..." : saved ? "Saved ✓" : "Save deal details"}
+              </button>
             </div>
           </div>
 
-          {/* Discount code + affiliate link — visible to creators in their dashboard */}
-          <div className="grid grid-cols-2 gap-5">
-            <div>
-              <label className="block text-sm font-medium text-im8-burgundy mb-1">Discount code</label>
-              <input type="text" value={form.discountCode} placeholder="DAVID10"
-                onChange={e => setForm(f => ({ ...f, discountCode: e.target.value }))}
-                className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40 font-mono" />
-              <p className="text-xs text-im8-burgundy/40 mt-0.5">Shown to the creator in their portal.</p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-im8-burgundy mb-1">Referral link</label>
-              <input type="url" value={form.affiliateLink} placeholder="https://im8health.com/discount/DAVID10"
-                onChange={e => setForm(f => ({ ...f, affiliateLink: e.target.value }))}
-                className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40" />
-              {form.affiliateLink && (
-                <a href={form.affiliateLink} target="_blank" rel="noopener noreferrer"
-                  className="text-xs text-im8-red hover:underline mt-0.5 inline-block">Test link ↗</a>
-              )}
-            </div>
-          </div>
-
-          {/* Portal access */}
-          <div className="p-4 bg-im8-sand/40 rounded-xl border border-im8-stone/20 space-y-3">
-            <span className="text-xs font-semibold text-im8-burgundy/50 uppercase tracking-wide">Portal access</span>
+          {/* ── Card 3: Creator Portal ── */}
+          <div className="bg-white rounded-xl border border-im8-stone/30 p-6">
+            <h3 className="text-[11px] font-bold text-im8-muted uppercase tracking-[0.1em] mb-4">Creator Portal</h3>
             <LinkProfileSection dealId={deal.id as string} currentProfileId={deal.influencer_profile_id as string | null} driveFolderId={deal.drive_folder_id as string | null} />
-          </div>
-
-          <div className="flex justify-between items-center pt-2">
-            <button onClick={saveOverview} disabled={saving}
-              className={`ml-auto px-5 py-2 text-white text-sm rounded-lg disabled:opacity-50 transition-colors ${saved ? "bg-green-600 hover:bg-green-700" : "bg-im8-red hover:bg-im8-burgundy"}`}>
-              {saving ? "Saving..." : saved ? "Saved ✓" : "Save changes"}
-            </button>
           </div>
 
           {/* Version history */}
@@ -1418,6 +1435,69 @@ function VersionHistorySection({ dealId }: { dealId: string }) {
               ))}
             </div>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StatusOverrideSelect({ status, dealId, onRefresh }: {
+  status: string; dealId: string; onRefresh: () => void;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [confirm, setConfirm] = useState(false);
+  const [pending, setPending] = useState("");
+
+  function handleChange(next: string) {
+    if (next === status) return;
+    setPending(next);
+    setConfirm(true);
+  }
+
+  async function doOverride() {
+    setLoading(true);
+    setConfirm(false);
+    await fetch(`/api/deals/${dealId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: pending }),
+    });
+    setLoading(false);
+    onRefresh();
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-[11px] text-im8-burgundy/40 uppercase tracking-[0.06em] font-medium">Override</span>
+      <select
+        value={status}
+        disabled={loading}
+        onChange={e => handleChange(e.target.value)}
+        className="text-xs px-2 py-1.5 border border-im8-stone/40 rounded-lg text-im8-burgundy bg-white focus:outline-none disabled:opacity-50 capitalize"
+      >
+        {STATUS_FLOW.map(s => (
+          <option key={s} value={s} className="capitalize">{s.replace(/_/g, " ")}</option>
+        ))}
+      </select>
+      {confirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setConfirm(false)}>
+          <div className="absolute inset-0 bg-black/40" />
+          <div className="relative z-10 bg-white rounded-xl shadow-xl p-6 max-w-sm w-full" onClick={e => e.stopPropagation()}>
+            <p className="text-sm font-semibold text-im8-burgundy mb-2">Change status?</p>
+            <p className="text-xs text-im8-burgundy/60 mb-5">
+              Move this deal from <span className="font-medium capitalize">{status.replace(/_/g, " ")}</span> → <span className="font-medium capitalize">{pending.replace(/_/g, " ")}</span>. This bypasses the normal flow.
+            </p>
+            <div className="flex gap-3">
+              <button onClick={doOverride}
+                className="flex-1 py-2 bg-im8-burgundy text-white text-sm rounded-lg hover:bg-im8-red transition-colors">
+                Confirm
+              </button>
+              <button onClick={() => setConfirm(false)}
+                className="flex-1 py-2 border border-im8-stone/40 text-im8-burgundy text-sm rounded-lg hover:bg-im8-offwhite transition-colors">
+                Cancel
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -76,7 +76,7 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
         <Link href="/admin/deals" className="text-im8-burgundy/50 hover:text-im8-burgundy text-sm">← Partner Tracker</Link>
         <span className="text-im8-burgundy/30">/</span>
         <h1 className="text-2xl font-bold text-im8-burgundy">{deal.influencer_name}</h1>
-        <span className="text-xs px-2.5 py-1 rounded-full bg-purple-100 text-purple-700 font-semibold">
+        <span className="text-xs px-2.5 py-1 rounded-[6px] bg-im8-burgundy/10 text-im8-burgundy font-semibold">
           Contract {contractSeq}
         </span>
         {prevContract && (
