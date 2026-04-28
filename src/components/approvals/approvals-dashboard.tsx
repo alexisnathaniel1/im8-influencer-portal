@@ -16,7 +16,46 @@ type Deal = {
   rationale: string | null;
   contract_sequence: number | null;
   deliverables?: Array<{ code: string; count: number }> | null;
+  instagram_handle?: string | null;
+  tiktok_handle?: string | null;
+  youtube_handle?: string | null;
 };
+
+// Render any social handles the creator has as inline hyperlinks. Empty
+// string output when no handles exist; the caller decides whether to render.
+function HandleLinks({ deal, className = "" }: { deal: Deal; className?: string }) {
+  const handles: Array<{ label: string; href: string; display: string }> = [];
+  if (deal.instagram_handle) {
+    const h = deal.instagram_handle.replace(/^@/, "");
+    handles.push({ label: "IG", href: `https://instagram.com/${h}`, display: `@${h}` });
+  }
+  if (deal.tiktok_handle) {
+    const h = deal.tiktok_handle.replace(/^@/, "");
+    handles.push({ label: "TT", href: `https://tiktok.com/@${h}`, display: `@${h}` });
+  }
+  if (deal.youtube_handle) {
+    const h = deal.youtube_handle.replace(/^@/, "");
+    handles.push({ label: "YT", href: `https://youtube.com/@${h}`, display: `@${h}` });
+  }
+  if (handles.length === 0) return null;
+  return (
+    <div className={`flex flex-wrap gap-x-3 gap-y-1 text-xs ${className}`}>
+      {handles.map(h => (
+        <a
+          key={h.label}
+          href={h.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-im8-burgundy/70 hover:text-im8-red hover:underline"
+        >
+          <span className="text-[10px] font-bold text-im8-muted uppercase tracking-wide">{h.label}</span>
+          <span>{h.display}</span>
+          <span className="text-[10px] opacity-50">↗</span>
+        </a>
+      ))}
+    </div>
+  );
+}
 type Packet = {
   id: string;
   title: string;
@@ -234,6 +273,25 @@ export default function ApprovalsDashboard({
     setDeletingPacketId(null);
   }
 
+  // Recall a sent batch — same effect as delete (drops the packet so the
+  // deals re-appear in 'Ready for approval'), but framed as a workflow
+  // action rather than a destructive one. Comments and decisions on the
+  // batch are dropped along with it; the deals' rationale, deliverables,
+  // and rate are preserved on the deal record.
+  async function sendBackToReady(packet: Packet, e?: React.MouseEvent) {
+    e?.stopPropagation();
+    if (!confirm(`Send "${packet.title}" back to "Ready for approval"? You can edit and re-send it. Any comments and decisions on this batch will be cleared.`)) return;
+    setDeletingPacketId(packet.id);
+    const res = await fetch(`/api/approvals/${packet.id}`, { method: "DELETE" });
+    if (!res.ok) {
+      alert("Failed to recall the batch.");
+    } else {
+      if (openPacket?.id === packet.id) setOpenPacket(null);
+      startTransition(() => router.refresh());
+    }
+    setDeletingPacketId(null);
+  }
+
   function rationaleValue(d: Deal) {
     return editedRationales[d.id] ?? d.rationale ?? "";
   }
@@ -297,6 +355,8 @@ export default function ApprovalsDashboard({
                           {totalUsd !== null ? ` · $${totalUsd.toLocaleString()} total` : ""}
                         </div>
                       )}
+
+                      <HandleLinks deal={d} />
 
                       {(d.deliverables ?? []).length > 0 && (
                         <p className="text-[11px] text-im8-burgundy/50">
@@ -473,11 +533,19 @@ export default function ApprovalsDashboard({
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <button
+                  onClick={(e) => sendBackToReady(openPacket, e)}
+                  disabled={deletingPacketId === openPacket.id}
+                  title="Move this batch back to 'Ready for approval' so you can edit and re-send"
+                  className="text-xs px-3 py-1.5 border border-im8-stone/40 text-im8-burgundy hover:bg-im8-offwhite rounded-lg transition-colors disabled:opacity-50"
+                >
+                  ← Send back to ready
+                </button>
+                <button
                   onClick={(e) => deletePacket(openPacket, e)}
                   disabled={deletingPacketId === openPacket.id}
                   className="text-sm text-im8-burgundy/30 hover:text-red-600 hover:bg-red-50 px-2 py-1 rounded transition-colors disabled:opacity-50"
                 >
-                  🗑 Delete
+                  🗑
                 </button>
                 <button
                   onClick={() => setOpenPacket(null)}
@@ -538,6 +606,7 @@ export default function ApprovalsDashboard({
                             {d.platform_primary}
                             {d.agency_name && ` · ${d.agency_name}`}
                           </div>
+                          <HandleLinks deal={d} className="mt-1.5" />
                         </div>
                         {canViewRates && monthlyUsd !== null && (
                           <div className="text-right">

@@ -11,7 +11,28 @@ type DealForApproval = {
   rationale?: string | null;
   deliverables?: Array<{ code: string; count: number }> | null;
   contract_sequence?: number | null;
+  instagram_handle?: string | null;
+  tiktok_handle?: string | null;
+  youtube_handle?: string | null;
 };
+
+function buildHandlesHtml(d: DealForApproval): string {
+  const links: string[] = [];
+  if (d.instagram_handle) {
+    const h = d.instagram_handle.replace(/^@/, "");
+    links.push(`<a href="https://instagram.com/${h}" style="color:#A40011;text-decoration:none;font-weight:600">IG @${h}</a>`);
+  }
+  if (d.tiktok_handle) {
+    const h = d.tiktok_handle.replace(/^@/, "");
+    links.push(`<a href="https://tiktok.com/@${h}" style="color:#A40011;text-decoration:none;font-weight:600">TikTok @${h}</a>`);
+  }
+  if (d.youtube_handle) {
+    const h = d.youtube_handle.replace(/^@/, "");
+    links.push(`<a href="https://youtube.com/@${h}" style="color:#A40011;text-decoration:none;font-weight:600">YouTube @${h}</a>`);
+  }
+  if (links.length === 0) return "";
+  return `<p style="margin:6px 0 0;font-size:12px;color:#8C7A6E">${links.join(" &nbsp;·&nbsp; ")}</p>`;
+}
 
 export function approvalRequestTemplate(params: {
   approverName: string;
@@ -41,10 +62,15 @@ export function approvalRequestTemplate(params: {
       const rateLine = monthlyUsd !== null
         ? `$${monthlyUsd.toLocaleString()}/mo${d.total_months ? ` × ${d.total_months}mo = $${totalUsd!.toLocaleString()}` : ""}`
         : "Rate TBC";
+      const handleParts: string[] = [];
+      if (d.instagram_handle) handleParts.push(`IG @${d.instagram_handle.replace(/^@/, "")}: https://instagram.com/${d.instagram_handle.replace(/^@/, "")}`);
+      if (d.tiktok_handle) handleParts.push(`TikTok @${d.tiktok_handle.replace(/^@/, "")}: https://tiktok.com/@${d.tiktok_handle.replace(/^@/, "")}`);
+      if (d.youtube_handle) handleParts.push(`YouTube @${d.youtube_handle.replace(/^@/, "")}: https://youtube.com/@${d.youtube_handle.replace(/^@/, "")}`);
       return [
         `── ${d.influencer_name}${d.contract_sequence ? ` (Contract ${d.contract_sequence})` : ""} ──`,
         d.agency_name ? `Agency: ${d.agency_name}` : null,
         `Platform: ${d.platform_primary ?? "—"}`,
+        ...handleParts,
         `Rate: ${rateLine}`,
         `Deliverables: ${formatDeliverablesSummary(d.deliverables ?? null)}`,
         d.rationale ? `Rationale: ${d.rationale}` : null,
@@ -81,6 +107,7 @@ export function approvalRequestTemplate(params: {
           <p style="margin:4px 0 0;font-size:13px;color:#8C7A6E">
             ${platformLabel}${d.agency_name ? ` &nbsp;·&nbsp; ${d.agency_name}` : ""}
           </p>
+          ${buildHandlesHtml(d)}
         </div>
 
         <!-- Rate + Duration -->

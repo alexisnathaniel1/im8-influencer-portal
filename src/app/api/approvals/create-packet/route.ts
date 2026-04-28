@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
     const { data: approvers } = await admin.from("profiles").select("email, full_name").in("id", approverIds);
     const { data: deals } = await admin
       .from("deals")
-      .select("id, influencer_name, agency_name, platform_primary, monthly_rate_cents, total_months, rationale, deliverables, contract_sequence")
+      .select("id, influencer_name, agency_name, platform_primary, monthly_rate_cents, total_months, rationale, deliverables, contract_sequence, instagram_handle, tiktok_handle, youtube_handle")
       .in("id", dealIds);
 
     const portalUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
