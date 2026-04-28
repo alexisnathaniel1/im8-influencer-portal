@@ -76,8 +76,13 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     });
   }
 
-  // When the admin approves a discovery profile, auto-create an approval packet
-  // seeded from the profile so management review can begin.
+  // When the admin approves a discovery profile we just create the deal in
+  // 'pending_approval' status and mark the discovery row 'converted'. The
+  // deal then lands on the Approvals page's "Ready for approval" pool where
+  // an admin can edit the rationale, batch it with other deals, and send
+  // the whole batch to management as one approval request. Previously this
+  // route also created a single-deal approval_packet immediately, which
+  // skipped the staging step.
   if (updates.status === "approved" && before && before.status !== "approved") {
     try {
       const { data: existingDeal } = await admin
@@ -124,17 +129,6 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       }
 
       if (dealId) {
-        await admin.from("approval_packets").insert({
-          created_by: user.id,
-          title: `${before.influencer_name} — Contract 1`,
-          status: "pending",
-          deal_ids: [dealId],
-          approver_ids: [],
-          required_approvals: 3,
-          approved_count: 0,
-          rejected_count: 0,
-        });
-
         // Flip discovery to converted to remove it from the Discovery queue
         await admin.from("discovery_profiles").update({ status: "converted" }).eq("id", id);
 
@@ -142,13 +136,13 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
           discovery_profile_id: id,
           author_id: user.id,
           author_display_name: actorDisplay,
-          body: `Approved and moved to the Approvals queue.`,
+          body: `Approved and moved to the Approvals 'Ready for approval' queue.`,
           kind: "status_change",
           visible_to_partner: false,
         });
       }
     } catch (err) {
-      console.error("[discovery/approve] approval packet creation failed:", err);
+      console.error("[discovery/approve] deal creation failed:", err);
     }
   }
 

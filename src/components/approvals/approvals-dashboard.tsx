@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { formatDeliverablesSummary } from "@/lib/deliverables";
 
 type Deal = {
   id: string;
@@ -14,6 +15,7 @@ type Deal = {
   total_rate_cents: number | null;
   rationale: string | null;
   contract_sequence: number | null;
+  deliverables?: Array<{ code: string; count: number }> | null;
 };
 type Packet = {
   id: string;
@@ -37,141 +39,189 @@ type ApprovalComment = {
 
 const PACKET_STATUS_COLORS: Record<string, string> = {
   pending: "bg-yellow-100 text-yellow-700",
-  partially_approved: "bg-orange-100 text-orange-700",
+  partially_approved: "bg-amber-100 text-amber-700",
   approved: "bg-green-100 text-green-700",
   rejected: "bg-red-100 text-red-600",
 };
 
 export default function ApprovalsDashboard({
-  agreedDeals,
+  readyDeals,
   packets,
+  packetDeals,
   approvers,
   canViewRates = true,
   userId,
 }: {
-  agreedDeals: Deal[];
+  readyDeals: Deal[];
   packets: Packet[];
+  packetDeals: Deal[];
   approvers: Approver[];
   canViewRates?: boolean;
   userId: string;
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
+
+  // Ready-for-approval state
   const [selectedDealIds, setSelectedDealIds] = useState<string[]>([]);
-  const [title, setTitle] = useState(
+  const [editedRationales, setEditedRationales] = useState<Record<string, string>>({});
+  const [savingRationaleId, setSavingRationaleId] = useState<string | null>(null);
+
+  // Batch-creation form state
+  const [batchTitle, setBatchTitle] = useState(
     `${new Date().toLocaleString("default", { month: "long", year: "numeric" })} Batch`
   );
-  const [selectedApprovers, setSelectedApprovers] = useState<string[]>(
-    approvers.map((a) => a.id)
-  );
-  const [creating, setCreating] = useState(false);
+  const [selectedApprovers, setSelectedApprovers] = useState<string[]>(approvers.map((a) => a.id));
+  const [batchNote, setBatchNote] = useState("");
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const [deletingPacketId, setDeletingPacketId] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
 
-  // Side panel state
+  // Side-panel state
   const [openPacket, setOpenPacket] = useState<Packet | null>(null);
   const [comments, setComments] = useState<ApprovalComment[]>([]);
   const [loadingComments, setLoadingComments] = useState(false);
-  const [commentBody, setCommentBody] = useState("");
-  const [postingComment, setPostingComment] = useState(false);
+  const [generalComment, setGeneralComment] = useState("");
+  const [postingGeneral, setPostingGeneral] = useState(false);
+  const [perDealComment, setPerDealComment] = useState<Record<string, string>>({});
+  const [perDealBusy, setPerDealBusy] = useState<string | null>(null);
+  const [bulkBusy, setBulkBusy] = useState<"approve" | "reject" | null>(null);
+  const [deletingPacketId, setDeletingPacketId] = useState<string | null>(null);
+
+  const dealsById = useMemo(() => {
+    const map: Record<string, Deal> = {};
+    for (const d of [...readyDeals, ...packetDeals]) map[d.id] = d;
+    return map;
+  }, [readyDeals, packetDeals]);
 
   function toggleDeal(id: string) {
-    setSelectedDealIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    );
+    setSelectedDealIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+  }
+  function toggleAllDeals() {
+    setSelectedDealIds(prev => prev.length === readyDeals.length ? [] : readyDeals.map(d => d.id));
+  }
+  function toggleApprover(id: string) {
+    setSelectedApprovers((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
   }
 
-  function toggleApprover(id: string) {
-    setSelectedApprovers((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    );
+  // Auto-save rationale on blur
+  async function saveRationale(dealId: string) {
+    const value = editedRationales[dealId];
+    if (value === undefined) return;
+    const original = readyDeals.find(d => d.id === dealId)?.rationale ?? "";
+    if (value === original) return;
+    setSavingRationaleId(dealId);
+    await fetch(`/api/deals/${dealId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rationale: value || null }),
+    });
+    setSavingRationaleId(null);
+    startTransition(() => router.refresh());
   }
 
   async function createPacket() {
-    if (!selectedDealIds.length || !selectedApprovers.length || !title.trim()) return;
+    if (!selectedDealIds.length || !selectedApprovers.length || !batchTitle.trim()) return;
     setCreating(true);
-    await fetch("/api/approvals/create-packet", {
+    const res = await fetch("/api/approvals/create-packet", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        title,
+        title: batchTitle,
         dealIds: selectedDealIds,
         approverIds: selectedApprovers,
+        batchNote: batchNote.trim() || null,
       }),
     });
-    startTransition(() => router.refresh());
-    setSelectedDealIds([]);
-    setShowCreateForm(false);
     setCreating(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      alert(data.error || "Failed to create batch.");
+      return;
+    }
+    setSelectedDealIds([]);
+    setBatchNote("");
+    setShowCreateForm(false);
+    startTransition(() => router.refresh());
   }
 
   async function openPacketPanel(packet: Packet) {
     setOpenPacket(packet);
     setLoadingComments(true);
+    setPerDealComment({});
     const res = await fetch(`/api/approvals/${packet.id}/comments`);
     const data = await res.json().catch(() => ({ comments: [] }));
     setComments(data.comments ?? []);
     setLoadingComments(false);
   }
 
-  async function postComment(kind: "comment" | "approval" | "rejection" | "revision_request") {
-    if (!openPacket) return;
-    if (kind === "comment" && !commentBody.trim()) return;
-    setPostingComment(true);
-
-    // 1. Post the comment/thread entry (visible in side panel)
+  async function postGeneralComment() {
+    if (!openPacket || !generalComment.trim()) return;
+    setPostingGeneral(true);
     await fetch(`/api/approvals/${openPacket.id}/comments`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ body: commentBody || kindLabel(kind), kind }),
+      body: JSON.stringify({ body: generalComment, kind: "comment" }),
     });
-
-    // 2. For approval/rejection/revision actions, also submit a formal decision
-    //    so the decide route can update deal status and packet counts.
-    if (kind !== "comment") {
-      const decisionMap: Record<string, string> = {
-        approval: "approved",
-        rejection: "rejected",
-        revision_request: "revision_requested",
-      };
-      const decisionValue = decisionMap[kind];
-      // Apply the same decision to every deal in this packet
-      const decisions: Record<string, { decision: string; comment: string }> = {};
-      for (const dealId of openPacket.deal_ids) {
-        decisions[dealId] = { decision: decisionValue, comment: commentBody };
-      }
-      const decideRes = await fetch(`/api/approvals/${openPacket.id}/decide`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ approverId: userId, decisions }),
-      });
-      if (decideRes.ok) {
-        const decideData = await decideRes.json().catch(() => ({}));
-        // Update the open packet's counts optimistically so the panel header reflects them
-        const updatedStatus = decideData.packetStatus as string | undefined;
-        if (updatedStatus) {
-          setOpenPacket(prev => prev ? {
-            ...prev,
-            status: updatedStatus,
-            approved_count: kind === "approval" ? prev.approved_count + 1 : prev.approved_count,
-            rejected_count: kind === "rejection" ? prev.rejected_count + 1 : prev.rejected_count,
-          } : prev);
-        }
-      }
-    }
-
-    // 3. Refresh comment thread
     const res = await fetch(`/api/approvals/${openPacket.id}/comments`);
     const data = await res.json().catch(() => ({ comments: [] }));
     setComments(data.comments ?? []);
-    setCommentBody("");
-    setPostingComment(false);
-    // Refresh page data (updates packet list counts and deals list)
+    setGeneralComment("");
+    setPostingGeneral(false);
+  }
+
+  async function decideDeal(dealId: string, decision: "approved" | "rejected") {
+    if (!openPacket) return;
+    setPerDealBusy(`${dealId}:${decision}`);
+    const comment = perDealComment[dealId] ?? "";
+    await fetch(`/api/approvals/${openPacket.id}/decide`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        approverId: userId,
+        decisions: { [dealId]: { decision, comment } },
+      }),
+    });
+    // Refresh comment thread (includes the per-deal note as a comment)
+    if (comment.trim()) {
+      const dealName = dealsById[dealId]?.influencer_name ?? "creator";
+      await fetch(`/api/approvals/${openPacket.id}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          body: `[${dealName}] ${decision === "approved" ? "✓ Approved" : "✗ Rejected"}: ${comment}`,
+          kind: "comment",
+        }),
+      });
+    }
+    const res = await fetch(`/api/approvals/${openPacket.id}/comments`);
+    const data = await res.json().catch(() => ({ comments: [] }));
+    setComments(data.comments ?? []);
+    setPerDealComment(p => ({ ...p, [dealId]: "" }));
+    setPerDealBusy(null);
     startTransition(() => router.refresh());
   }
 
-  async function deletePacket(packet: Packet, e: React.MouseEvent) {
-    e.stopPropagation();
+  async function bulkDecide(decision: "approved" | "rejected") {
+    if (!openPacket) return;
+    setBulkBusy(decision === "approved" ? "approve" : "reject");
+    const decisions: Record<string, { decision: string; comment: string }> = {};
+    for (const dealId of openPacket.deal_ids) {
+      decisions[dealId] = { decision, comment: "" };
+    }
+    await fetch(`/api/approvals/${openPacket.id}/decide`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ approverId: userId, decisions }),
+    });
+    const res = await fetch(`/api/approvals/${openPacket.id}/comments`);
+    const data = await res.json().catch(() => ({ comments: [] }));
+    setComments(data.comments ?? []);
+    setBulkBusy(null);
+    startTransition(() => router.refresh());
+  }
+
+  async function deletePacket(packet: Packet, e?: React.MouseEvent) {
+    e?.stopPropagation();
     if (!confirm(`Delete approval batch "${packet.title}"? This cannot be undone.`)) return;
     setDeletingPacketId(packet.id);
     const res = await fetch(`/api/approvals/${packet.id}`, { method: "DELETE" });
@@ -184,106 +234,124 @@ export default function ApprovalsDashboard({
     setDeletingPacketId(null);
   }
 
-  function kindLabel(kind: string) {
-    if (kind === "approval") return "✓ Approved this packet";
-    if (kind === "rejection") return "✗ Rejected this packet";
-    if (kind === "revision_request") return "⟳ Requested revisions";
-    return "";
+  function rationaleValue(d: Deal) {
+    return editedRationales[d.id] ?? d.rationale ?? "";
   }
-
-  function kindStyle(kind: string) {
-    if (kind === "approval") return "bg-green-50 border-green-200 text-green-800";
-    if (kind === "rejection") return "bg-red-50 border-red-200 text-red-800";
-    if (kind === "revision_request") return "bg-orange-50 border-orange-200 text-orange-800";
-    return "bg-im8-offwhite border-im8-stone/30 text-im8-ink";
-  }
-
-  const dealsById = Object.fromEntries(agreedDeals.map((d) => [d.id, d]));
 
   return (
     <div className="grid grid-cols-5 gap-6">
-      {/* Left: ready deals */}
-      <div className="col-span-2 space-y-4">
+      {/* ───────── LEFT — Ready for approval ───────── */}
+      <div className="col-span-2 space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold text-im8-burgundy">
-            Ready for approval ({agreedDeals.length})
+            Ready for approval ({readyDeals.length})
           </h2>
-          {selectedDealIds.length > 0 && (
-            <button
-              onClick={() => setShowCreateForm(true)}
-              className="px-3 py-1.5 bg-im8-red text-white text-sm rounded-lg hover:bg-im8-burgundy transition-colors"
-            >
-              Send for approval ({selectedDealIds.length})
+          {readyDeals.length > 0 && (
+            <button onClick={toggleAllDeals} className="text-xs text-im8-red hover:underline">
+              {selectedDealIds.length === readyDeals.length ? "Deselect all" : "Select all"}
             </button>
           )}
         </div>
 
-        {agreedDeals.length === 0 ? (
+        {readyDeals.length === 0 ? (
           <div className="bg-white rounded-xl border border-im8-stone/30 p-8 text-center text-im8-burgundy/40 text-sm">
-            No deals in &ldquo;agreed&rdquo; status yet.
+            No deals ready for approval. Approve a creator from Discovery and they&rsquo;ll appear here.
           </div>
         ) : (
           <div className="space-y-2">
-            {agreedDeals.map((d) => (
-              <label
-                key={d.id}
-                className={`flex items-start gap-3 bg-white rounded-xl border p-4 cursor-pointer transition-colors ${
-                  selectedDealIds.includes(d.id)
-                    ? "border-im8-red bg-im8-offwhite"
-                    : "border-im8-stone/30 hover:border-im8-stone/60"
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  checked={selectedDealIds.includes(d.id)}
-                  onChange={() => toggleDeal(d.id)}
-                  className="mt-0.5 accent-im8-red"
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-medium text-im8-burgundy text-sm">{d.influencer_name}</span>
-                    <span className="text-[11px] px-1.5 py-0.5 rounded-[6px] bg-purple-100 text-purple-700 font-semibold">
-                      Contract {d.contract_sequence ?? 1}
-                    </span>
+            {readyDeals.map((d) => {
+              const checked = selectedDealIds.includes(d.id);
+              const monthlyUsd = d.monthly_rate_cents ? d.monthly_rate_cents / 100 : null;
+              const totalUsd = monthlyUsd !== null && d.total_months ? monthlyUsd * d.total_months : null;
+              return (
+                <div
+                  key={d.id}
+                  className={`bg-white rounded-xl border p-4 transition-colors ${checked ? "border-im8-red bg-im8-offwhite" : "border-im8-stone/30"}`}
+                >
+                  <div className="flex items-start gap-3">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleDeal(d.id)}
+                      className="mt-1 accent-im8-red"
+                    />
+                    <div className="flex-1 min-w-0 space-y-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Link
+                          href={`/admin/deals/${d.id}`}
+                          className="font-semibold text-im8-burgundy text-sm hover:text-im8-red hover:underline"
+                        >
+                          {d.influencer_name}
+                        </Link>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-[6px] bg-im8-burgundy/10 text-im8-burgundy font-semibold">
+                          Contract {d.contract_sequence ?? 1}
+                        </span>
+                        <span className="text-xs text-im8-burgundy/50 capitalize">{d.platform_primary}</span>
+                        {d.agency_name && <span className="text-xs text-im8-burgundy/50">· {d.agency_name}</span>}
+                      </div>
+
+                      {canViewRates && (
+                        <div className="text-xs text-im8-burgundy/70">
+                          {monthlyUsd !== null ? `$${monthlyUsd.toLocaleString()}/mo` : "Rate TBC"}
+                          {d.total_months ? ` · ${d.total_months}mo` : ""}
+                          {totalUsd !== null ? ` · $${totalUsd.toLocaleString()} total` : ""}
+                        </div>
+                      )}
+
+                      {(d.deliverables ?? []).length > 0 && (
+                        <p className="text-[11px] text-im8-burgundy/50">
+                          {formatDeliverablesSummary(d.deliverables ?? null)}
+                        </p>
+                      )}
+
+                      {/* Inline rationale editor */}
+                      <div>
+                        <label className="block text-[10px] font-bold text-im8-muted uppercase tracking-[0.1em] mb-1">
+                          Rationale for management
+                          {savingRationaleId === d.id && <span className="ml-2 text-im8-red/60 normal-case">Saving…</span>}
+                        </label>
+                        <textarea
+                          rows={2}
+                          value={rationaleValue(d)}
+                          onChange={(e) => setEditedRationales(p => ({ ...p, [d.id]: e.target.value }))}
+                          onBlur={() => saveRationale(d.id)}
+                          placeholder="Why this creator? Niche fit, audience quality, past results…"
+                          className="w-full px-2 py-1.5 text-xs border border-im8-stone/40 rounded-lg text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40 resize-none"
+                        />
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-xs text-im8-burgundy/50">
-                    {d.platform_primary}
-                    {canViewRates && d.monthly_rate_cents
-                      ? ` · $${(d.monthly_rate_cents / 100).toFixed(0)}/mo`
-                      : ""}
-                    {d.total_months ? ` · ${d.total_months}mo` : ""}
-                    {d.agency_name ? ` · ${d.agency_name}` : ""}
-                  </div>
-                  {d.rationale && (
-                    <p className="text-xs text-im8-burgundy/60 mt-1 line-clamp-2 italic">
-                      {d.rationale}
-                    </p>
-                  )}
                 </div>
-              </label>
-            ))}
+              );
+            })}
           </div>
         )}
 
-        {/* Create packet form */}
+        {selectedDealIds.length > 0 && !showCreateForm && (
+          <button
+            onClick={() => setShowCreateForm(true)}
+            className="w-full py-2.5 bg-im8-burgundy text-white text-sm font-medium rounded-lg hover:bg-im8-red transition-colors"
+          >
+            Send {selectedDealIds.length} creator{selectedDealIds.length === 1 ? "" : "s"} to management →
+          </button>
+        )}
+
         {showCreateForm && (
           <div className="bg-white rounded-xl border border-im8-stone/30 p-5 space-y-4">
-            <h3 className="font-semibold text-im8-burgundy text-sm">New approval batch</h3>
+            <h3 className="font-semibold text-im8-burgundy text-sm">Send batch to management</h3>
+
             <div>
-              <label className="block text-xs font-medium text-im8-burgundy/60 mb-1 uppercase tracking-wide">
-                Batch title
-              </label>
+              <label className="block text-[10px] font-bold text-im8-muted uppercase tracking-[0.1em] mb-1">Batch title</label>
               <input
                 type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
+                value={batchTitle}
+                onChange={(e) => setBatchTitle(e.target.value)}
                 className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40"
               />
             </div>
+
             <div>
-              <label className="block text-xs font-medium text-im8-burgundy/60 mb-2 uppercase tracking-wide">
-                Send to approvers
-              </label>
+              <label className="block text-[10px] font-bold text-im8-muted uppercase tracking-[0.1em] mb-1">Send to</label>
               {approvers.length === 0 ? (
                 <p className="text-xs text-im8-burgundy/40">No approvers set up yet.</p>
               ) : (
@@ -303,13 +371,27 @@ export default function ApprovalsDashboard({
                 </div>
               )}
             </div>
+
+            <div>
+              <label className="block text-[10px] font-bold text-im8-muted uppercase tracking-[0.1em] mb-1">
+                Note to management <span className="text-im8-burgundy/40 normal-case font-normal">(optional, included in the email)</span>
+              </label>
+              <textarea
+                rows={3}
+                value={batchNote}
+                onChange={(e) => setBatchNote(e.target.value)}
+                placeholder="Add any general context or a summary for this batch…"
+                className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40 resize-none"
+              />
+            </div>
+
             <div className="flex gap-2">
               <button
                 onClick={createPacket}
                 disabled={creating || !selectedApprovers.length}
-                className="flex-1 py-2 bg-im8-red text-white text-sm rounded-lg hover:bg-im8-burgundy disabled:opacity-50 transition-colors"
+                className="flex-1 py-2 bg-im8-burgundy text-white text-sm rounded-lg hover:bg-im8-red disabled:opacity-50 transition-colors"
               >
-                {creating ? "Sending…" : `Send ${selectedDealIds.length} creator${selectedDealIds.length !== 1 ? "s" : ""} for approval`}
+                {creating ? "Sending…" : `Send ${selectedDealIds.length} to management`}
               </button>
               <button
                 onClick={() => setShowCreateForm(false)}
@@ -322,7 +404,7 @@ export default function ApprovalsDashboard({
         )}
       </div>
 
-      {/* Right: existing packets */}
+      {/* ───────── RIGHT — Approval batches ───────── */}
       <div className="col-span-3 space-y-4">
         <h2 className="font-semibold text-im8-burgundy">Approval batches ({packets.length})</h2>
 
@@ -342,20 +424,15 @@ export default function ApprovalsDashboard({
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-semibold text-im8-burgundy text-sm">{p.title}</span>
-                      <span
-                        className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${PACKET_STATUS_COLORS[p.status] ?? ""}`}
-                      >
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${PACKET_STATUS_COLORS[p.status] ?? ""}`}>
                         {p.status.replace("_", " ")}
                       </span>
                     </div>
                     <div className="text-xs text-im8-burgundy/50 mt-1">
-                      {p.deal_ids.length} creator{p.deal_ids.length !== 1 ? "s" : ""} ·{" "}
-                      {p.approved_count} approved · {p.rejected_count} rejected ·{" "}
-                      {p.approver_ids.length} approver{p.approver_ids.length !== 1 ? "s" : ""}
+                      {p.deal_ids.length} creator{p.deal_ids.length !== 1 ? "s" : ""} · {p.approved_count} approved · {p.rejected_count} rejected
                     </div>
                     <div className="text-xs text-im8-burgundy/40 mt-0.5">
-                      Sent {new Date(p.created_at).toLocaleDateString()} by{" "}
-                      {p.created_by?.full_name ?? "—"}
+                      Sent {new Date(p.created_at).toLocaleDateString()} by {p.created_by?.full_name ?? "—"}
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
@@ -376,163 +453,189 @@ export default function ApprovalsDashboard({
         )}
       </div>
 
-      {/* Side panel — packet thread */}
+      {/* ───────── SIDE PANEL — packet detail with per-creator decisions ───────── */}
       {openPacket && (
         <div className="fixed inset-0 z-50 flex">
-          <div
-            className="flex-1 bg-black/40"
-            onClick={() => setOpenPacket(null)}
-          />
-          <div className="w-full max-w-lg bg-white shadow-2xl flex flex-col overflow-hidden">
+          <div className="flex-1 bg-black/40" onClick={() => setOpenPacket(null)} />
+          <div className="w-full max-w-2xl bg-white shadow-2xl flex flex-col overflow-hidden">
             {/* Header */}
             <div className="px-6 py-4 border-b border-im8-stone/20 flex items-start justify-between gap-3">
-              <div>
-                <h2 className="font-bold text-im8-burgundy">{openPacket.title}</h2>
+              <div className="min-w-0 flex-1">
+                <h2 className="font-bold text-im8-burgundy truncate">{openPacket.title}</h2>
                 <div className="flex items-center gap-2 mt-1 flex-wrap">
-                  <span
-                    className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${PACKET_STATUS_COLORS[openPacket.status] ?? ""}`}
-                  >
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${PACKET_STATUS_COLORS[openPacket.status] ?? ""}`}>
                     {openPacket.status.replace("_", " ")}
                   </span>
                   <span className="text-xs text-im8-burgundy/50">
-                    {openPacket.approved_count} approved · {openPacket.rejected_count} rejected
+                    {openPacket.approved_count} approved · {openPacket.rejected_count} rejected · {openPacket.deal_ids.length} total
                   </span>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 <button
                   onClick={(e) => deletePacket(openPacket, e)}
                   disabled={deletingPacketId === openPacket.id}
-                  title="Delete this batch"
                   className="text-sm text-im8-burgundy/30 hover:text-red-600 hover:bg-red-50 px-2 py-1 rounded transition-colors disabled:opacity-50"
                 >
                   🗑 Delete
                 </button>
                 <button
                   onClick={() => setOpenPacket(null)}
-                  className="text-im8-burgundy/40 hover:text-im8-burgundy text-xl leading-none mt-0.5"
-                >
-                  ×
-                </button>
+                  className="text-im8-burgundy/40 hover:text-im8-burgundy text-2xl leading-none"
+                >×</button>
               </div>
             </div>
 
-            {/* Creators in this packet */}
-            <div className="px-6 py-3 border-b border-im8-stone/20 bg-im8-offwhite">
-              <p className="text-xs font-semibold text-im8-burgundy/50 uppercase tracking-wide mb-2">
-                Creators in this batch
-              </p>
-              <div className="space-y-1">
+            {/* Bulk actions */}
+            <div className="px-6 py-3 border-b border-im8-stone/20 bg-im8-offwhite flex gap-2 flex-wrap">
+              <button
+                onClick={() => bulkDecide("approved")}
+                disabled={bulkBusy !== null}
+                className="px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors"
+              >
+                {bulkBusy === "approve" ? "Approving…" : `✓ Approve all (${openPacket.deal_ids.length})`}
+              </button>
+              <button
+                onClick={() => bulkDecide("rejected")}
+                disabled={bulkBusy !== null}
+                className="px-3 py-1.5 bg-red-600 text-white text-xs font-medium rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors"
+              >
+                {bulkBusy === "reject" ? "Rejecting…" : "✗ Reject all"}
+              </button>
+            </div>
+
+            {/* Scrollable body */}
+            <div className="flex-1 overflow-y-auto">
+              {/* Per-creator cards with individual decisions */}
+              <div className="px-6 py-4 space-y-4">
+                <p className="text-[10px] font-bold text-im8-muted uppercase tracking-[0.12em]">Creators in this batch</p>
                 {openPacket.deal_ids.map((dealId) => {
                   const d = dealsById[dealId];
-                  return d ? (
-                    <div key={dealId} className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <Link
-                          href={`/admin/deals/${dealId}`}
-                          className="text-sm font-medium text-im8-red hover:underline truncate"
-                          onClick={() => setOpenPacket(null)}
-                        >
-                          {d.influencer_name}
-                        </Link>
-                        <span className="text-[11px] px-1.5 py-0.5 rounded-[6px] bg-purple-100 text-purple-700 font-semibold shrink-0">
-                          Contract {d.contract_sequence ?? 1}
-                        </span>
-                      </div>
-                      {canViewRates && (
-                        <span className="text-xs text-im8-burgundy/50 shrink-0">
-                          {d.monthly_rate_cents
-                            ? `$${(d.monthly_rate_cents / 100).toFixed(0)}/mo${d.total_months ? ` × ${d.total_months}mo` : ""}`
-                            : "—"}
-                        </span>
-                      )}
+                  if (!d) return (
+                    <div key={dealId} className="bg-white rounded-xl border border-im8-stone/30 p-4 text-sm text-im8-burgundy/60">
+                      <Link href={`/admin/deals/${dealId}`} className="text-im8-red hover:underline">View deal →</Link>
                     </div>
-                  ) : (
-                    <div key={dealId}>
-                      <Link
-                        href={`/admin/deals/${dealId}`}
-                        className="text-sm text-im8-red hover:underline"
-                        onClick={() => setOpenPacket(null)}
-                      >
-                        View deal →
-                      </Link>
+                  );
+                  const monthlyUsd = d.monthly_rate_cents ? d.monthly_rate_cents / 100 : null;
+                  const totalUsd = monthlyUsd !== null && d.total_months ? monthlyUsd * d.total_months : null;
+                  const note = perDealComment[dealId] ?? "";
+                  return (
+                    <div key={dealId} className="bg-white rounded-xl border border-im8-stone/40 p-4 space-y-3">
+                      {/* Header */}
+                      <div className="flex items-start justify-between gap-3 flex-wrap">
+                        <div>
+                          <Link
+                            href={`/admin/deals/${d.id}`}
+                            className="font-semibold text-im8-burgundy hover:text-im8-red hover:underline inline-flex items-center gap-2"
+                            onClick={() => setOpenPacket(null)}
+                          >
+                            {d.influencer_name}
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-[6px] bg-im8-burgundy/10 text-im8-burgundy font-semibold">
+                              Contract {d.contract_sequence ?? 1}
+                            </span>
+                          </Link>
+                          <div className="text-xs text-im8-burgundy/50 mt-0.5 capitalize">
+                            {d.platform_primary}
+                            {d.agency_name && ` · ${d.agency_name}`}
+                          </div>
+                        </div>
+                        {canViewRates && monthlyUsd !== null && (
+                          <div className="text-right">
+                            <p className="text-sm font-bold text-im8-burgundy">${monthlyUsd.toLocaleString()}/mo</p>
+                            {totalUsd !== null && (
+                              <p className="text-[11px] text-im8-burgundy/50">${totalUsd.toLocaleString()} over {d.total_months} mo</p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Deliverables */}
+                      {(d.deliverables ?? []).length > 0 && (
+                        <div className="text-xs">
+                          <span className="text-im8-burgundy/40 uppercase tracking-wide font-medium">Deliverables: </span>
+                          <span className="text-im8-burgundy/80">{formatDeliverablesSummary(d.deliverables ?? null)}</span>
+                        </div>
+                      )}
+
+                      {/* Rationale */}
+                      {d.rationale && (
+                        <div className="border-l-2 border-im8-red/40 pl-3">
+                          <p className="text-[10px] font-bold text-im8-muted uppercase tracking-[0.1em] mb-1">Rationale</p>
+                          <p className="text-xs text-im8-burgundy/80 whitespace-pre-wrap leading-relaxed">{d.rationale}</p>
+                        </div>
+                      )}
+
+                      {/* Per-deal comment + actions */}
+                      <div className="border-t border-im8-stone/20 pt-3 space-y-2">
+                        <textarea
+                          rows={2}
+                          value={note}
+                          onChange={(e) => setPerDealComment(p => ({ ...p, [dealId]: e.target.value }))}
+                          placeholder="Comment for this creator (optional)…"
+                          className="w-full px-2 py-1.5 text-xs border border-im8-stone/40 rounded-lg text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40 resize-none"
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => decideDeal(dealId, "approved")}
+                            disabled={perDealBusy?.startsWith(dealId)}
+                            className="flex-1 py-1.5 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors"
+                          >
+                            {perDealBusy === `${dealId}:approved` ? "…" : "✓ Approve"}
+                          </button>
+                          <button
+                            onClick={() => decideDeal(dealId, "rejected")}
+                            disabled={perDealBusy?.startsWith(dealId)}
+                            className="flex-1 py-1.5 border border-red-300 text-red-700 text-xs font-medium rounded-lg hover:bg-red-50 disabled:opacity-50 transition-colors"
+                          >
+                            {perDealBusy === `${dealId}:rejected` ? "…" : "✗ Reject"}
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   );
                 })}
               </div>
-            </div>
 
-            {/* Comment thread */}
-            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
-              <p className="text-xs font-semibold text-im8-burgundy/50 uppercase tracking-wide">
-                Thread
-              </p>
-              {loadingComments ? (
-                <p className="text-sm text-im8-burgundy/40">Loading…</p>
-              ) : comments.length === 0 ? (
-                <p className="text-sm text-im8-burgundy/40">No comments yet.</p>
-              ) : (
-                comments.map((c) => (
-                  <div
-                    key={c.id}
-                    className={`border rounded-xl px-4 py-3 text-sm ${kindStyle(c.kind)}`}
-                  >
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="font-semibold text-xs">{c.author_display_name || "Admin"}</span>
-                      <span className="text-xs opacity-60">
-                        {new Date(c.created_at).toLocaleString("en-AU", {
-                          day: "numeric",
-                          month: "short",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </span>
+              {/* General activity thread */}
+              <div className="px-6 py-4 border-t border-im8-stone/20 bg-im8-offwhite/40 space-y-3">
+                <p className="text-[10px] font-bold text-im8-muted uppercase tracking-[0.12em]">Batch activity & comments</p>
+                {loadingComments ? (
+                  <p className="text-sm text-im8-burgundy/40">Loading…</p>
+                ) : comments.length === 0 ? (
+                  <p className="text-sm text-im8-burgundy/40">No comments yet.</p>
+                ) : (
+                  comments.map((c) => (
+                    <div key={c.id} className="bg-white rounded-xl border border-im8-stone/30 px-4 py-3 text-sm">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-semibold text-xs text-im8-burgundy">{c.author_display_name || "Admin"}</span>
+                        <span className="text-[11px] text-im8-burgundy/40">
+                          {new Date(c.created_at).toLocaleString("en-AU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                        </span>
+                      </div>
+                      <p className="leading-relaxed whitespace-pre-wrap text-im8-burgundy/80">{c.body}</p>
                     </div>
-                    <p className="leading-relaxed whitespace-pre-wrap">{c.body}</p>
-                  </div>
-                ))
-              )}
+                  ))
+                )}
+              </div>
             </div>
 
-            {/* Add comment + actions */}
-            <div className="px-6 py-4 border-t border-im8-stone/20 space-y-3">
+            {/* Sticky footer — general comment */}
+            <div className="px-6 py-4 border-t border-im8-stone/20 space-y-2 bg-white">
+              <p className="text-[10px] font-bold text-im8-muted uppercase tracking-[0.12em]">Add a general comment for the batch</p>
               <textarea
-                value={commentBody}
-                onChange={(e) => setCommentBody(e.target.value)}
-                placeholder="Leave a comment…"
+                value={generalComment}
+                onChange={(e) => setGeneralComment(e.target.value)}
                 rows={2}
-                className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40 resize-none"
+                placeholder="Visible in the batch thread…"
+                className="w-full px-3 py-2 text-sm border border-im8-stone/40 rounded-lg text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40 resize-none"
               />
-              <div className="flex gap-2 flex-wrap">
-                <button
-                  onClick={() => postComment("comment")}
-                  disabled={postingComment || !commentBody.trim()}
-                  className="px-4 py-2 bg-im8-sand text-im8-burgundy text-sm rounded-lg hover:bg-im8-stone transition-colors disabled:opacity-40"
-                >
-                  Comment
-                </button>
-                <button
-                  onClick={() => postComment("approval")}
-                  disabled={postingComment}
-                  className="px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors disabled:opacity-40"
-                >
-                  ✓ Approve
-                </button>
-                <button
-                  onClick={() => postComment("revision_request")}
-                  disabled={postingComment}
-                  className="px-4 py-2 bg-orange-500 text-white text-sm rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-40"
-                >
-                  ⟳ Request revisions
-                </button>
-                <button
-                  onClick={() => postComment("rejection")}
-                  disabled={postingComment}
-                  className="px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 transition-colors disabled:opacity-40"
-                >
-                  ✗ Reject
-                </button>
-              </div>
+              <button
+                onClick={postGeneralComment}
+                disabled={postingGeneral || !generalComment.trim()}
+                className="px-4 py-1.5 bg-im8-burgundy text-white text-sm font-medium rounded-lg hover:bg-im8-red disabled:opacity-50 transition-colors"
+              >
+                {postingGeneral ? "Posting…" : "Post comment"}
+              </button>
             </div>
           </div>
         </div>
