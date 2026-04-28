@@ -194,7 +194,7 @@ export default function PartnerGroupList({
                         {/* Status — simplified label */}
                         <td className="px-5 py-3.5">
                           <span
-                            className={`text-[11px] px-2 py-0.5 rounded-[6px] font-medium ${
+                            className={`text-[11px] px-2 py-0.5 rounded-[6px] font-medium whitespace-nowrap ${
                               STATUS_COLORS[d.status] ?? "bg-gray-100 text-gray-500"
                             }`}
                           >

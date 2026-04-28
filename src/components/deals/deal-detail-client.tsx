@@ -336,14 +336,14 @@ export default function DealDetailClient({
           <div className="grid grid-cols-2 gap-5">
             <div>
               <label className="block text-sm font-medium text-im8-burgundy mb-1">Discount code</label>
-              <input type="text" value={form.discountCode} placeholder="e.g. IM8ALEX20"
+              <input type="text" value={form.discountCode} placeholder="DAVID10"
                 onChange={e => setForm(f => ({ ...f, discountCode: e.target.value }))}
                 className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40 font-mono" />
               <p className="text-xs text-im8-burgundy/40 mt-0.5">Shown to the creator in their portal.</p>
             </div>
             <div>
-              <label className="block text-sm font-medium text-im8-burgundy mb-1">Affiliate / tracking link</label>
-              <input type="url" value={form.affiliateLink} placeholder="https://im8.com/?ref=..."
+              <label className="block text-sm font-medium text-im8-burgundy mb-1">Referral link</label>
+              <input type="url" value={form.affiliateLink} placeholder="https://im8health.com/discount/DAVID10"
                 onChange={e => setForm(f => ({ ...f, affiliateLink: e.target.value }))}
                 className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40" />
               {form.affiliateLink && (
@@ -1187,9 +1187,6 @@ function EditableContractSection({
         className="w-full flex items-center justify-between px-4 py-3 bg-im8-sand/40 hover:bg-im8-sand/70 transition-colors text-left"
       >
         <div className="flex items-center gap-3 flex-wrap">
-          <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">
-            Contract {seq}
-          </span>
           <span className="text-sm text-im8-burgundy font-medium">{rateText}</span>
           <span className="text-xs text-im8-burgundy/60">· {deliverablesSummary}</span>
         </div>
