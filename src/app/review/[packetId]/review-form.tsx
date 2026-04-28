@@ -4,7 +4,7 @@ import { useState } from "react";
 import { formatDeliverablesSummary } from "@/lib/deliverables";
 import type { ReviewDeal, ReviewComment } from "./page";
 
-type Decision = "approval" | "revision_request" | "rejection";
+type Decision = "approval" | "rejection";
 
 const DECISION_BUTTONS: Array<{ kind: Decision; label: string; activeClass: string; idleClass: string }> = [
   {
@@ -12,12 +12,6 @@ const DECISION_BUTTONS: Array<{ kind: Decision; label: string; activeClass: stri
     label: "✓ Approve",
     activeClass: "bg-green-600 text-white border-green-600",
     idleClass: "bg-white text-green-700 border-green-300 hover:bg-green-50",
-  },
-  {
-    kind: "revision_request",
-    label: "⟳ Request changes",
-    activeClass: "bg-amber-500 text-white border-amber-500",
-    idleClass: "bg-white text-amber-700 border-amber-300 hover:bg-amber-50",
   },
   {
     kind: "rejection",
@@ -95,18 +89,19 @@ export default function ReviewForm({
     setError(null);
 
     try {
-      // Build the payload — one comment per per-deal decision plus an optional
-      // batch-level comment. The API is updated to accept either a single
-      // legacy {kind, body} payload or a new {comments: [...]} array.
+      // Build the payload — one entry per per-deal decision plus an optional
+      // batch-level general comment. Each per-deal decision carries its
+      // dealId so the server can flip the deal's status directly (and the
+      // linked discovery_profiles row) instead of just leaving a comment.
       const dealById = Object.fromEntries(deals.map(d => [d.id, d]));
-      const commentsPayload: Array<{ kind: string; body: string }> = [];
+      const commentsPayload: Array<{ kind: string; body: string; dealId?: string }> = [];
 
       for (const [dealId, kind] of decisionEntries) {
         const dealName = dealById[dealId]?.influencer_name ?? "creator";
         const note = (perDealComment[dealId] ?? "").trim();
-        const verb = kind === "approval" ? "Approved" : kind === "rejection" ? "Rejected" : "Requested changes";
+        const verb = kind === "approval" ? "Approved" : "Rejected";
         const body = note ? `[${dealName}] ${verb}: ${note}` : `[${dealName}] ${verb}`;
-        commentsPayload.push({ kind, body });
+        commentsPayload.push({ kind, body, dealId });
       }
 
       if (hasGeneral) {
@@ -212,7 +207,6 @@ export default function ReviewForm({
                   placeholder={
                     decision === "approval" ? "Optional note for this approval…" :
                     decision === "rejection" ? "Why are you rejecting this creator?" :
-                    decision === "revision_request" ? "What changes would you like to see?" :
                     "Comment for this creator (optional)…"
                   }
                   className="w-full px-3 py-2 text-sm border border-im8-stone/40 rounded-lg text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40 resize-none"
