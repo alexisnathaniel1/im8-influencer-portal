@@ -40,38 +40,26 @@ export default async function PartnerPage() {
     .eq("id", user.id)
     .single();
 
-  // Use both profile.email and the auth user's email — they sometimes differ
-  // (profile.email is set on signup; user.email is what they auth with) and we
-  // need to match either against discovery_profiles.submitter_email.
-  const emailCandidates = Array.from(
-    new Set(
-      [profile?.email, user.email]
-        .filter((e): e is string => typeof e === "string" && e.length > 0)
-        .map(e => e.trim().toLowerCase()),
-    ),
-  );
-  const email = emailCandidates[0] ?? "";
+  // The user signed up with X, logs in with X, fills the intake form (which
+  // pre-fills email = X), and submits. The submission therefore always has
+  // their email on it. Use email as the source of truth: any discovery_profile
+  // with submitter_email or influencer_email matching X belongs to this user
+  // and should be linked to their user.id.
+  const userEmail = (profile?.email ?? user.email ?? "").trim().toLowerCase();
 
-  // ── Self-heal: claim any orphan discovery_profiles that match this user's
-  // emails and weren't yet linked to their profile id. This catches the case
-  // where the row was created before signup, before ensure-profile last ran,
-  // or where the email changed casing between submit and signup.
-  if (emailCandidates.length > 0) {
-    const orphanIds = new Set<string>();
-    for (const e of emailCandidates) {
-      const [{ data: bySubmit }, { data: byInfl }] = await Promise.all([
-        admin.from("discovery_profiles").select("id, submitted_by_profile_id").ilike("submitter_email", e),
-        admin.from("discovery_profiles").select("id, submitted_by_profile_id").ilike("influencer_email", e),
-      ]);
-      for (const r of [...(bySubmit ?? []), ...(byInfl ?? [])]) {
-        if (r.submitted_by_profile_id !== user.id) orphanIds.add(r.id);
-      }
-    }
-    if (orphanIds.size > 0) {
+  if (userEmail) {
+    const [{ data: bySubmit }, { data: byInfl }] = await Promise.all([
+      admin.from("discovery_profiles").select("id").ilike("submitter_email", userEmail),
+      admin.from("discovery_profiles").select("id").ilike("influencer_email", userEmail),
+    ]);
+    const idsToLink = Array.from(
+      new Set([...(bySubmit ?? []), ...(byInfl ?? [])].map(r => r.id))
+    );
+    if (idsToLink.length > 0) {
       await admin
         .from("discovery_profiles")
         .update({ submitted_by_profile_id: user.id })
-        .in("id", Array.from(orphanIds));
+        .in("id", idsToLink);
     }
   }
 
@@ -113,7 +101,7 @@ export default async function PartnerPage() {
     const { data: mySubmissions } = await admin
       .from("discovery_profiles")
       .select("id")
-      .or(`submitted_by_profile_id.eq.${user.id}${email ? `,submitter_email.ilike.${email}` : ""}`);
+      .or(`submitted_by_profile_id.eq.${user.id}${userEmail ? `,submitter_email.ilike.${userEmail}` : ""}`);
     const submittedIds = (mySubmissions ?? []).map(s => s.id);
     if (submittedIds.length > 0) {
       const { data: moreDealsRaw } = await admin
@@ -130,80 +118,32 @@ export default async function PartnerPage() {
     }
   }
 
-  // Three separate queries to avoid PostgREST escaping issues with email in .or()
-  // byProfileId: submissions the user filed themselves (agency or creator)
-  // byEmail: submissions filed by their email address (self-submissions before account creation)
-  // byInfluencerEmail: submissions where this user IS the creator, even if an admin/agency submitted
-  // Use a minimal safe SELECT to avoid failures if optional columns (e.g. influencer_email,
-  // proposed_deliverables) haven't been migrated in this environment yet.
-  const SELECT_FIELDS = "id, influencer_name, platform_primary, status, positioning, niche_tags, niche, proposed_rate_cents, proposed_deliverables, negotiation_counter, agency_response, created_at";
+  // After the email-based linking step above, every submission that should
+  // belong to this user has submitted_by_profile_id = user.id. One query is
+  // all we need. select("*") keeps it resilient against schema drift.
+  const { data: submissionsRaw, error: subsError } = await admin
+    .from("discovery_profiles")
+    .select("*")
+    .eq("submitted_by_profile_id", user.id)
+    .order("created_at", { ascending: false });
 
-  const emptyResult = { data: [] as { id: string; [k: string]: unknown }[], error: null };
+  if (subsError) {
+    console.error("[partner/page] submissions query failed:", subsError.message, "uid:", user.id, "email:", userEmail);
+  }
 
-  // Run byEmail / byInfluencerEmail against EACH email candidate to catch the
-  // case where profile.email and auth user.email differ. Wrap the email in
-  // wildcards so trailing whitespace or stray characters in the DB still match.
-  const byEmailQueries = emailCandidates.flatMap(e => {
-    const wildcard = `%${e}%`;
-    return [
-      admin.from("discovery_profiles").select(SELECT_FIELDS).ilike("submitter_email", wildcard).order("created_at", { ascending: false }),
-      admin.from("discovery_profiles").select(SELECT_FIELDS).ilike("influencer_email", wildcard).order("created_at", { ascending: false }),
-    ];
-  });
-
-  // Name-based fallback — only useful when full_name is meaningfully unique.
-  const fullName = (profile?.full_name ?? "").trim();
-  const nameQueries = fullName.length >= 4
-    ? [
-        admin.from("discovery_profiles").select(SELECT_FIELDS).ilike("influencer_name", `%${fullName}%`).order("created_at", { ascending: false }),
-        admin.from("discovery_profiles").select(SELECT_FIELDS).ilike("submitter_name", `%${fullName}%`).order("created_at", { ascending: false }),
-      ]
-    : [];
-
-  const [byProfileIdRes, ...allResults] = await Promise.all([
-    admin
-      .from("discovery_profiles")
-      .select(SELECT_FIELDS)
-      .eq("submitted_by_profile_id", user.id)
-      .order("created_at", { ascending: false }),
-    ...byEmailQueries,
-    ...nameQueries,
-  ]);
-  const { data: byProfileId, error: e1 } = byProfileIdRes;
-  const emailResults = allResults.slice(0, byEmailQueries.length);
-  const nameResults = allResults.slice(byEmailQueries.length);
-  const byEmail = emailResults.flatMap(r => r.data ?? []);
-  const byName = nameResults.flatMap(r => r.data ?? []);
-  const byInfluencerEmail: typeof byEmail = []; // merged into byEmail above
-  const e2 = emailResults.find(r => r.error)?.error ?? null;
-
-  if (e1) console.error("[partner/page] byProfileId failed:", e1.message, "uid:", user.id);
-  if (e2) console.error("[partner/page] email match failed:", e2.message, "candidates:", emailCandidates);
-
-  // Diagnostic — visible in Vercel function logs to debug missing submissions.
-  console.log("[partner/page] match summary", {
-    user_id: user.id,
-    auth_email: user.email,
-    profile_email: profile?.email,
-    full_name: fullName,
-    email_candidates: emailCandidates,
-    by_profile_id: (byProfileId ?? []).length,
-    by_email: byEmail.length,
-    by_name: byName.length,
-  });
-
-  // Merge and deduplicate by id
-  const seen = new Set<string>();
-  const submissions = [
-    ...(byProfileId ?? []),
-    ...(byEmail ?? []),
-    ...(byInfluencerEmail ?? []),
-    ...(byName ?? []),
-  ].filter(s => {
-    if (seen.has(s.id)) return false;
-    seen.add(s.id);
-    return true;
-  });
+  const submissions = (submissionsRaw ?? []) as Array<{
+    id: string;
+    influencer_name: string;
+    platform_primary: string;
+    status: string;
+    positioning: string | null;
+    niche_tags: string[] | null;
+    niche: string[] | null;
+    proposed_rate_cents: number | null;
+    negotiation_counter: string | null;
+    agency_response: string | null;
+    created_at: string;
+  }>;
 
   const submissionIds = (submissions ?? []).map(s => s.id);
 
