@@ -58,7 +58,7 @@ const STATUS_COLORS: Record<string, string> = {
   submitted: "bg-yellow-100 text-yellow-700",
   approved: "bg-green-100 text-green-700",
   live: "bg-emerald-100 text-emerald-700",
-  completed: "bg-purple-100 text-purple-700",
+  completed: "bg-im8-burgundy/10 text-im8-burgundy",
 };
 
 export default function DeliverablesTable({
@@ -84,6 +84,7 @@ export default function DeliverablesTable({
   const searchParams = useSearchParams();
   const [, startTransition] = useTransition();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [previewDraft, setPreviewDraft] = useState<{ url: string; name: string } | null>(null);
 
   function setFilter(key: string, value: string) {
     const p = new URLSearchParams(searchParams.toString());
@@ -155,11 +156,12 @@ export default function DeliverablesTable({
           {isAdsView ? (
             <AdsTable deliverables={deliverables} selectedId={selectedId} setSelectedId={setSelectedId} />
           ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-im8-sand/50 border-b border-im8-stone/20">
+          <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[900px]">
+            <thead className="bg-white border-b border-im8-stone/20">
               <tr>
                 {["Influencer", "Type", "Status", "Due", "Draft", "Edit", "QA", "Post URL", "Views", "PIC"].map(h => (
-                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-im8-burgundy/60 uppercase tracking-wide">{h}</th>
+                  <th key={h} className="px-5 py-2.5 text-left text-[11px] font-semibold text-im8-muted uppercase tracking-[0.07em] whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
@@ -174,7 +176,7 @@ export default function DeliverablesTable({
                   className={`cursor-pointer transition-colors hover:bg-im8-sand/30 ${selectedId === d.id ? "bg-im8-sand/50" : ""}`}
                 >
                   <td className="px-4 py-3">
-                    <div className="font-medium text-im8-burgundy truncate max-w-[140px]">
+                    <div className="font-medium text-im8-burgundy whitespace-nowrap">
                       {d.deal?.influencer_name ?? "—"}
                     </div>
                     {d.brief && (
@@ -196,12 +198,13 @@ export default function DeliverablesTable({
                   </td>
                   <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                     {d.approved_submission?.drive_url ? (
-                      <a href={d.approved_submission.drive_url} target="_blank" rel="noopener noreferrer"
-                        className="text-xs text-im8-red hover:underline inline-flex items-center gap-1">
-                        <span className="inline-block w-2 h-2 rounded-full bg-green-500" />
-                        {d.approved_submission.file_name ?? "Approved draft"}
-                        <span className="text-im8-burgundy/30">↗</span>
-                      </a>
+                      <button
+                        onClick={() => setPreviewDraft({ url: d.approved_submission!.drive_url!, name: d.approved_submission!.file_name ?? "Approved draft" })}
+                        className="text-xs text-im8-red hover:underline inline-flex items-center gap-1 text-left"
+                      >
+                        <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                        <span className="truncate max-w-[120px]">{d.approved_submission.file_name ?? "Approved draft"}</span>
+                      </button>
                     ) : (
                       <span className="text-xs text-im8-burgundy/30">—</span>
                     )}
@@ -225,6 +228,7 @@ export default function DeliverablesTable({
               ))}
             </tbody>
           </table>
+          </div>
           )}
         </div>
       </div>
@@ -234,6 +238,9 @@ export default function DeliverablesTable({
         <div className="w-96 shrink-0">
           <DeliverablePanel deliverable={selected} editors={editors} onClose={() => setSelectedId(null)} />
         </div>
+      )}
+      {previewDraft && (
+        <DrivePreviewModal url={previewDraft.url} name={previewDraft.name} onClose={() => setPreviewDraft(null)} />
       )}
     </div>
   );
@@ -479,7 +486,7 @@ function EditedVideoCell({ deliverableId, current }: { deliverableId: string; cu
   if (current) return (
     <a href={current} target="_blank" rel="noopener noreferrer"
       className="text-xs text-im8-red hover:underline inline-flex items-center gap-1">
-      <span className="inline-block w-2 h-2 rounded-full bg-blue-500" />
+      <span className="inline-block w-2 h-2 rounded-full bg-im8-burgundy/60" />
       Edit
       <span className="text-im8-burgundy/30">↗</span>
     </a>
@@ -885,6 +892,44 @@ function EditedVideoInlineField({ deliverableId, current }: { deliverableId: str
       <span className="text-xs text-im8-burgundy/40 w-12 text-right">
         {status === "saving" ? "Saving…" : status === "saved" ? "Saved ✓" : ""}
       </span>
+    </div>
+  );
+}
+
+function DrivePreviewModal({ url, name, onClose }: { url: string; name: string; onClose: () => void }) {
+  // Extract Google Drive file ID for embedding
+  const fileId = url.match(/\/d\/([a-zA-Z0-9_-]+)/)?.[1];
+  const embedUrl = fileId ? `https://drive.google.com/file/d/${fileId}/preview` : null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/60" />
+      <div className="relative z-10 bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden"
+        onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-im8-stone/20">
+          <span className="text-sm font-medium text-im8-burgundy truncate max-w-[500px]">{name}</span>
+          <div className="flex items-center gap-3 shrink-0">
+            <a href={url} target="_blank" rel="noopener noreferrer"
+              className="text-xs text-im8-red hover:underline">Open in Drive ↗</a>
+            <button onClick={onClose} className="text-im8-burgundy/40 hover:text-im8-burgundy text-2xl leading-none">×</button>
+          </div>
+        </div>
+        <div className="flex-1 min-h-0 bg-gray-50">
+          {embedUrl ? (
+            <iframe
+              src={embedUrl}
+              className="w-full h-full min-h-[500px]"
+              allow="autoplay"
+              title={name}
+            />
+          ) : (
+            <div className="flex items-center justify-center h-64 text-im8-burgundy/40 text-sm">
+              Preview unavailable —{" "}
+              <a href={url} target="_blank" rel="noopener noreferrer" className="text-im8-red hover:underline ml-1">open in Drive ↗</a>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

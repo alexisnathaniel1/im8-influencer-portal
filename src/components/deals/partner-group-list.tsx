@@ -130,7 +130,8 @@ export default function PartnerGroupList({
 
             {/* Contracts table — visible when expanded */}
             {isOpen && (
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[900px]">
                 <thead className="bg-white border-b border-im8-stone/20">
                   <tr>
                     {[
@@ -165,7 +166,7 @@ export default function PartnerGroupList({
                             href={`/admin/deals/${d.id}`}
                             className="inline-flex items-center gap-2 group"
                           >
-                            <span className="text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 font-semibold">
+                            <span className="text-xs px-2 py-0.5 rounded-[6px] bg-im8-burgundy/10 text-im8-burgundy font-semibold whitespace-nowrap">
                               Contract {d.contract_sequence ?? 1}
                             </span>
                             <span className="text-xs text-im8-burgundy/40 group-hover:text-im8-red group-hover:underline">
@@ -232,7 +233,7 @@ export default function PartnerGroupList({
                             ? new Date(d.campaign_start).toLocaleDateString()
                             : "—"}
                         </td>
-                        <td className="px-4 py-3 text-im8-burgundy/60 text-xs">
+                        <td className="px-4 py-3 text-im8-burgundy/60 text-xs whitespace-nowrap">
                           {d.assigned_to?.full_name ?? "—"}
                         </td>
                         <td className="px-4 py-3 text-im8-burgundy/40 text-xs">
@@ -249,6 +250,7 @@ export default function PartnerGroupList({
                   })}
                 </tbody>
               </table>
+              </div>
             )}
 
             {/* Collapsed state — subtle summary row */}

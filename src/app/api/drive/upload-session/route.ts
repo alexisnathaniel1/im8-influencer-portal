@@ -9,7 +9,7 @@ export async function POST(request: Request) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { briefId, dealId, mimeType, fileSize, fileHash } = await request.json();
+    const { briefId, dealId, deliverableId, mimeType, fileSize, fileHash } = await request.json();
 
     if (!mimeType || !fileSize) {
       return NextResponse.json({ error: "mimeType and fileSize are required" }, { status: 400 });
@@ -82,7 +82,30 @@ export async function POST(request: Request) {
     }
 
     const timestamp = Date.now();
-    const fileName = `${dealName}_${timestamp}`;
+    let canonicalName = dealName;
+
+    // Build a human-readable canonical filename when deliverable context is available
+    if (deliverableId) {
+      const { data: deliv } = await admin
+        .from("deliverables")
+        .select("deliverable_type, sequence, deal:deal_id(contract_sequence, influencer_name)")
+        .eq("id", deliverableId)
+        .single();
+
+      if (deliv) {
+        const deal2 = Array.isArray(deliv.deal) ? deliv.deal[0] : deliv.deal as { contract_sequence: number | null; influencer_name: string } | null;
+        const name = (deal2?.influencer_name ?? dealName)
+          .replace(/[^a-zA-Z0-9 ]/g, "")
+          .trim()
+          .replace(/\s+/g, "_");
+        const contractSeq = deal2?.contract_sequence ?? 1;
+        const delivType = (deliv.deliverable_type ?? "CONTENT").replace(/[^a-zA-Z0-9_]/g, "");
+        const seqSuffix = deliv.sequence ? `${deliv.sequence}` : "1";
+        canonicalName = `${name}_Contract${contractSeq}_${delivType}${seqSuffix}`;
+      }
+    }
+
+    const fileName = `${canonicalName}_${timestamp}`;
     const clientOrigin = request.headers.get("origin") || `https://${request.headers.get("host")}`;
 
     const { sessionUri } = await initiateResumableUpload(folderId, fileName, mimeType, fileSize, clientOrigin);

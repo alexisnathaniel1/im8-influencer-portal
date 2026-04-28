@@ -58,6 +58,7 @@ function SubmitForm() {
         body: JSON.stringify({
           briefId: prefillBriefId || undefined,
           dealId: selectedDealId || undefined,
+          deliverableId: selectedDeliverableId || undefined,
           mimeType: file.type || "video/mp4",
           fileSize: file.size,
           fileHash,

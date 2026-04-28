@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 
@@ -14,7 +15,9 @@ export default async function PartnerBriefsPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
 
-  const { data: deals } = await supabase
+  const admin = createAdminClient();
+
+  const { data: deals } = await admin
     .from("deals")
     .select("id")
     .eq("influencer_profile_id", user.id);
@@ -22,7 +25,7 @@ export default async function PartnerBriefsPage() {
   const dealIds = (deals ?? []).map((d) => d.id);
 
   const { data: briefs } = dealIds.length > 0
-    ? await supabase
+    ? await admin
         .from("briefs")
         .select("id, title, platform, deliverable_type, due_date, status, google_doc_url, created_at, deal:deal_id(influencer_name)")
         .in("deal_id", dealIds)
