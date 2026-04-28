@@ -69,13 +69,27 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   // Three URLs passed to the template:
   //   portalUrl — deep link to /partner (used once logged in)
   //   loginUrl  — /auth/login pre-filled with email (primary CTA)
-  //   signupUrl — /auth/signup pre-filled with email (shown for creators
-  //               who were manually added and don't have an account yet)
+  //   signupUrl — /auth/signup pre-filled with email; only sent when the
+  //               recipient does NOT yet have a portal account, so we don't
+  //               nudge people to sign up when they already can log in.
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "";
   const emailParam = encodeURIComponent(to);
   const portalUrl = siteUrl ? `${siteUrl}/partner` : null;
   const loginUrl = siteUrl ? `${siteUrl}/auth/login?email=${emailParam}` : null;
-  const signupUrl = siteUrl ? `${siteUrl}/auth/signup?email=${emailParam}` : null;
+
+  // Look up whether `to` already has a profile (= can log in). The cheapest
+  // safe check is profiles.email; falls through to no-account behaviour on error.
+  let hasAccount = false;
+  try {
+    const { count } = await admin
+      .from("profiles")
+      .select("id", { count: "exact", head: true })
+      .ilike("email", to);
+    hasAccount = (count ?? 0) > 0;
+  } catch (err) {
+    console.error("[discovery/counter] profile lookup failed:", err);
+  }
+  const signupUrl = !hasAccount && siteUrl ? `${siteUrl}/auth/signup?email=${emailParam}` : null;
 
   const { subject, text, html } = negotiationCounterTemplate({
     influencerName: profile.influencer_name,

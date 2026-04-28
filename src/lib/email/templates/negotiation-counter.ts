@@ -1,15 +1,29 @@
 import { emailShell, ctaButton, infoCard, sectionLabel } from "./base";
 
+// Canonical catalogue — kept in sync with deal-detail-client.tsx and
+// triage-board.tsx so the same labels surface in admin UI, partner
+// dashboard, deal contracts, and outbound emails.
 const DELIVERABLE_LABELS: Record<string, string> = {
   IGR: "Instagram Reels",
   IGS: "Instagram Stories",
-  UGC: "UGC Videos (for ads)",
   TIKTOK: "TikTok Videos",
-  YT_DEDICATED: "YouTube Dedicated Video",
-  YT_INTEGRATED: "YouTube Integrated Mention",
+  YT_DEDICATED: "YouTube Dedicated Review",
+  YT_INTEGRATED: "YouTube Integrated Review",
+  YT_PODCAST: "YouTube Podcast Ad Read",
+  UGC: "UGC Videos",
+  NEWSLETTER: "Newsletter",
+  APP_PARTNERSHIP: "App Partnership",
+  BLOG: "Blog Post",
+  WHITELIST: "Whitelisting",
+  PAID_AD: "Paid Ad Usage Rights",
+  RAW_FOOTAGE: "Raw Footage",
+  LINK_BIO: "Link in Bio",
 };
 
-const STANDARD_USAGE_RIGHTS = ["Whitelisting", "Paid ad usage rights", "Link in bio"];
+// Codes that are binary Yes/No grants rather than countable content
+// deliverables. These render in the "Usage rights" block, not the
+// numbered "Deliverables" list.
+const BINARY_DELIVERABLE_CODES = new Set(["WHITELIST", "PAID_AD", "RAW_FOOTAGE", "LINK_BIO"]);
 
 export function negotiationCounterTemplate(params: {
   influencerName: string;
@@ -28,6 +42,13 @@ export function negotiationCounterTemplate(params: {
     deliverables, notes, portalUrl, loginUrl, signupUrl,
   } = params;
   const totalUsd = rateUsd ? rateUsd * totalMonths : null;
+
+  // Split the incoming deliverables into countable content items vs binary
+  // rights. Counted content goes in the numbered list; rights render below
+  // as a checklist with friendly labels (Whitelisting, etc) — never as
+  // raw enum codes (WHITELIST, PAID_AD, …).
+  const contentDeliverables = deliverables.filter(d => !BINARY_DELIVERABLE_CODES.has(d.code) && d.count > 0);
+  const grantedRights = deliverables.filter(d => BINARY_DELIVERABLE_CODES.has(d.code) && d.count > 0);
 
   // Agencies submit on behalf of named creators, so the email refers to the
   // creator by name. Individual creators are submitting themselves, so the
@@ -54,10 +75,10 @@ export function negotiationCounterTemplate(params: {
     `Creator: ${influencerName}`,
     ``,
     `Deliverables:`,
-    ...deliverables.map(d => `  • ${d.count} × ${DELIVERABLE_LABELS[d.code] ?? d.code}`),
+    ...contentDeliverables.map(d => `  • ${d.count} × ${DELIVERABLE_LABELS[d.code] ?? d.code}`),
     ``,
-    `Usage rights (standard inclusions):`,
-    ...STANDARD_USAGE_RIGHTS.map(r => `  • ${r}`),
+    `Usage rights & extras:`,
+    ...grantedRights.map(d => `  • ${DELIVERABLE_LABELS[d.code] ?? d.code}`),
     ``,
     `Rate: ${rateText}`,
     ``,
@@ -73,8 +94,8 @@ export function negotiationCounterTemplate(params: {
     `— IM8 Influencer Team`,
   ].filter(l => l !== null).join("\n");
 
-  // Deliverables rows
-  const deliverablesHtml = deliverables
+  // Deliverables rows — content only (counted)
+  const deliverablesHtml = contentDeliverables
     .map(d => `
       <tr>
         <td style="padding:6px 0;font-size:14px;color:#1A0508;border-bottom:1px solid #E1CBB9">${DELIVERABLE_LABELS[d.code] ?? d.code}</td>
@@ -82,11 +103,12 @@ export function negotiationCounterTemplate(params: {
       </tr>`)
     .join("");
 
-  const usageHtml = STANDARD_USAGE_RIGHTS
-    .map(r => `
+  // Usage rights & extras — rendered with friendly labels from the catalogue
+  const usageHtml = grantedRights
+    .map(d => `
       <tr>
         <td style="padding:4px 0;vertical-align:top"><span style="color:#A40011;font-weight:700">✓</span></td>
-        <td style="padding:4px 0;font-size:13px;color:#3D0010;padding-left:10px">${r}</td>
+        <td style="padding:4px 0;font-size:13px;color:#3D0010;padding-left:10px">${DELIVERABLE_LABELS[d.code] ?? d.code}</td>
       </tr>`)
     .join("");
 
@@ -100,12 +122,13 @@ export function negotiationCounterTemplate(params: {
       </table>
     </div>
 
+    ${grantedRights.length > 0 ? `
     <div style="margin:16px 0">
-      ${sectionLabel("Usage rights — standard inclusions")}
+      ${sectionLabel("Usage rights & extras")}
       <table role="presentation" cellpadding="0" cellspacing="0">
         ${usageHtml}
       </table>
-    </div>
+    </div>` : ""}
 
     <div style="margin:16px 0 0">
       ${sectionLabel("Rate")}
