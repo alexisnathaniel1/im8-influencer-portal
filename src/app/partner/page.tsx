@@ -5,26 +5,21 @@ import { redirect } from "next/navigation";
 import NegotiationResponse from "./negotiation-response";
 import ShippingPrompt, { type MissingCreator } from "@/components/partner/shipping-prompt";
 
-const STATUS_LABELS: Record<string, string> = {
-  new: "Submitted",
-  submitted: "Submitted",
-  reviewing: "Under Review",
-  negotiation_needed: "Negotiation Needed",
-  approved: "Approved",
-  shortlisted: "Approved",
-  rejected: "Rejected",
-  converted: "Pending MGMT Approval",
-};
-const STATUS_COLORS: Record<string, string> = {
-  new: "bg-blue-100 text-blue-700",
-  submitted: "bg-blue-100 text-blue-700",
-  reviewing: "bg-yellow-100 text-yellow-700",
-  negotiation_needed: "bg-orange-100 text-orange-700",
-  approved: "bg-green-100 text-green-700",
-  shortlisted: "bg-green-100 text-green-700",
-  rejected: "bg-red-100 text-red-700",
-  converted: "bg-im8-burgundy/10 text-im8-burgundy",
-};
+// Partner-facing status labels — we deliberately don't expose internal triage
+// states (reviewing, negotiation_needed, converted) to creators. Until a
+// decision is finalised, every in-flight state reads as "Submitted". Once
+// approved or rejected, that final outcome is shown. Negotiation terms are
+// still surfaced via the dedicated counter-proposal block below.
+function publicStatusLabel(realStatus: string): string {
+  if (realStatus === "approved" || realStatus === "shortlisted") return "Approved";
+  if (realStatus === "rejected") return "Rejected";
+  return "Submitted";
+}
+function publicStatusColor(realStatus: string): string {
+  if (realStatus === "approved" || realStatus === "shortlisted") return "bg-green-100 text-green-700";
+  if (realStatus === "rejected") return "bg-red-100 text-red-700";
+  return "bg-blue-100 text-blue-700";
+}
 
 const STANDARD_DELIVERABLES = "3 IG Reels · 3 IG Stories · Raw footage · Whitelisting · Paid ad usage rights · Link in bio · 3 UGC Videos for ads — across 3 months";
 
@@ -387,13 +382,13 @@ export default async function PartnerPage() {
             const niches = (s.niche_tags ?? s.niche ?? []) as string[];
 
             return (
-              <div key={s.id} className={`bg-white rounded-xl border p-5 space-y-4 ${isNegotiating ? "border-orange-300" : "border-im8-stone/30"}`}>
+              <div key={s.id} className="bg-white rounded-xl border border-im8-stone/30 p-5 space-y-4">
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-3 flex-wrap">
                       <span className="font-semibold text-im8-burgundy">{s.influencer_name}</span>
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[s.status] ?? ""}`}>
-                        {STATUS_LABELS[s.status] ?? s.status}
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${publicStatusColor(s.status)}`}>
+                        {publicStatusLabel(s.status)}
                       </span>
                       <span className="text-xs text-im8-burgundy/50 capitalize">{s.platform_primary}</span>
                     </div>
