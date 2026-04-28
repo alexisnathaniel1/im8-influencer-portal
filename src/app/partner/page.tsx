@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
 import NegotiationResponse from "./negotiation-response";
 import ShippingPrompt, { type MissingCreator } from "@/components/partner/shipping-prompt";
+import ClaimSubmissionForm from "./claim-submission-form";
 
 const STATUS_LABELS: Record<string, string> = {
   new: "Submitted",
@@ -28,7 +29,11 @@ const STATUS_COLORS: Record<string, string> = {
 
 const STANDARD_DELIVERABLES = "3 IG Reels · 3 IG Stories · Raw footage · Whitelisting · Paid ad usage rights · Link in bio · 3 UGC Videos for ads — across 3 months";
 
-export default async function PartnerPage() {
+export default async function PartnerPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ claim?: string }>;
+}) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
@@ -39,6 +44,33 @@ export default async function PartnerPage() {
     .select("email, full_name, partner_type, drive_folder_url")
     .eq("id", user.id)
     .single();
+
+  // ── Manual claim: ?claim=email@example.com or ?claim=Full+Name lets a
+  // creator force-link a submission whose email/name differs from theirs.
+  const claimParam = (await searchParams)?.claim?.trim();
+  if (claimParam) {
+    const claimLower = claimParam.toLowerCase();
+    const isEmail = claimLower.includes("@");
+    const wildcardPattern = `%${claimLower}%`;
+    const claimQueries = isEmail
+      ? [
+          admin.from("discovery_profiles").select("id").ilike("submitter_email", wildcardPattern),
+          admin.from("discovery_profiles").select("id").ilike("influencer_email", wildcardPattern),
+        ]
+      : [
+          admin.from("discovery_profiles").select("id").ilike("submitter_name", wildcardPattern),
+          admin.from("discovery_profiles").select("id").ilike("influencer_name", wildcardPattern),
+        ];
+    const claimResults = await Promise.all(claimQueries);
+    const claimIds = Array.from(new Set(claimResults.flatMap(r => (r.data ?? []).map(d => d.id))));
+    if (claimIds.length > 0) {
+      await admin
+        .from("discovery_profiles")
+        .update({ submitted_by_profile_id: user.id })
+        .in("id", claimIds);
+      console.log("[partner/page] Manually claimed", claimIds.length, "rows for user", user.id, "via", claimParam);
+    }
+  }
 
   // Use both profile.email and the auth user's email — they sometimes differ
   // (profile.email is set on signup; user.email is what they auth with) and we
@@ -141,27 +173,56 @@ export default async function PartnerPage() {
   const emptyResult = { data: [] as { id: string; [k: string]: unknown }[], error: null };
 
   // Run byEmail / byInfluencerEmail against EACH email candidate to catch the
-  // case where profile.email and auth user.email differ.
-  const byEmailQueries = emailCandidates.flatMap(e => [
-    admin.from("discovery_profiles").select(SELECT_FIELDS).ilike("submitter_email", e).order("created_at", { ascending: false }),
-    admin.from("discovery_profiles").select(SELECT_FIELDS).ilike("influencer_email", e).order("created_at", { ascending: false }),
-  ]);
+  // case where profile.email and auth user.email differ. Wrap the email in
+  // wildcards so trailing whitespace or stray characters in the DB still match.
+  const byEmailQueries = emailCandidates.flatMap(e => {
+    const wildcard = `%${e}%`;
+    return [
+      admin.from("discovery_profiles").select(SELECT_FIELDS).ilike("submitter_email", wildcard).order("created_at", { ascending: false }),
+      admin.from("discovery_profiles").select(SELECT_FIELDS).ilike("influencer_email", wildcard).order("created_at", { ascending: false }),
+    ];
+  });
 
-  const [byProfileIdRes, ...emailResults] = await Promise.all([
+  // Name-based fallback — only useful when full_name is meaningfully unique.
+  const fullName = (profile?.full_name ?? "").trim();
+  const nameQueries = fullName.length >= 4
+    ? [
+        admin.from("discovery_profiles").select(SELECT_FIELDS).ilike("influencer_name", `%${fullName}%`).order("created_at", { ascending: false }),
+        admin.from("discovery_profiles").select(SELECT_FIELDS).ilike("submitter_name", `%${fullName}%`).order("created_at", { ascending: false }),
+      ]
+    : [];
+
+  const [byProfileIdRes, ...allResults] = await Promise.all([
     admin
       .from("discovery_profiles")
       .select(SELECT_FIELDS)
       .eq("submitted_by_profile_id", user.id)
       .order("created_at", { ascending: false }),
-    ...(byEmailQueries.length > 0 ? byEmailQueries : [Promise.resolve(emptyResult)]),
+    ...byEmailQueries,
+    ...nameQueries,
   ]);
   const { data: byProfileId, error: e1 } = byProfileIdRes;
+  const emailResults = allResults.slice(0, byEmailQueries.length);
+  const nameResults = allResults.slice(byEmailQueries.length);
   const byEmail = emailResults.flatMap(r => r.data ?? []);
+  const byName = nameResults.flatMap(r => r.data ?? []);
   const byInfluencerEmail: typeof byEmail = []; // merged into byEmail above
   const e2 = emailResults.find(r => r.error)?.error ?? null;
 
   if (e1) console.error("[partner/page] byProfileId failed:", e1.message, "uid:", user.id);
   if (e2) console.error("[partner/page] email match failed:", e2.message, "candidates:", emailCandidates);
+
+  // Diagnostic — visible in Vercel function logs to debug missing submissions.
+  console.log("[partner/page] match summary", {
+    user_id: user.id,
+    auth_email: user.email,
+    profile_email: profile?.email,
+    full_name: fullName,
+    email_candidates: emailCandidates,
+    by_profile_id: (byProfileId ?? []).length,
+    by_email: byEmail.length,
+    by_name: byName.length,
+  });
 
   // Merge and deduplicate by id
   const seen = new Set<string>();
@@ -169,6 +230,7 @@ export default async function PartnerPage() {
     ...(byProfileId ?? []),
     ...(byEmail ?? []),
     ...(byInfluencerEmail ?? []),
+    ...(byName ?? []),
   ].filter(s => {
     if (seen.has(s.id)) return false;
     seen.add(s.id);
@@ -398,12 +460,15 @@ export default async function PartnerPage() {
       </div>
 
       {(!submissions || submissions.length === 0) ? (
-        <div className="bg-white rounded-xl border border-im8-stone/30 p-12 text-center">
-          <p className="text-im8-burgundy/60 mb-4">No submissions yet.</p>
-          <Link href="/intake"
-            className="inline-block px-5 py-2.5 bg-im8-red text-white text-sm font-medium rounded-lg hover:bg-im8-burgundy transition-colors">
-            Fill the intake form →
-          </Link>
+        <div className="space-y-4">
+          <div className="bg-white rounded-xl border border-im8-stone/30 p-12 text-center">
+            <p className="text-im8-burgundy/60 mb-4">No submissions yet.</p>
+            <Link href="/intake"
+              className="inline-block px-5 py-2.5 bg-im8-red text-white text-sm font-medium rounded-lg hover:bg-im8-burgundy transition-colors">
+              Fill the intake form →
+            </Link>
+          </div>
+          <ClaimSubmissionForm />
         </div>
       ) : (
         <div className="space-y-4">
