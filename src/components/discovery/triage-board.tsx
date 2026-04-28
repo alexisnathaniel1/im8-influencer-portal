@@ -40,8 +40,8 @@ const STATUS_LABELS: Record<string, string> = {
   new: "Submitted",
   submitted: "Submitted",
   reviewing: "Under Review",          // legacy
-  negotiation_needed: "Negotiation Needed",
-  creator_countered: "Creator Counter",  // creator pushed back with new terms
+  negotiation_needed: "Negotiation Sent",  // admin sent counter, awaiting reply
+  creator_countered: "Counter Received",   // creator/agency pushed back with new terms
   approved: "Approved",               // transient — shown on rows but not a tab
   shortlisted: "Approved",            // legacy alias
   rejected: "Rejected",
@@ -61,6 +61,29 @@ const STATUS_COLORS: Record<string, string> = {
   rejected: "bg-red-100 text-red-700",                    // declined
   converted: "bg-im8-burgundy/15 text-im8-burgundy",      // already pending MGMT
 };
+
+// Combine status + agency_response + agency_name into a single rich label so
+// admins at a glance know exactly where in the negotiation the row is and
+// don't double-fire counters that are already in flight.
+function displayStatus(p: { status: string; agency_response: string | null; agency_name: string | null }): { label: string; color: string } {
+  const counterPartyLabel = p.agency_name ? "Agency" : "Creator";
+  if (p.status === "negotiation_needed") {
+    if (p.agency_response === "accepted") {
+      return { label: `${counterPartyLabel} Accepted`, color: "bg-emerald-100 text-emerald-700" };
+    }
+    if (p.agency_response === "declined") {
+      return { label: `${counterPartyLabel} Declined`, color: "bg-rose-100 text-rose-700" };
+    }
+    return { label: "Negotiation Sent", color: "bg-amber-100 text-amber-700" };
+  }
+  if (p.status === "creator_countered") {
+    return { label: `${counterPartyLabel} Counter`, color: "bg-fuchsia-100 text-fuchsia-700" };
+  }
+  return {
+    label: STATUS_LABELS[p.status] ?? p.status,
+    color: STATUS_COLORS[p.status] ?? "",
+  };
+}
 
 function ScoreBadge({ score }: { score: number | null }) {
   if (score === null || score === undefined) return <span className="text-xs text-im8-burgundy/30">—</span>;
@@ -409,9 +432,14 @@ export default function DiscoveryBoard({
                       <div className="text-xs text-im8-burgundy/50 capitalize mt-0.5">{p.platform_primary}</div>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <span className={`text-[11px] px-2 py-0.5 rounded-[6px] font-medium whitespace-nowrap ${STATUS_COLORS[p.status] ?? ""}`}>
-                        {STATUS_LABELS[p.status] ?? p.status}
-                      </span>
+                      {(() => {
+                        const ds = displayStatus(p);
+                        return (
+                          <span className={`text-[11px] px-2 py-0.5 rounded-[6px] font-medium whitespace-nowrap ${ds.color}`}>
+                            {ds.label}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="px-4 py-3 text-im8-burgundy/70 whitespace-nowrap">
                       <span className="truncate inline-block max-w-[160px] align-bottom">
@@ -466,9 +494,14 @@ export default function DiscoveryBoard({
               <div>
                 <h2 className="text-xl font-bold text-im8-burgundy">{openProfile.influencer_name}</h2>
                 <div className="flex items-center gap-2 mt-1 text-xs text-im8-burgundy/60">
-                  <span className={`px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[openProfile.status] ?? ""}`}>
-                    {STATUS_LABELS[openProfile.status] ?? openProfile.status}
-                  </span>
+                  {(() => {
+                    const ds = displayStatus(openProfile);
+                    return (
+                      <span className={`px-2 py-0.5 rounded-full font-medium ${ds.color}`}>
+                        {ds.label}
+                      </span>
+                    );
+                  })()}
                   <span className="capitalize">{openProfile.platform_primary}</span>
                   {openProfile.agency_name && <span>· {openProfile.agency_name}</span>}
                 </div>
