@@ -21,7 +21,32 @@ function publicStatusColor(realStatus: string): string {
   return "bg-blue-100 text-blue-700";
 }
 
-const STANDARD_DELIVERABLES = "3 IG Reels · 3 IG Stories · Raw footage · Whitelisting · Paid ad usage rights · Link in bio · 3 UGC Videos for ads — across 3 months";
+// Mirrors the catalogue used in the admin Partner Tracker so the deliverables
+// shown to creators match exactly what's stored on the deal.
+const DELIVERABLE_LABELS: Record<string, string> = {
+  IGR: "Instagram Reels", IGS: "Instagram Stories", TIKTOK: "TikTok Videos",
+  YT_DEDICATED: "YouTube Dedicated Review", YT_INTEGRATED: "YouTube Integrated Review",
+  YT_PODCAST: "YouTube Podcast Ad Read", UGC: "UGC Videos",
+  NEWSLETTER: "Newsletter", APP_PARTNERSHIP: "App Partnership", BLOG: "Blog Post",
+  WHITELIST: "Whitelisting", PAID_AD: "Paid Ad Usage Rights",
+  RAW_FOOTAGE: "Raw Footage", LINK_BIO: "Link in Bio",
+};
+const BINARY_DELIVERABLE_CODES = new Set(["WHITELIST", "PAID_AD", "RAW_FOOTAGE", "LINK_BIO"]);
+
+function formatDeliverables(items: Array<{ code: string; count: number }> | null | undefined): string {
+  if (!items || items.length === 0) return "Standard package";
+  const parts = items
+    .map(item => {
+      if (!item?.code) return null;
+      if (BINARY_DELIVERABLE_CODES.has(item.code)) {
+        return item.count > 0 ? DELIVERABLE_LABELS[item.code] ?? item.code : null;
+      }
+      if (item.count <= 0) return null;
+      return `${item.count}× ${DELIVERABLE_LABELS[item.code] ?? item.code}`;
+    })
+    .filter((s): s is string => !!s);
+  return parts.length ? parts.join(" · ") : "Standard package";
+}
 
 export default async function PartnerPage() {
   const supabase = await createClient();
@@ -135,6 +160,8 @@ export default async function PartnerPage() {
     niche_tags: string[] | null;
     niche: string[] | null;
     proposed_rate_cents: number | null;
+    proposed_deliverables: Array<{ code: string; count: number }> | null;
+    total_months: number | null;
     negotiation_counter: string | null;
     agency_response: string | null;
     created_at: string;
@@ -408,29 +435,48 @@ export default async function PartnerPage() {
                   </div>
                 </div>
 
-                {/* Submitted terms */}
-                <div className="bg-im8-sand/50 rounded-lg p-4 space-y-2 text-sm border border-im8-stone/20">
-                  <p className="text-xs font-semibold text-im8-burgundy/50 uppercase tracking-wide">Submitted terms</p>
-                  <div className="flex gap-6 flex-wrap">
-                    {s.proposed_rate_cents ? (
-                      <div>
-                        <span className="text-im8-burgundy/50 text-xs">Monthly rate</span>
-                        <p className="font-semibold text-im8-burgundy">${(s.proposed_rate_cents / 100).toFixed(0)}/mo</p>
-                        <p className="text-xs text-im8-burgundy/50">${((s.proposed_rate_cents / 100) * 3).toFixed(0)} over 3 months</p>
+                {/* Current terms — proposed_deliverables reflects whatever
+                    is on the record right now (post-counter if applicable),
+                    matching what shows on the Partner Tracker overview. */}
+                {(() => {
+                  const months = s.total_months ?? 3;
+                  const monthlyUsd = s.proposed_rate_cents ? s.proposed_rate_cents / 100 : null;
+                  const totalUsd = monthlyUsd !== null ? monthlyUsd * months : null;
+                  const deliverablesText = formatDeliverables(s.proposed_deliverables);
+                  return (
+                    <div className="bg-im8-sand/50 rounded-lg p-4 space-y-2 text-sm border border-im8-stone/20">
+                      <p className="text-xs font-semibold text-im8-burgundy/50 uppercase tracking-wide">
+                        {isNegotiating ? "Current proposal" : "Submitted terms"}
+                      </p>
+                      <div className="flex gap-6 flex-wrap">
+                        {monthlyUsd !== null ? (
+                          <div>
+                            <span className="text-im8-burgundy/50 text-xs">Monthly rate</span>
+                            <p className="font-semibold text-im8-burgundy">${monthlyUsd.toFixed(0)}/mo</p>
+                            {totalUsd !== null && (
+                              <p className="text-xs text-im8-burgundy/50">${totalUsd.toFixed(0)} over {months} month{months === 1 ? "" : "s"}</p>
+                            )}
+                          </div>
+                        ) : null}
+                        <div className="flex-1">
+                          <span className="text-im8-burgundy/50 text-xs">Deliverables</span>
+                          <p className="text-im8-burgundy/80 text-xs mt-0.5">{deliverablesText}</p>
+                        </div>
                       </div>
-                    ) : null}
-                    <div className="flex-1">
-                      <span className="text-im8-burgundy/50 text-xs">Deliverables</span>
-                      <p className="text-im8-burgundy/80 text-xs mt-0.5">{STANDARD_DELIVERABLES}</p>
                     </div>
-                  </div>
-                </div>
+                  );
+                })()}
 
-                {/* Negotiation counter from IM8 */}
-                {isNegotiating && s.negotiation_counter && (
-                  <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 space-y-3">
-                    <p className="text-xs font-semibold text-orange-700 uppercase tracking-wide">IM8 counter-proposal</p>
-                    <p className="text-sm text-orange-900 whitespace-pre-wrap leading-relaxed">{s.negotiation_counter}</p>
+                {/* Negotiation counter from IM8 — note + accept/decline. The
+                    actual rate/deliverables now live in the Current proposal
+                    block above so this section only carries the message and
+                    the response control. */}
+                {isNegotiating && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
+                    <p className="text-xs font-semibold text-amber-800 uppercase tracking-wide">IM8 counter-proposal</p>
+                    {s.negotiation_counter && (
+                      <p className="text-sm text-amber-900 whitespace-pre-wrap leading-relaxed">{s.negotiation_counter}</p>
+                    )}
                     {s.agency_response ? (
                       <div className={`text-sm font-medium px-3 py-2 rounded-lg ${s.agency_response === "accepted" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
                         You {s.agency_response === "accepted" ? "accepted" : "declined"} this proposal.
