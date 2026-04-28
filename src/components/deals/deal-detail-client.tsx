@@ -66,8 +66,17 @@ type DeliverableRow = {
   brief_doc_url: string | null;
 };
 
+export type ManagementFeedbackEntry = {
+  id: string;
+  author_display_name: string | null;
+  body: string;
+  kind: string;
+  created_at: string;
+  packet_id: string;
+};
+
 export default function DealDetailClient({
-  deal, briefs, submissions, giftingRequests, deliverables = [], partnerShippingAddress, canViewRates = true, role = "",
+  deal, briefs, submissions, giftingRequests, deliverables = [], partnerShippingAddress, canViewRates = true, role = "", managementFeedback = [],
 }: {
   deal: Deal;
   briefs: Brief[];
@@ -77,6 +86,7 @@ export default function DealDetailClient({
   partnerShippingAddress: ShippingAddress | null;
   canViewRates?: boolean;
   role?: string;
+  managementFeedback?: ManagementFeedbackEntry[];
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<"overview" | "contract" | "briefs" | "submissions" | "gifting" | "edited-videos">("overview");
@@ -339,6 +349,53 @@ export default function DealDetailClient({
               </button>
             </div>
           </div>
+
+          {/* ── Management feedback (only shown if any per-creator decisions
+              or comments came back from the public review site) ── */}
+          {managementFeedback.length > 0 && (
+            <div className="bg-white rounded-xl border border-im8-stone/30 p-6 space-y-4">
+              <div>
+                <h3 className="text-[11px] font-bold text-im8-muted uppercase tracking-[0.1em]">Management Feedback</h3>
+                <p className="text-xs text-im8-burgundy/40 mt-1">Per-creator decisions and notes left by approvers via the review link.</p>
+              </div>
+              <div className="space-y-3">
+                {managementFeedback.map(f => {
+                  // Body is stored as e.g. "[Creator Name] Approved: looks great"
+                  // Strip the [Name] prefix for the deal-page display since
+                  // the deal page is already scoped to this creator.
+                  const cleanedBody = f.body.replace(/^\[[^\]]+\]\s*/, "");
+                  const decisionMatch = cleanedBody.match(/^(Approved|Rejected)(?::\s*([\s\S]*))?$/);
+                  const decision = decisionMatch?.[1] ?? null;
+                  const note = decisionMatch?.[2]?.trim() ?? cleanedBody;
+                  const decisionStyle = decision === "Approved"
+                    ? "bg-green-100 text-green-700"
+                    : decision === "Rejected"
+                    ? "bg-red-100 text-red-700"
+                    : "bg-im8-burgundy/10 text-im8-burgundy";
+                  return (
+                    <div key={f.id} className="border border-im8-stone/30 rounded-xl p-4">
+                      <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-sm text-im8-burgundy">{f.author_display_name || "Manager"}</span>
+                          {decision && (
+                            <span className={`text-[10px] px-2 py-0.5 rounded-[6px] font-semibold ${decisionStyle}`}>
+                              {decision}
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[11px] text-im8-burgundy/40">
+                          {new Date(f.created_at).toLocaleString("en-AU", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                        </span>
+                      </div>
+                      {note && note !== decision && (
+                        <p className="text-sm text-im8-burgundy/80 whitespace-pre-wrap leading-relaxed">{note}</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* ── Card 2: Deal Terms ── */}
           <div className="bg-white rounded-xl border border-im8-stone/30 p-6 space-y-5">

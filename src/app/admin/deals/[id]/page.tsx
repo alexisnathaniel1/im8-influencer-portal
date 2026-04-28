@@ -45,6 +45,35 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
       .order("created_at", { ascending: true }),
   ]);
 
+  // Fetch management feedback comments for this deal. Per-creator decisions
+  // and notes left via the public review site are stored in approval_comments
+  // with the creator's name prefixed in square brackets, e.g.
+  //   "[Agency Creator 1] Approved: looks great"
+  // We surface them on the deal page so the team reviewing the contract can
+  // see exactly what each manager said about *this* creator without having
+  // to dig through the batch's full thread.
+  type MgmtFeedback = { id: string; author_display_name: string | null; body: string; kind: string; created_at: string; packet_id: string };
+  let managementFeedback: MgmtFeedback[] = [];
+  const influencerName = (deal.influencer_name as string | null)?.trim();
+  if (influencerName) {
+    // Find packets that include this deal id, then fetch their approval_comments
+    // whose body starts with [<influencer_name>].
+    const { data: relatedPackets } = await admin
+      .from("approval_packets")
+      .select("id")
+      .contains("deal_ids", [id]);
+    const packetIds = (relatedPackets ?? []).map((p) => p.id as string);
+    if (packetIds.length > 0) {
+      const { data: comments } = await admin
+        .from("approval_comments")
+        .select("id, author_display_name, body, kind, created_at, packet_id")
+        .in("packet_id", packetIds)
+        .ilike("body", `[${influencerName}]%`)
+        .order("created_at", { ascending: false });
+      managementFeedback = (comments ?? []) as MgmtFeedback[];
+    }
+  }
+
   // Fetch partner shipping address if linked to a profile
   let partnerShippingAddress: Record<string, string> | null = null;
   const profileId = (deal.influencer_profile_id as { id?: string } | null)?.id ?? deal.influencer_profile_id as string | null;
@@ -98,6 +127,7 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
         partnerShippingAddress={partnerShippingAddress}
         canViewRates={showRates}
         role={profile?.role ?? ""}
+        managementFeedback={managementFeedback}
       />
     </div>
   );
