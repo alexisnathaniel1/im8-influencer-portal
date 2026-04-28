@@ -207,9 +207,19 @@ export default function DiscoveryBoard({
     // Initialise counter-proposal from existing profile values
     setCounterRate(profile.proposed_rate_cents ? String(profile.proposed_rate_cents / 100) : "");
     setCounterMonths(profile.total_months ? String(profile.total_months) : "3");
-    setCounterDeliverables(
-      (profile.proposed_deliverables ?? []).filter(d => d.code !== "WHITELIST")
-    );
+    // Seed the counter list from what the creator submitted, then ensure the
+    // standard usage rights (Whitelisting, Paid Ad Usage Rights, Link in Bio)
+    // are always pre-included — they're listed as "USAGE RIGHTS (STANDARD)"
+    // above the form so admins shouldn't have to re-add them by hand.
+    const STANDARD_RIGHTS = ["WHITELIST", "PAID_AD", "LINK_BIO"];
+    const submitted = profile.proposed_deliverables ?? [];
+    const merged = [...submitted];
+    for (const code of STANDARD_RIGHTS) {
+      if (!merged.some(d => d.code === code)) {
+        merged.push({ code, count: 1 });
+      }
+    }
+    setCounterDeliverables(merged);
     setCounterNotes(profile.negotiation_counter ?? "");
     setCounterEmail(profile.submitter_email ?? "");
     await loadComments(profile.id);
