@@ -330,9 +330,14 @@ export default function DiscoveryBoard({
     if (res.ok) {
       const data = await res.json();
       if (data.comment) setComments(prev => [...prev, data.comment]);
+      // Optimistically reflect the negotiation reset in the open panel so
+      // the status pill immediately shows "Negotiation Sent" — without this
+      // the panel would still show "Creator Declined" until the next reload.
+      setOpenProfile(p => p ? { ...p, status: "negotiation_needed", agency_response: null, creator_counter_note: null } : p);
       router.refresh();
     } else {
-      alert("Failed to send counter-proposal. Please try again.");
+      const data = await res.json().catch(() => ({}));
+      alert(data.error || "Failed to send counter-proposal. Please try again.");
     }
   }
 

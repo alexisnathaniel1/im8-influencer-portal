@@ -62,7 +62,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   // agency_response is reset so the partner-side block shows the new
   // counter, not the previous accept/decline state.
   const rate_cents = rate_usd ? Math.round(rate_usd * 100) : null;
-  await admin.from("discovery_profiles").update({
+
+  // Try to update with the full payload first. If the deployed DB hasn't
+  // had migration 044 applied yet, creator_counter_note won't exist and
+  // the update will fail wholesale — so we fall back to the legacy column
+  // set, which is enough to flip the row back into a fresh negotiation
+  // state (status + agency_response reset) so the creator sees the
+  // counter again on /partner.
+  const fullPayload: Record<string, unknown> = {
     proposed_rate_cents: rate_cents ?? undefined,
     proposed_deliverables: deliverables,
     negotiation_counter: notes ?? null,
@@ -71,7 +78,19 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     status: "negotiation_needed",
     agency_response: null,
     creator_counter_note: null,
-  }).eq("id", id);
+  };
+  let { error: updateError } = await admin.from("discovery_profiles").update(fullPayload).eq("id", id);
+
+  if (updateError && /creator_counter_note/.test(updateError.message)) {
+    console.warn("[discovery/counter] migration 044 not yet applied — falling back without creator_counter_note");
+    delete fullPayload.creator_counter_note;
+    ({ error: updateError } = await admin.from("discovery_profiles").update(fullPayload).eq("id", id));
+  }
+
+  if (updateError) {
+    console.error("[discovery/counter] update failed:", updateError.message, "id:", id);
+    return NextResponse.json({ error: `Could not save counter-proposal: ${updateError.message}` }, { status: 500 });
+  }
 
   // Send the email.
   // Three URLs passed to the template:
