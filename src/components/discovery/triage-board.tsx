@@ -67,10 +67,38 @@ function ScoreBadge({ score }: { score: number | null }) {
 
 const STANDARD_USAGE_RIGHTS = ["Whitelisting", "Paid ad usage rights", "Link in bio"];
 
+// Mirrors the canonical catalogue used in the Partner Tracker
+// (src/components/deals/deal-detail-client.tsx) so counter-proposals,
+// approved deals, and partner-facing summaries all reference the same codes.
 const DELIVERABLE_LABELS: Record<string, string> = {
-  IGR: "IG Reels", IGS: "IG Stories", UGC: "UGC Videos",
-  TIKTOK: "TikTok Videos", YT: "YouTube Videos",
+  // Instagram
+  IGR: "Instagram Reels",
+  IGS: "Instagram Stories",
+  // TikTok
+  TIKTOK: "TikTok Videos",
+  // YouTube — broken down by format
+  YT_DEDICATED: "YouTube Dedicated Review",
+  YT_INTEGRATED: "YouTube Integrated Review",
+  YT_PODCAST: "YouTube Podcast Ad Read",
+  // UGC + other formats
+  UGC: "UGC Videos",
+  NEWSLETTER: "Newsletter",
+  APP_PARTNERSHIP: "App Partnership",
+  BLOG: "Blog Post",
+  // Rights / extras — Yes/No grants, no count needed
+  WHITELIST: "Whitelisting",
+  PAID_AD: "Paid Ad Usage Rights",
+  RAW_FOOTAGE: "Raw Footage",
+  LINK_BIO: "Link in Bio",
 };
+const BINARY_DELIVERABLE_CODES = new Set(["WHITELIST", "PAID_AD", "RAW_FOOTAGE", "LINK_BIO"]);
+// Order shown in the dropdown — content deliverables first, rights/extras last.
+const COUNTER_DELIVERABLE_CODES = [
+  "IGR", "IGS", "TIKTOK",
+  "YT_DEDICATED", "YT_INTEGRATED", "YT_PODCAST",
+  "UGC", "NEWSLETTER", "APP_PARTNERSHIP", "BLOG",
+  "WHITELIST", "PAID_AD", "RAW_FOOTAGE", "LINK_BIO",
+];
 
 type Comment = {
   id: string;
@@ -613,29 +641,42 @@ export default function DiscoveryBoard({
                   <div>
                     <label className="block text-xs font-semibold text-orange-700 mb-2">Deliverables</label>
                     <div className="space-y-2">
-                      {counterDeliverables.map((d, idx) => (
-                        <div key={d.code} className="flex items-center gap-2">
-                          <select
-                            value={d.code}
-                            onChange={e => setCounterDeliverables(prev => prev.map((x, i) => i === idx ? { ...x, code: e.target.value } : x))}
-                            className="flex-1 px-2 py-1.5 border border-orange-300 rounded-lg text-sm text-im8-burgundy focus:outline-none bg-white"
-                          >
-                            {["IGR","IGS","UGC","TIKTOK","YT"].map(c => (
-                              <option key={c} value={c}>{DELIVERABLE_LABELS[c] ?? c}</option>
-                            ))}
-                          </select>
-                          <input
-                            type="number" min="1" max="20" value={d.count}
-                            onChange={e => setCounterDeliverables(prev => prev.map((x, i) => i === idx ? { ...x, count: parseInt(e.target.value) || 1 } : x))}
-                            className="w-16 px-2 py-1.5 border border-orange-300 rounded-lg text-sm text-im8-burgundy text-center focus:outline-none"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setCounterDeliverables(prev => prev.filter((_, i) => i !== idx))}
-                            className="text-orange-400 hover:text-red-500 text-lg leading-none px-1"
-                          >×</button>
-                        </div>
-                      ))}
+                      {counterDeliverables.map((d, idx) => {
+                        const isBinary = BINARY_DELIVERABLE_CODES.has(d.code);
+                        return (
+                          <div key={`${d.code}-${idx}`} className="flex items-center gap-2">
+                            <select
+                              value={d.code}
+                              onChange={e => {
+                                const nextCode = e.target.value;
+                                const nextIsBinary = BINARY_DELIVERABLE_CODES.has(nextCode);
+                                setCounterDeliverables(prev => prev.map((x, i) =>
+                                  i === idx ? { code: nextCode, count: nextIsBinary ? 1 : (BINARY_DELIVERABLE_CODES.has(x.code) ? 1 : x.count) } : x
+                                ));
+                              }}
+                              className="flex-1 px-2 py-1.5 border border-orange-300 rounded-lg text-sm text-im8-burgundy focus:outline-none bg-white"
+                            >
+                              {COUNTER_DELIVERABLE_CODES.map(c => (
+                                <option key={c} value={c}>{DELIVERABLE_LABELS[c] ?? c}</option>
+                              ))}
+                            </select>
+                            {isBinary ? (
+                              <span className="w-16 px-2 py-1.5 text-xs text-im8-burgundy/60 text-center">Yes</span>
+                            ) : (
+                              <input
+                                type="number" min="1" max="20" value={d.count}
+                                onChange={e => setCounterDeliverables(prev => prev.map((x, i) => i === idx ? { ...x, count: parseInt(e.target.value) || 1 } : x))}
+                                className="w-16 px-2 py-1.5 border border-orange-300 rounded-lg text-sm text-im8-burgundy text-center focus:outline-none"
+                              />
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => setCounterDeliverables(prev => prev.filter((_, i) => i !== idx))}
+                              className="text-orange-400 hover:text-red-500 text-lg leading-none px-1"
+                            >×</button>
+                          </div>
+                        );
+                      })}
                       <button
                         type="button"
                         onClick={() => setCounterDeliverables(prev => [...prev, { code: "IGR", count: 1 }])}
