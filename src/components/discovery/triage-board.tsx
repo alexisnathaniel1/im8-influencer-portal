@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { humaniseDeliverableCodes } from "@/lib/deliverables";
 
 type DiscoveryProfile = {
   id: string;
@@ -827,7 +828,7 @@ export default function DiscoveryBoard({
                               {new Date(c.created_at).toLocaleString("en-AU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
                             </span>
                           </div>
-                          <p className="text-im8-burgundy/80 whitespace-pre-wrap">{c.body}</p>
+                          <p className="text-im8-burgundy/80 whitespace-pre-wrap">{humaniseDeliverableCodes(c.body)}</p>
                         </div>
                       );
                     })}

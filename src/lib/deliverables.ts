@@ -51,3 +51,20 @@ export function formatDeliverablesSummary(items: Array<{ code: string; count: nu
   const parts = items.map(formatDeliverable).filter((s): s is string => !!s);
   return parts.length ? parts.join(", ") : "no deliverables specified";
 }
+
+/**
+ * Rewrite raw enum codes inside a free-text string with their friendly
+ * labels at render time. Used to clean up legacy activity-feed bodies
+ * that were written before the formatter was centralised — matches
+ * patterns like '1 × IGR', '2× YT_DEDICATED', '1 × WHITELIST' and turns
+ * them into '1× Instagram Reels', '2× YouTube Dedicated Review',
+ * 'Whitelisting'. Unknown codes are left untouched.
+ */
+export function humaniseDeliverableCodes(text: string): string {
+  return text.replace(/(\d+)\s*×\s*([A-Z][A-Z0-9_]*)/g, (match, countStr: string, code: string) => {
+    const label = DELIVERABLE_LABELS[code];
+    if (!label) return match;
+    if (BINARY_DELIVERABLE_CODES.has(code)) return label;
+    return `${countStr}× ${label}`;
+  });
+}
