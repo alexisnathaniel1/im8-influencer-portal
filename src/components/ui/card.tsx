@@ -11,10 +11,14 @@ const paddingClasses = { sm: "p-4", md: "p-6", lg: "p-8" };
 function Card({ title, children, padding = "md", className = "", ...props }: CardProps) {
   return (
     <div
-      className={`bg-white rounded-xl shadow-sm border border-im8-stone/20 ${paddingClasses[padding]} ${className}`}
+      className={`bg-white rounded-xl border border-im8-stone/30 transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-sm ${paddingClasses[padding]} ${className}`}
       {...props}
     >
-      {title && <h3 className="text-lg font-semibold text-im8-burgundy mb-4">{title}</h3>}
+      {title && (
+        <h3 className="text-[15px] font-semibold text-im8-maroon mb-4" style={{ fontFamily: "var(--font-serif)" }}>
+          {title}
+        </h3>
+      )}
       {children}
     </div>
   );

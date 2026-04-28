@@ -96,7 +96,7 @@ export default function PartnerGroupList({
         return (
           <div key={g.key} className="bg-white rounded-xl border border-im8-stone/30 overflow-hidden">
             {/* Creator header — click left side to toggle */}
-            <div className="flex items-center justify-between gap-4 px-5 py-3 bg-im8-sand/40 border-b border-im8-stone/20">
+            <div className="flex items-center justify-between gap-4 px-5 py-3.5 bg-im8-offwhite border-b border-im8-stone/20">
               <button
                 onClick={() => toggle(g.key)}
                 className="min-w-0 flex-1 text-left hover:opacity-80 transition-opacity"
@@ -147,7 +147,7 @@ export default function PartnerGroupList({
                     ].map(h => (
                       <th
                         key={h}
-                        className="text-left px-4 py-2 text-[10px] font-semibold text-im8-burgundy/50 uppercase tracking-wide"
+                        className="text-left px-5 py-2.5 text-[11px] font-semibold text-im8-muted uppercase tracking-[0.07em]"
                       >
                         {h}
                       </th>
@@ -158,9 +158,9 @@ export default function PartnerGroupList({
                   {g.deals.map(d => {
                     const social = primarySocialUrl(d);
                     return (
-                      <tr key={d.id} className="hover:bg-im8-sand/20 transition-colors">
+                      <tr key={d.id} className="hover:bg-im8-offwhite transition-colors">
                         {/* Contract badge + View link */}
-                        <td className="px-4 py-3">
+                        <td className="px-5 py-3.5">
                           <Link
                             href={`/admin/deals/${d.id}`}
                             className="inline-flex items-center gap-2 group"
@@ -192,9 +192,9 @@ export default function PartnerGroupList({
                         </td>
 
                         {/* Status — simplified label */}
-                        <td className="px-4 py-3">
+                        <td className="px-5 py-3.5">
                           <span
-                            className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                            className={`text-[11px] px-2 py-0.5 rounded-[6px] font-medium ${
                               STATUS_COLORS[d.status] ?? "bg-gray-100 text-gray-500"
                             }`}
                           >
@@ -203,7 +203,7 @@ export default function PartnerGroupList({
                         </td>
 
                         {/* Paid / Gifted */}
-                        <td className="px-4 py-3">
+                        <td className="px-5 py-3.5">
                           {d.is_gifted ? (
                             <span className="text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 font-medium">
                               Gifted

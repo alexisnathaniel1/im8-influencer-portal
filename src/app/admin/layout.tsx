@@ -27,8 +27,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   return (
     <div className="min-h-screen bg-im8-offwhite flex">
       <AdminNav profile={profile} />
-      <main className="flex-1 ml-64 p-8 overflow-y-auto min-h-screen">
-        {children}
+      <main className="flex-1 ml-64 overflow-y-auto min-h-screen bg-im8-offwhite">
+        <div className="max-w-[1080px] mx-auto px-10 py-8">
+          {children}
+        </div>
       </main>
     </div>
   );

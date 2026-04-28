@@ -288,23 +288,23 @@ export default function DiscoveryBoard({
       ) : (
         <div className="bg-white rounded-xl border border-im8-stone/30 overflow-hidden">
           <table className="w-full text-sm">
-            <thead className="bg-im8-sand/60 border-b border-im8-stone/30">
-              <tr className="text-left text-im8-burgundy/60 text-xs uppercase tracking-wide">
-                <th className="px-4 py-3">Creator</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Niche</th>
-                <th className="px-4 py-3">Followers</th>
-                <th className="px-4 py-3">Rate</th>
-                <th className="px-4 py-3">AI</th>
-                <th className="px-4 py-3">Comments</th>
-                <th className="px-4 py-3 text-right">Actions</th>
+            <thead className="bg-white border-b border-im8-stone/20">
+              <tr className="text-left text-im8-muted text-[11px] uppercase tracking-[0.07em] font-semibold">
+                <th className="px-5 py-2.5">Creator</th>
+                <th className="px-5 py-2.5">Status</th>
+                <th className="px-5 py-2.5">Niche</th>
+                <th className="px-5 py-2.5">Followers</th>
+                <th className="px-5 py-2.5">Rate</th>
+                <th className="px-5 py-2.5">AI</th>
+                <th className="px-5 py-2.5">Comments</th>
+                <th className="px-5 py-2.5 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
               {profiles.map(p => {
                 const niches = p.niche_tags ?? p.niche ?? [];
                 return (
-                  <tr key={p.id} className="border-b border-im8-stone/20 hover:bg-im8-sand/30 cursor-pointer"
+                  <tr key={p.id} className="border-b border-im8-stone/20 hover:bg-im8-offwhite cursor-pointer transition-colors"
                       onClick={() => openRow(p)}>
                     <td className="px-4 py-3">
                       <div className="font-medium text-im8-burgundy">{p.influencer_name}</div>
@@ -316,7 +316,7 @@ export default function DiscoveryBoard({
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[p.status] ?? ""}`}>
+                      <span className={`text-[11px] px-2 py-0.5 rounded-[6px] font-medium ${STATUS_COLORS[p.status] ?? ""}`}>
                         {STATUS_LABELS[p.status] ?? p.status}
                       </span>
                     </td>

@@ -44,98 +44,143 @@
 }
 
 :root {
-  --background: #F5EAEA;
-  --foreground: #50000B;
-  --surface: #FFFFFF;
-  --surface-hover: #FFE9D8;
-  --border: #E1CBB9;
-  --muted: rgba(80, 0, 11, 0.7);
-  --primary: #A40011;
-  --primary-hover: #50000B;
-  --danger: #A40011;
-  --success: #16a34a;
-  --flamingo: #FF9693;
-  --sand: #FFE9D8;
-  --stone: #E1CBB9;
-  --stone-white: #F5EAEA;
-  --burgundy: #50000B;
-  --red-algae: #A40011;
+  /* ── Surfaces ─────────────────────────────────────────────── */
+  --background:    #FAF6F2;   /* V4 Off White — page background */
+  --surface:       #FFFFFF;
+  --surface-hover: #F5EDE0;   /* V4 Cream */
+  --border:        #E1CBB9;
+
+  /* ── Text colour system (V4: use only these 4 values) ─────── */
+  --text-headline: #5A000B;   /* Deep Maroon — h1, h2, h3 */
+  --text-body:     #1A0508;   /* Near Black  — paragraphs, cells */
+  --text-muted:    #8C7A6E;   /* Warm Gray   — labels, captions */
+  --text-on-dark:  #FFFFFF;   /* on burgundy/dark surfaces */
+
+  /* ── Brand colours ────────────────────────────────────────── */
+  --burgundy:      #50000B;
+  --dark-burgundy: #3D0010;
+  --red-algae:     #A40011;
+  --flamingo:      #FF9693;
+  --gold:          #C5973B;
+  --stone:         #E1CBB9;
+  --sand:          #F5EDE0;
+
+  /* ── Button base (V4 spec) ───────────────────────────────── */
+  --btn-radius:    9999px;    /* pill */
+
+  /* ── Spacing scale (8px base) ────────────────────────────── */
+  --space-xs:   4px;
+  --space-sm:   8px;
+  --space-md:   16px;
+  --space-lg:   24px;
+  --space-xl:   40px;
+  --space-2xl:  64px;
+  --space-3xl:  96px;
+
+  /* ── Legacy aliases (keep existing CSS var references working) */
+  --primary:        #A40011;
+  --primary-hover:  #50000B;
+  --danger:         #A40011;
+  --success:        #16a34a;
+  --muted:          rgba(80, 0, 11, 0.7);
+  --stone-white:    #FAF6F2;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-surface: var(--surface);
+  --color-background:    var(--background);
+  --color-foreground:    var(--text-headline);
+  --color-surface:       var(--surface);
   --color-surface-hover: var(--surface-hover);
-  --color-border: var(--border);
-  --color-muted: var(--muted);
-  --color-primary: var(--primary);
+  --color-border:        var(--border);
+  --color-muted:         var(--muted);
+  --color-primary:       var(--primary);
   --color-primary-hover: var(--primary-hover);
-  --color-danger: var(--danger);
-  --color-success: var(--success);
-  --color-flamingo: var(--flamingo);
-  --color-sand: var(--sand);
-  --color-stone: var(--stone);
-  --color-stone-white: var(--stone-white);
-  --color-burgundy: var(--burgundy);
-  --color-red-algae: var(--red-algae);
+  --color-danger:        var(--danger);
+  --color-success:       var(--success);
+  --color-flamingo:      var(--flamingo);
+  --color-sand:          var(--sand);
+  --color-stone:         var(--stone);
+  --color-stone-white:   var(--stone-white);
+  --color-burgundy:      var(--burgundy);
+  --color-red-algae:     var(--red-algae);
+  --color-gold:          var(--gold);
 
+  /* Tailwind im8-* colour tokens */
   --color-im8-burgundy: #50000B;
-  --color-im8-red: #A40011;
+  --color-im8-red:      #A40011;
   --color-im8-flamingo: #FF9693;
-  --color-im8-stone: #E1CBB9;
-  --color-im8-sand: #FFE9D8;
-  --color-im8-offwhite: #F5EAEA;
+  --color-im8-stone:    #E1CBB9;
+  --color-im8-sand:     #F5EDE0;
+  --color-im8-offwhite: #FAF6F2;
+  --color-im8-gold:     #C5973B;
+  --color-im8-dark:     #3D0010;
+  --color-im8-maroon:   #5A000B;
+  --color-im8-ink:      #1A0508;
+  --color-im8-muted:    #8C7A6E;
 
-  --font-sans: "Aeonik", system-ui, -apple-system, sans-serif;
-  --font-serif: "Arizona Flare", Georgia, "Times New Roman", serif;
+  --font-sans:   "Aeonik", system-ui, -apple-system, sans-serif;
+  --font-serif:  "Arizona Flare", Georgia, "Times New Roman", serif;
 }
 
 html { color-scheme: light; }
 
 body {
   background: var(--burgundy);
-  color: var(--foreground);
+  color: var(--text-body);
   font-family: var(--font-sans);
 }
 
-h1, h2, h3 { font-family: var(--font-serif); }
+h1, h2, h3 {
+  font-family: var(--font-serif);
+  color: var(--text-headline);
+}
 
+/* ── Page container (max-width + gutter) ───────────────────── */
+.im8-page {
+  max-width: 1080px;
+  padding-left: var(--space-2xl);
+  padding-right: var(--space-2xl);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ── Scrollbar ─────────────────────────────────────────────── */
 .scrollbar-thin {
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
 }
 
+/* ── Animations ────────────────────────────────────────────── */
 @keyframes fade-in-up {
   from { opacity: 0; transform: translateY(16px); }
-  to { opacity: 1; transform: translateY(0); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 @keyframes fade-in {
   from { opacity: 0; }
-  to { opacity: 1; }
+  to   { opacity: 1; }
 }
 @keyframes scale-in {
   from { opacity: 0; transform: scale(0.9); }
-  to { opacity: 1; transform: scale(1); }
+  to   { opacity: 1; transform: scale(1); }
 }
 @keyframes shake {
   0%, 100% { transform: translateX(0); }
-  20% { transform: translateX(-6px); }
-  40% { transform: translateX(6px); }
-  60% { transform: translateX(-4px); }
-  80% { transform: translateX(4px); }
+  20%       { transform: translateX(-6px); }
+  40%       { transform: translateX(6px); }
+  60%       { transform: translateX(-4px); }
+  80%       { transform: translateX(4px); }
 }
 @keyframes pop {
-  0% { transform: scale(1); }
-  50% { transform: scale(1.05); }
+  0%   { transform: scale(1); }
+  50%  { transform: scale(1.05); }
   100% { transform: scale(1); }
 }
 
 .animate-fade-in-up { animation: fade-in-up 0.5s ease-out both; }
-.animate-fade-in { animation: fade-in 0.4s ease-out both; }
-.animate-scale-in { animation: scale-in 0.4s ease-out both; }
-.animate-shake { animation: shake 0.5s ease-in-out; }
-.animate-pop { animation: pop 0.3s ease-in-out; }
+.animate-fade-in    { animation: fade-in 0.4s ease-out both; }
+.animate-scale-in   { animation: scale-in 0.4s ease-out both; }
+.animate-shake      { animation: shake 0.5s ease-in-out; }
+.animate-pop        { animation: pop 0.3s ease-in-out; }
 
 .stagger-1 { animation-delay: 0.1s; }
 .stagger-2 { animation-delay: 0.2s; }

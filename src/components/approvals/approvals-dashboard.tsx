@@ -195,7 +195,7 @@ export default function ApprovalsDashboard({
     if (kind === "approval") return "bg-green-50 border-green-200 text-green-800";
     if (kind === "rejection") return "bg-red-50 border-red-200 text-red-800";
     if (kind === "revision_request") return "bg-orange-50 border-orange-200 text-orange-800";
-    return "bg-im8-sand/40 border-im8-stone/30 text-im8-burgundy";
+    return "bg-im8-offwhite border-im8-stone/30 text-im8-ink";
   }
 
   const dealsById = Object.fromEntries(agreedDeals.map((d) => [d.id, d]));
@@ -229,8 +229,8 @@ export default function ApprovalsDashboard({
                 key={d.id}
                 className={`flex items-start gap-3 bg-white rounded-xl border p-4 cursor-pointer transition-colors ${
                   selectedDealIds.includes(d.id)
-                    ? "border-im8-red bg-im8-sand/30"
-                    : "border-im8-stone/30 hover:border-im8-stone"
+                    ? "border-im8-red bg-im8-offwhite"
+                    : "border-im8-stone/30 hover:border-im8-stone/60"
                 }`}
               >
                 <input
@@ -242,7 +242,7 @@ export default function ApprovalsDashboard({
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-medium text-im8-burgundy text-sm">{d.influencer_name}</span>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700 font-semibold">
+                    <span className="text-[11px] px-1.5 py-0.5 rounded-[6px] bg-purple-100 text-purple-700 font-semibold">
                       Contract {d.contract_sequence ?? 1}
                     </span>
                   </div>
@@ -418,7 +418,7 @@ export default function ApprovalsDashboard({
             </div>
 
             {/* Creators in this packet */}
-            <div className="px-6 py-3 border-b border-im8-stone/20 bg-im8-sand/30">
+            <div className="px-6 py-3 border-b border-im8-stone/20 bg-im8-offwhite">
               <p className="text-xs font-semibold text-im8-burgundy/50 uppercase tracking-wide mb-2">
                 Creators in this batch
               </p>
@@ -435,7 +435,7 @@ export default function ApprovalsDashboard({
                         >
                           {d.influencer_name}
                         </Link>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700 font-semibold shrink-0">
+                        <span className="text-[11px] px-1.5 py-0.5 rounded-[6px] bg-purple-100 text-purple-700 font-semibold shrink-0">
                           Contract {d.contract_sequence ?? 1}
                         </span>
                       </div>

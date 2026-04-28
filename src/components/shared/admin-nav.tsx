@@ -6,14 +6,64 @@ import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { getAllowedNav } from "@/lib/permissions";
 
+// ── SVG Icons (16×16, currentColor) ────────────────────────────────────────
+const Icons: Record<string, React.FC<{ className?: string }>> = {
+  dashboard: ({ className }) => (
+    <svg className={className} width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <rect x="1" y="1" width="6" height="6" rx="1.5" fill="currentColor" opacity="0.9"/>
+      <rect x="9" y="1" width="6" height="6" rx="1.5" fill="currentColor" opacity="0.9"/>
+      <rect x="1" y="9" width="6" height="6" rx="1.5" fill="currentColor" opacity="0.9"/>
+      <rect x="9" y="9" width="6" height="6" rx="1.5" fill="currentColor" opacity="0.9"/>
+    </svg>
+  ),
+  discovery: ({ className }) => (
+    <svg className={className} width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" strokeWidth="1.5"/>
+      <path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+    </svg>
+  ),
+  approvals: ({ className }) => (
+    <svg className={className} width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5"/>
+      <path d="M5 8l2 2 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  ),
+  tracker: ({ className }) => (
+    <svg className={className} width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path d="M1 12.5c0-2.21 2-4 4.5-4s4.5 1.79 4.5 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+      <circle cx="5.5" cy="5" r="2.5" stroke="currentColor" strokeWidth="1.5"/>
+      <path d="M11 8.7c1.38.37 2.5 1.66 2.5 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+      <circle cx="10.5" cy="4.5" r="2" stroke="currentColor" strokeWidth="1.5"/>
+    </svg>
+  ),
+  deliverables: ({ className }) => (
+    <svg className={className} width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <rect x="1.5" y="1.5" width="13" height="13" rx="2" stroke="currentColor" strokeWidth="1.5"/>
+      <path d="M5 5.5h6M5 8.5h6M5 11.5h3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+    </svg>
+  ),
+  review: ({ className }) => (
+    <svg className={className} width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5"/>
+      <path d="M6.5 5.5l4.5 2.5-4.5 2.5V5.5z" fill="currentColor"/>
+    </svg>
+  ),
+  settings: ({ className }) => (
+    <svg className={className} width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <circle cx="8" cy="8" r="2.5" stroke="currentColor" strokeWidth="1.5"/>
+      <path d="M8 1v1.5M8 13.5V15M15 8h-1.5M2.5 8H1M12.54 3.46l-1.06 1.06M4.52 11.48l-1.06 1.06M12.54 12.54l-1.06-1.06M4.52 4.52L3.46 3.46" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+    </svg>
+  ),
+};
+
 const NAV = [
-  { href: "/admin", label: "Dashboard", icon: "⬛" },
-  { href: "/admin/discovery", label: "Discovery", icon: "🔍" },
-  { href: "/admin/approvals", label: "Approvals", icon: "✅" },
-  { href: "/admin/deals", label: "Partner Tracker", icon: "🤝" },
-  { href: "/admin/deliverables", label: "Deliverables", icon: "📋" },
-  { href: "/admin/review", label: "Content Review", icon: "🎬" },
-  { href: "/admin/settings", label: "Settings", icon: "⚙️" },
+  { href: "/admin",              label: "Dashboard",      icon: "dashboard"    },
+  { href: "/admin/discovery",    label: "Discovery",      icon: "discovery"    },
+  { href: "/admin/approvals",    label: "Approvals",      icon: "approvals"    },
+  { href: "/admin/deals",        label: "Partner Tracker",icon: "tracker"      },
+  { href: "/admin/deliverables", label: "Deliverables",   icon: "deliverables" },
+  { href: "/admin/review",       label: "Content Review", icon: "review"       },
+  { href: "/admin/settings",     label: "Settings",       icon: "settings"     },
 ];
 
 export default function AdminNav({ profile }: { profile: { full_name: string; role: string; email: string } }) {
@@ -31,33 +81,52 @@ export default function AdminNav({ profile }: { profile: { full_name: string; ro
 
   return (
     <nav className="fixed left-0 top-0 h-full w-64 bg-im8-burgundy text-white flex flex-col">
-      <div className="p-6 border-b border-white/10">
-        <Image src="/logo-white.svg" alt="IM8" width={60} height={30} />
-        <p className="text-xs text-white/50 mt-2 uppercase tracking-wider">Influencer Portal</p>
+      {/* Logo + portal label */}
+      <div className="px-6 py-5 border-b border-white/10">
+        <Image src="/logo-white.svg" alt="IM8" width={56} height={28} />
+        <p className="text-[10px] font-bold text-im8-gold/80 mt-2.5 uppercase tracking-[0.15em]">
+          Influencer Portal
+        </p>
       </div>
 
-      <div className="flex-1 py-4 overflow-y-auto">
+      {/* Nav items */}
+      <div className="flex-1 py-3 overflow-y-auto">
         {visibleNav.map(item => {
           const active = pathname === item.href || (item.href !== "/admin" && pathname.startsWith(item.href));
+          const IconComponent = Icons[item.icon];
           return (
-            <Link key={item.href} href={item.href}
-              className={`flex items-center gap-3 px-6 py-3 text-sm transition-colors ${
-                active ? "bg-white/15 text-white font-medium" : "text-white/60 hover:text-white hover:bg-white/5"
-              }`}>
-              <span className="text-base">{item.icon}</span>
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`flex items-center gap-3 px-5 py-2.5 text-[13px] transition-colors relative ${
+                active
+                  ? "text-white font-medium bg-white/10 border-l-2 border-im8-flamingo"
+                  : "text-white/55 hover:text-white hover:bg-white/8 border-l-2 border-transparent"
+              }`}
+            >
+              {IconComponent && (
+                <IconComponent className={`shrink-0 ${active ? "text-white" : "text-white/50"}`} />
+              )}
               {item.label}
             </Link>
           );
         })}
       </div>
 
-      <div className="p-4 border-t border-white/10">
-        <div className="text-xs text-white/50 mb-1 truncate">{profile.full_name}</div>
-        <div className="text-xs text-white/30 mb-3 capitalize">{profile.role.replace("_", " ")}</div>
-        <button onClick={signOut}
-          className="w-full text-xs text-white/50 hover:text-white py-1 text-left transition-colors">
-          Sign out →
-        </button>
+      {/* User footer */}
+      <div className="px-5 py-4 border-t border-white/10">
+        <div className="text-[13px] font-medium text-white/85 truncate">{profile.full_name}</div>
+        <div className="flex items-center justify-between mt-1">
+          <span className="text-[11px] text-im8-flamingo/70 uppercase tracking-[0.08em] capitalize">
+            {profile.role.replace("_", " ")}
+          </span>
+          <button
+            onClick={signOut}
+            className="text-[11px] text-white/40 hover:text-white/80 transition-colors"
+          >
+            Sign out
+          </button>
+        </div>
       </div>
     </nav>
   );
