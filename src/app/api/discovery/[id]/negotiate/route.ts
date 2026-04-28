@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { formatDeliverablesSummary } from "@/lib/deliverables";
 
 type Deliverable = { code: string; count: number };
 
@@ -66,9 +67,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const rateUsd = typeof body.rate_usd === "number" ? body.rate_usd : null;
     const totalMonths = typeof body.total_months === "number" ? body.total_months : 3;
     const deliverables = Array.isArray(body.deliverables) ? body.deliverables as Deliverable[] : [];
-    const summary = deliverables.length
-      ? deliverables.map(d => `${d.count}× ${d.code}`).join(", ")
-      : "no deliverables specified";
+    const summary = formatDeliverablesSummary(deliverables);
     const rateNote = rateUsd ? `$${rateUsd.toLocaleString()}/mo · ${totalMonths}mo` : "rate TBC";
     const note = typeof body.note === "string" && body.note.trim() ? `\nNote: ${body.note.trim()}` : "";
     commentBody = `${submitterLabel} sent a counter-proposal back to IM8.\nTerms: ${rateNote} · ${summary}${note}`;

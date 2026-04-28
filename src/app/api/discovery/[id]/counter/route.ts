@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createTransporter, EMAIL_FROM } from "@/lib/email/client";
 import { negotiationCounterTemplate } from "@/lib/email/templates/negotiation-counter";
+import { formatDeliverablesSummary } from "@/lib/deliverables";
 
 const ROLE_LABELS: Record<string, string> = {
   admin: "Admin", management: "Management", support: "Support",
@@ -139,9 +140,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 
   // Log to activity feed
-  const deliverablesSummary = deliverables
-    .map(d => `${d.count} × ${d.code}`)
-    .join(", ");
+  const deliverablesSummary = formatDeliverablesSummary(deliverables);
   const rateNote = rate_usd ? `$${rate_usd.toLocaleString()}/mo` : "rate TBC";
 
   const { data: comment } = await admin.from("discovery_comments").insert({
