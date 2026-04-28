@@ -49,6 +49,13 @@ function SignupForm() {
     const accessToken = signUpData.session?.access_token;
     const displayName = isAdminEmail ? fullName : partnerType === "agency" ? agencyName : fullName;
 
+    // Normalise the agency website so users can type 'www.example.com',
+    // 'example.com', or the full URL — we always store it with https://.
+    const trimmedWebsite = agencyWebsite.trim();
+    const normalisedWebsite = trimmedWebsite
+      ? (/^https?:\/\//i.test(trimmedWebsite) ? trimmedWebsite : `https://${trimmedWebsite}`)
+      : null;
+
     const res = await fetch("/api/auth/ensure-profile", {
       method: "POST",
       headers: {
@@ -58,7 +65,7 @@ function SignupForm() {
       body: JSON.stringify({
         full_name: displayName,
         partner_type: isAdminEmail ? null : partnerType,
-        agency_website: agencyWebsite || null,
+        agency_website: normalisedWebsite,
         agency_contact_pic: agencyContactPic || null,
       }),
     });
@@ -203,8 +210,8 @@ function SignupForm() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-im8-burgundy mb-1">Agency website <span className="text-im8-burgundy/40">(optional)</span></label>
-                  <input type="url" value={agencyWebsite} onChange={e => setAgencyWebsite(e.target.value)}
-                    placeholder="https://"
+                  <input type="text" value={agencyWebsite} onChange={e => setAgencyWebsite(e.target.value)}
+                    placeholder="www.example.com"
                     className="w-full px-4 py-3 rounded-lg border border-im8-stone/40 focus:outline-none focus:ring-2 focus:ring-im8-red/50 focus:border-im8-red text-im8-burgundy transition-colors" />
                 </div>
                 <div>
