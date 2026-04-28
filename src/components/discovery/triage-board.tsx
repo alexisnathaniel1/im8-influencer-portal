@@ -45,15 +45,18 @@ const STATUS_LABELS: Record<string, string> = {
   rejected: "Rejected",
   converted: "Pending MGMT Approval",
 };
+// Each status gets its own colour so reviewers can scan the table at a glance.
+// Off-brand semantic palette is fine here — the user explicitly carved out
+// status pills as the one place these colours are allowed.
 const STATUS_COLORS: Record<string, string> = {
-  new: "bg-yellow-100 text-yellow-700",
-  submitted: "bg-yellow-100 text-yellow-700",
-  reviewing: "bg-yellow-100 text-yellow-700",
-  negotiation_needed: "bg-amber-100 text-amber-700",
-  approved: "bg-green-100 text-green-700",
-  shortlisted: "bg-green-100 text-green-700",
-  rejected: "bg-red-100 text-red-700",
-  converted: "bg-yellow-100 text-yellow-700",
+  new: "bg-blue-100 text-blue-700",                  // just submitted
+  submitted: "bg-blue-100 text-blue-700",            // just submitted
+  reviewing: "bg-yellow-100 text-yellow-700",        // under review
+  negotiation_needed: "bg-amber-100 text-amber-700", // action required
+  approved: "bg-green-100 text-green-700",           // good to go
+  shortlisted: "bg-green-100 text-green-700",        // good to go (alias)
+  rejected: "bg-red-100 text-red-700",               // declined
+  converted: "bg-im8-burgundy/15 text-im8-burgundy", // already pending MGMT
 };
 
 function ScoreBadge({ score }: { score: number | null }) {
@@ -109,6 +112,47 @@ export default function DiscoveryBoard({
   const [counterEmail, setCounterEmail] = useState("");
   const [sendingCounter, setSendingCounter] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // Column sort state — click a header to toggle ascending / descending.
+  type SortKey = "name" | "status" | "niche" | "followers" | "rate";
+  const [sortKey, setSortKey] = useState<SortKey>("name");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir(d => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  }
+
+  // Status sort uses a workflow ordering so "ascending" reads as pipeline
+  // progression (new → reviewing → negotiation → approved → converted) rather
+  // than alphabetical, which is more useful for triage.
+  const STATUS_RANK: Record<string, number> = {
+    new: 0, submitted: 0,
+    reviewing: 1,
+    negotiation_needed: 2,
+    approved: 3, shortlisted: 3,
+    converted: 4,
+    rejected: 5,
+  };
+
+  const sortedProfiles = [...profiles].sort((a, b) => {
+    const dir = sortDir === "asc" ? 1 : -1;
+    const aNiches = (a.niche_tags ?? a.niche ?? []).join(", ");
+    const bNiches = (b.niche_tags ?? b.niche ?? []).join(", ");
+    let cmp = 0;
+    switch (sortKey) {
+      case "name": cmp = (a.influencer_name ?? "").localeCompare(b.influencer_name ?? ""); break;
+      case "status": cmp = (STATUS_RANK[a.status] ?? 99) - (STATUS_RANK[b.status] ?? 99); break;
+      case "niche": cmp = aNiches.localeCompare(bNiches); break;
+      case "followers": cmp = (a.follower_count ?? 0) - (b.follower_count ?? 0); break;
+      case "rate": cmp = (a.proposed_rate_cents ?? 0) - (b.proposed_rate_cents ?? 0); break;
+    }
+    return cmp * dir;
+  });
 
   function applyFilter(key: string, value: string) {
     const params = new URLSearchParams(currentFilters as Record<string, string>);
@@ -290,16 +334,31 @@ export default function DiscoveryBoard({
           <table className="w-full text-sm table-auto">
             <thead className="bg-white border-b border-im8-stone/20">
               <tr className="text-left text-im8-muted text-[11px] uppercase tracking-[0.07em] font-semibold">
-                <th className="px-4 py-2.5 whitespace-nowrap">Creator</th>
-                <th className="px-4 py-2.5 whitespace-nowrap">Status</th>
-                <th className="px-4 py-2.5 whitespace-nowrap">Niche</th>
-                <th className="px-4 py-2.5 whitespace-nowrap">Followers</th>
-                <th className="px-4 py-2.5 whitespace-nowrap">Rate</th>
+                {([
+                  { key: "name", label: "Creator" },
+                  { key: "status", label: "Status" },
+                  { key: "niche", label: "Niche" },
+                  { key: "followers", label: "Followers" },
+                  { key: "rate", label: "Rate" },
+                ] as const).map(col => (
+                  <th key={col.key} className="px-4 py-2.5 whitespace-nowrap">
+                    <button
+                      type="button"
+                      onClick={() => toggleSort(col.key)}
+                      className="inline-flex items-center gap-1 hover:text-im8-burgundy transition-colors"
+                    >
+                      <span>{col.label}</span>
+                      <span className={`text-[9px] ${sortKey === col.key ? "text-im8-burgundy" : "text-im8-muted/40"}`}>
+                        {sortKey === col.key ? (sortDir === "asc" ? "▲" : "▼") : "↕"}
+                      </span>
+                    </button>
+                  </th>
+                ))}
                 <th className="px-4 py-2.5 text-right whitespace-nowrap">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {profiles.map(p => {
+              {sortedProfiles.map(p => {
                 const niches = p.niche_tags ?? p.niche ?? [];
                 return (
                   <tr key={p.id} className="border-b border-im8-stone/20 hover:bg-im8-offwhite cursor-pointer transition-colors"
