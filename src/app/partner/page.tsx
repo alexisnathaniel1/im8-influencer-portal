@@ -178,6 +178,11 @@ export default async function PartnerPage() {
       .select("discovery_profile_id, body, created_at, kind")
       .in("discovery_profile_id", submissionIds)
       .eq("visible_to_partner", true)
+      // Skip activity-feed entries that record the creator's own action —
+      // they have dedicated UI on this page already, so re-surfacing them
+      // as 'Latest note from IM8' would echo the creator's words back as
+      // if they were from the IM8 team.
+      .not("kind", "in", '("agency_response","counter_creator")')
       .order("created_at", { ascending: false });
     (visibleComments ?? []).forEach(c => {
       if (!latestCommentBySubmission.has(c.discovery_profile_id)) {

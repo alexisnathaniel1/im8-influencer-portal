@@ -75,12 +75,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     kind = "counter_creator";
   }
 
+  // The creator/agency already sees their own action confirmed in the
+  // dedicated UI on /partner ("Counter sent to IM8", "You declined this
+  // proposal", etc.). The activity-feed comment is for admins reviewing
+  // the row, so visible_to_partner stays false — otherwise the partner
+  // page surfaces their own action back to them as a "Latest note from IM8".
   await admin.from("discovery_comments").insert({
     discovery_profile_id: id,
     author_id: user.id,
     author_display_name: profile?.full_name ?? profile?.email ?? submitterLabel,
     body: commentBody,
-    visible_to_partner: true,
+    visible_to_partner: false,
     kind,
   });
 
