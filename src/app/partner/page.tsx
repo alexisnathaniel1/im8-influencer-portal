@@ -361,10 +361,14 @@ export default async function PartnerPage() {
               : "The profile you've submitted to IM8."}
           </p>
         </div>
-        <Link href="/intake"
-          className="px-4 py-2 bg-im8-red text-white text-sm rounded-lg hover:bg-im8-burgundy transition-colors">
-          + {profile?.partner_type === "agency" ? "Submit creators" : "Submit profile"}
-        </Link>
+        {/* Agencies can submit unlimited creators. Individual creators get one
+            profile per account — only show the CTA if they haven't submitted yet. */}
+        {(profile?.partner_type === "agency" || submissions.length === 0) && (
+          <Link href="/intake"
+            className="px-4 py-2 bg-im8-red text-white text-sm rounded-lg hover:bg-im8-burgundy transition-colors">
+            + {profile?.partner_type === "agency" ? "Submit creators" : "Submit profile"}
+          </Link>
+        )}
       </div>
 
       {(!submissions || submissions.length === 0) ? (

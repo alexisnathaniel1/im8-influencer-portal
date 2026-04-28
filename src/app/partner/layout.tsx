@@ -34,6 +34,11 @@ export default async function PartnerLayout({ children }: { children: React.Reac
 
   const hasDeal = (activeDeals ?? []).length > 0;
 
+  // Individual creators get one profile per account — only agencies can submit
+  // multiple. So we hide the "+ New submission" nav link for creators entirely;
+  // for agencies it stays visible as a quick-add shortcut.
+  const isAgency = profile.partner_type === "agency";
+
   return (
     <div className="min-h-screen bg-im8-offwhite">
       <header className="bg-white border-b border-im8-stone/20 sticky top-0 z-10">
@@ -61,7 +66,7 @@ export default async function PartnerLayout({ children }: { children: React.Reac
                 <Link href="/partner/edited-videos" className="text-im8-muted hover:text-im8-maroon transition-colors">Edited videos</Link>
               </>
             )}
-            {!hasDeal && (
+            {!hasDeal && isAgency && (
               <Link href="/intake" className="text-im8-muted hover:text-im8-maroon transition-colors">+ New submission</Link>
             )}
             <Link href="/partner/settings" className="text-im8-muted hover:text-im8-maroon transition-colors">Settings</Link>

@@ -25,6 +25,18 @@ export default async function IntakePage() {
     .order("sort_order", { ascending: true });
 
   const isAdmin = ADMIN_ROLES.includes(profile?.role ?? "");
+  const isAgency = profile?.partner_type === "agency";
+
+  // Individual creators get exactly one profile (their own). If they already
+  // have a submission, send them back to the dashboard — no second submission.
+  // Agencies and admins are unrestricted.
+  if (!isAdmin && !isAgency) {
+    const { count } = await admin
+      .from("discovery_profiles")
+      .select("*", { count: "exact", head: true })
+      .eq("submitted_by_profile_id", user.id);
+    if ((count ?? 0) > 0) redirect("/partner");
+  }
 
   // For admin users: leave submitter fields blank so they can fill them in freely.
   // For partners: pre-fill from profile.
