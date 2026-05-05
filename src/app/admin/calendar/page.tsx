@@ -71,23 +71,62 @@ export default async function CalendarPage({
     return deal && ACTIVE_DEAL_STATUSES.has(deal.status);
   });
 
-  // Briefs not yet sent for active deals — shown in the pending sidebar.
-  // Source of truth = brief_sent_at. We deliberately don't check brief_doc_url
-  // because clearing the URL after sending would otherwise re-flag the row.
-  const { data: pendingBriefs } = await admin
-    .from("deliverables")
-    .select(`
-      id, deliverable_type, sequence, brief_doc_url, brief_sent_at,
-      deal:deal_id(id, influencer_name, status)
-    `)
-    .is("brief_sent_at", null)
-    .not("status", "in", '("live","completed","approved")')
-    .order("created_at", { ascending: true });
+  // "BRIEFS STILL NEEDED" sidebar — driven by deals.deliverables JSON so it
+  // works even before tracker rows exist in the deliverables table.
+  // Source of truth for "sent" = brief_sent_at on the tracker row.
+  const SKIP_BRIEF_CODES = new Set(["WHITELIST", "PAID_AD", "RAW_FOOTAGE", "LINK_BIO", "IGS"]);
 
-  const pendingFiltered = (pendingBriefs ?? []).filter(d => {
-    const deal = d.deal as unknown as { status: string } | null;
-    return deal && ACTIVE_DEAL_STATUSES.has(deal.status);
-  });
+  // 1. Fetch active deals with their deliverables JSON
+  const { data: activeDeals } = await admin
+    .from("deals")
+    .select("id, influencer_name, status, deliverables")
+    .in("status", [...ACTIVE_DEAL_STATUSES]);
+
+  // 2. Fetch tracker rows that have already had a brief sent, keyed by deal
+  const activeDealIds = (activeDeals ?? []).map(d => d.id as string);
+  const { data: sentRows } = activeDealIds.length > 0
+    ? await admin
+        .from("deliverables")
+        .select("deal_id, deliverable_type, sequence, brief_sent_at")
+        .in("deal_id", activeDealIds)
+        .not("brief_sent_at", "is", null)
+    : { data: [] };
+
+  // Build set: dealId → Set of "TYPE_seq" that already have a brief sent
+  const sentByDeal = new Map<string, Set<string>>();
+  for (const row of sentRows ?? []) {
+    const key = `${row.deliverable_type}_${row.sequence ?? 1}`;
+    if (!sentByDeal.has(row.deal_id)) sentByDeal.set(row.deal_id, new Set());
+    sentByDeal.get(row.deal_id)!.add(key);
+  }
+
+  // 3. For each active deal, enumerate deliverable slots not yet briefed
+  const pendingFiltered: PendingBriefItem[] = [];
+  for (const deal of activeDeals ?? []) {
+    const dealId = deal.id as string;
+    const sent = sentByDeal.get(dealId) ?? new Set<string>();
+    const slots = ((deal.deliverables as Array<{ code: string; count: number }> | null) ?? [])
+      .filter(d => d?.code && d.count > 0 && !SKIP_BRIEF_CODES.has(d.code));
+
+    for (const slot of slots) {
+      for (let seq = 1; seq <= slot.count; seq++) {
+        if (!sent.has(`${slot.code}_${seq}`)) {
+          pendingFiltered.push({
+            id: `${dealId}_${slot.code}_${seq}`,
+            deliverable_type: slot.code,
+            sequence: seq,
+            brief_doc_url: null,
+            brief_sent_at: null,
+            deal: {
+              id: dealId,
+              influencer_name: deal.influencer_name as string,
+              status: deal.status as string,
+            },
+          });
+        }
+      }
+    }
+  }
 
   const currentMonthStr = `${year}-${String(month + 1).padStart(2, "0")}`;
 
