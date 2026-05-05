@@ -102,6 +102,14 @@ export default function AdminReviewPage() {
     }).catch(console.error);
   }
 
+  function notifyCreator(submissionId: string, action: "approved" | "revision_requested" | "rejected", feedbackText?: string) {
+    fetch(`/api/submissions/${submissionId}/notify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, feedback: feedbackText }),
+    }).catch(console.error);
+  }
+
   async function handleApprove(submissionId: string) {
     setActionLoading(submissionId);
     const supabase = createClient();
@@ -116,6 +124,7 @@ export default function AdminReviewPage() {
     if (expandedId === submissionId) setExpandedId(null);
     setActionLoading(null);
     syncContentLog(submissionId);
+    notifyCreator(submissionId, "approved");
   }
 
   async function handleReject(submissionId: string) {
@@ -132,6 +141,7 @@ export default function AdminReviewPage() {
     setSelectedIds((prev) => { const next = new Set(prev); next.delete(submissionId); return next; });
     if (expandedId === submissionId) setExpandedId(null);
     setActionLoading(null);
+    notifyCreator(submissionId, "rejected", feedback[submissionId]);
   }
 
   async function handleRevisionRequest(submissionId: string) {
@@ -148,6 +158,7 @@ export default function AdminReviewPage() {
     setSelectedIds((prev) => { const next = new Set(prev); next.delete(submissionId); return next; });
     if (expandedId === submissionId) setExpandedId(null);
     setActionLoading(null);
+    notifyCreator(submissionId, "revision_requested", feedback[submissionId]);
   }
 
   async function handleBulkApprove() {

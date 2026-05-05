@@ -2,9 +2,9 @@ export type AdminRole = "admin" | "management" | "support";
 
 // Nav sections each role can access
 const ROLE_NAV: Record<AdminRole, string[]> = {
-  admin:      ["/admin", "/admin/discovery", "/admin/approvals", "/admin/deals", "/admin/deliverables", "/admin/review", "/admin/settings"],
-  management: ["/admin", "/admin/approvals", "/admin/deals"],
-  support:    ["/admin", "/admin/deals", "/admin/deliverables", "/admin/review"],
+  admin:      ["/admin", "/admin/discovery", "/admin/approvals", "/admin/deals", "/admin/deliverables", "/admin/calendar", "/admin/review", "/admin/inbox", "/admin/settings"],
+  management: ["/admin", "/admin/approvals", "/admin/deals", "/admin/calendar", "/admin/inbox"],
+  support:    ["/admin", "/admin/deals", "/admin/deliverables", "/admin/calendar", "/admin/review", "/admin/inbox"],
 };
 
 export function getAllowedNav(role: string): string[] {

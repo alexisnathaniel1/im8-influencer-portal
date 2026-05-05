@@ -64,6 +64,9 @@ type DeliverableRow = {
   status: string;
   due_date: string | null;
   brief_doc_url: string | null;
+  brief_sent_at: string | null;
+  admin_review_due_date: string | null;
+  brief_sent_by: { full_name: string } | null;
 };
 
 export type ManagementFeedbackEntry = {
@@ -76,7 +79,7 @@ export type ManagementFeedbackEntry = {
 };
 
 export default function DealDetailClient({
-  deal, briefs, submissions, giftingRequests, deliverables = [], partnerShippingAddress, canViewRates = true, role = "", managementFeedback = [],
+  deal, briefs, submissions, giftingRequests, deliverables = [], partnerShippingAddress, canViewRates = true, role = "", managementFeedback = [], completedDeliverables = 0, totalDeliverables = 0,
 }: {
   deal: Deal;
   briefs: Brief[];
@@ -87,6 +90,8 @@ export default function DealDetailClient({
   canViewRates?: boolean;
   role?: string;
   managementFeedback?: ManagementFeedbackEntry[];
+  completedDeliverables?: number;
+  totalDeliverables?: number;
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<"overview" | "contract" | "briefs" | "submissions" | "gifting" | "edited-videos">("overview");
@@ -528,6 +533,26 @@ export default function DealDetailClient({
       {tab === "briefs" && (
         <div className="space-y-4">
 
+          {/* Deliverable progress bar */}
+          {totalDeliverables > 0 && (
+            <div className="bg-white rounded-xl border border-im8-stone/30 px-5 py-4">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-semibold text-im8-burgundy">
+                  {completedDeliverables} / {totalDeliverables} deliverables complete
+                </p>
+                <span className="text-xs text-im8-burgundy/50">
+                  {Math.round((completedDeliverables / totalDeliverables) * 100)}%
+                </span>
+              </div>
+              <div className="h-2 rounded-full bg-im8-stone/30 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-emerald-500 transition-all"
+                  style={{ width: `${Math.round((completedDeliverables / totalDeliverables) * 100)}%` }}
+                />
+              </div>
+            </div>
+          )}
+
           {/* Per-deliverable brief URLs — driven by the deal's deliverables JSON so rows
               appear as soon as deliverables are set in the Overview tab, even before
               tracker rows are fully created. Tracker rows are cross-referenced for the
@@ -612,26 +637,85 @@ export default function DealDetailClient({
 
       {tab === "submissions" && (
         <div className="space-y-3">
+          {/* Progress overview */}
+          {totalDeliverables > 0 && (
+            <div className="bg-white rounded-xl border border-im8-stone/30 px-5 py-4">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-semibold text-im8-burgundy">
+                  {completedDeliverables} / {totalDeliverables} deliverables complete
+                </p>
+                <span className="text-xs text-im8-burgundy/50">
+                  {Math.round((completedDeliverables / totalDeliverables) * 100)}%
+                </span>
+              </div>
+              <div className="h-2 rounded-full bg-im8-stone/30 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-emerald-500 transition-all"
+                  style={{ width: `${Math.round((completedDeliverables / totalDeliverables) * 100)}%` }}
+                />
+              </div>
+            </div>
+          )}
+
           {submissions.length === 0 ? (
             <div className="bg-white rounded-xl border border-im8-stone/30 p-12 text-center text-im8-burgundy/40">
               No submissions yet.
             </div>
           ) : (
-            submissions.map(s => (
-              <div key={s.id as string} className="bg-white rounded-xl border border-im8-stone/30 p-5 flex items-center justify-between">
-                <div>
-                  <div className="font-medium text-im8-burgundy text-sm">{s.file_name as string}</div>
-                  <div className="text-xs text-im8-burgundy/50 mt-1 capitalize">
-                    {s.status as string} · {s.content_type as string}
+            submissions.map((s, _idx) => {
+              // Draft number: count how many submissions for the same deliverable came before this one
+              const delivId = s.deliverable_id as string | null;
+              const draftNum = delivId
+                ? submissions.filter(
+                    other =>
+                      (other.deliverable_id as string | null) === delivId &&
+                      new Date(other.submitted_at as string) <= new Date(s.submitted_at as string),
+                  ).length
+                : null;
+
+              const statusColors: Record<string, string> = {
+                pending: "bg-yellow-100 text-yellow-700",
+                approved: "bg-green-100 text-green-700",
+                rejected: "bg-red-100 text-red-700",
+                revision_requested: "bg-amber-100 text-amber-700",
+              };
+
+              return (
+                <div key={s.id as string} className="bg-white rounded-xl border border-im8-stone/30 p-5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-medium text-im8-burgundy text-sm truncate">{s.file_name as string}</span>
+                        {draftNum !== null && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-[6px] bg-im8-burgundy/10 text-im8-burgundy font-semibold shrink-0">
+                            Draft {draftNum}
+                          </span>
+                        )}
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-[6px] font-semibold shrink-0 ${statusColors[s.status as string] ?? "bg-gray-100 text-gray-600"}`}>
+                          {(s.status as string).replace(/_/g, " ")}
+                        </span>
+                      </div>
+                      <div className="text-xs text-im8-burgundy/50 mt-1 capitalize">
+                        {s.content_type as string} · Submitted {new Date(s.submitted_at as string).toLocaleDateString("en-AU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                        {s.reviewed_at ? ` · Reviewed ${new Date(s.reviewed_at as string).toLocaleDateString("en-AU", { day: "numeric", month: "short" })}` : null}
+                      </div>
+                      {Boolean(s.feedback) && (
+                        <div className="mt-2 text-xs text-amber-700 bg-amber-50 px-2 py-1.5 rounded-lg">{s.feedback as string}</div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {s.drive_url ? (
+                        <a href={s.drive_url as string} target="_blank" rel="noopener noreferrer"
+                          className="text-xs text-im8-burgundy/50 hover:text-im8-red hover:underline">
+                          View file ↗
+                        </a>
+                      ) : null}
+                      <Link href="/admin/review" className="text-sm text-im8-red hover:underline">Review →</Link>
+                    </div>
                   </div>
-                  {Boolean(s.feedback) && (
-                    <div className="mt-1 text-xs text-amber-700 bg-amber-50 px-2 py-1 rounded">{s.feedback as string}</div>
-                  )}
                 </div>
-                <Link href={`/admin/review`}
-                  className="text-sm text-im8-red hover:underline">Review queue →</Link>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       )}
@@ -2055,6 +2139,21 @@ function DeliverableBriefRow({
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [sendStatus, setSendStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState("");
+  const [sentMeta, setSentMeta] = useState<{
+    sentAt: string;
+    creatorDeadline: string;
+    reviewDeadline: string;
+    sentBy: string | null;
+  } | null>(
+    trackerRow?.brief_sent_at
+      ? {
+          sentAt: trackerRow.brief_sent_at,
+          creatorDeadline: trackerRow.due_date ?? "",
+          reviewDeadline: trackerRow.admin_review_due_date ?? "",
+          sentBy: trackerRow.brief_sent_by?.full_name ?? null,
+        }
+      : null,
+  );
   const isDirty = url.trim() !== savedUrl;
 
   // Save brief_doc_url — creates tracker row on-demand if it doesn't exist yet.
@@ -2123,6 +2222,13 @@ function DeliverableBriefRow({
         setSendStatus("error");
         return;
       }
+      const result = await res.json();
+      setSentMeta({
+        sentAt: result.briefSentAt ?? new Date().toISOString(),
+        creatorDeadline: result.creatorDeadline ?? "",
+        reviewDeadline: result.reviewDeadline ?? "",
+        sentBy: null, // populated on next page load from DB
+      });
       setSendStatus("sent");
       setTimeout(() => setSendStatus("idle"), 3000);
     } catch (err) {
@@ -2170,6 +2276,27 @@ function DeliverableBriefRow({
         {errorMsg && <span className="text-xs text-red-600">{errorMsg}</span>}
         {saveStatus === "error" && !errorMsg && <span className="text-xs text-red-600">Save failed</span>}
       </div>
+
+      {/* Timestamp trail — shown once brief has been sent */}
+      {sentMeta && (
+        <div className="pl-[6.5rem] flex flex-wrap gap-x-4 gap-y-1">
+          <span className="text-[11px] text-im8-burgundy/50">
+            ✉ Sent{" "}
+            {new Date(sentMeta.sentAt).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+            {sentMeta.sentBy && ` by ${sentMeta.sentBy}`}
+          </span>
+          {sentMeta.creatorDeadline && (
+            <span className="text-[11px] text-amber-600 font-medium">
+              Creator deadline: {new Date(sentMeta.creatorDeadline + "T00:00:00").toLocaleDateString("en-AU", { day: "numeric", month: "short" })}
+            </span>
+          )}
+          {sentMeta.reviewDeadline && (
+            <span className="text-[11px] text-blue-600 font-medium">
+              Review by: {new Date(sentMeta.reviewDeadline + "T00:00:00").toLocaleDateString("en-AU", { day: "numeric", month: "short" })}
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { findFileInFolder, extractFolderId } from "@/lib/google/drive";
 import { performAIReview } from "@/lib/ai-review/review";
+import { createTransporter, EMAIL_FROM } from "@/lib/email/client";
+import { contentSubmittedTemplate } from "@/lib/email/templates/content-submitted";
 
 export const maxDuration = 60;
 
@@ -86,6 +88,43 @@ export async function POST(request: Request) {
         );
         await performAIReview(submissionId, fileId);
       });
+
+      // Notify the PIC (assigned_pic) that content was submitted for review
+      if (deliverableId) {
+        after(async () => {
+          try {
+            const { data: deliv } = await admin
+              .from("deliverables")
+              .select("deliverable_type, sequence, assigned_pic(email, full_name)")
+              .eq("id", deliverableId)
+              .single();
+
+            const { data: dealRow } = await admin
+              .from("deals")
+              .select("influencer_name")
+              .eq("id", dealId)
+              .single();
+
+            const pic = deliv?.assigned_pic as unknown as { email: string; full_name: string } | null;
+            const toEmail = pic?.email ?? process.env.SMTP_USER;
+            if (!toEmail) return;
+
+            const { subject, text, html } = contentSubmittedTemplate({
+              creatorName: dealRow?.influencer_name ?? "Creator",
+              deliverableType: deliv?.deliverable_type ?? "Content",
+              sequence: (deliv?.sequence as number | null) ?? null,
+              dealId: dealId,
+              submittedAt: new Date().toISOString(),
+              portalUrl: process.env.NEXT_PUBLIC_APP_URL,
+            });
+
+            const transporter = createTransporter();
+            await transporter.sendMail({ from: EMAIL_FROM, to: toEmail, subject, text, html });
+          } catch (e) {
+            console.error("[upload-complete] PIC notification failed:", e);
+          }
+        });
+      }
     }
 
     return NextResponse.json({

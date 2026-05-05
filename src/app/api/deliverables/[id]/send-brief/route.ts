@@ -26,10 +26,10 @@ export async function POST(
 
   const admin = createAdminClient();
 
-  // Load deliverable with its deal (influencer email + name)
+  // Load deliverable with linked brief id, existing due_date, and admin_review_due_date
   const { data: deliverable } = await admin
     .from("deliverables")
-    .select("id, deliverable_type, sequence, brief_doc_url, deal_id")
+    .select("id, deliverable_type, sequence, brief_doc_url, brief_id, deal_id, due_date, admin_review_due_date")
     .eq("id", id)
     .single();
 
@@ -75,7 +75,7 @@ export async function POST(
         <p>Hi ${influencerName},</p>
         <p>Your content brief for <strong>${label}</strong> is now ready.</p>
         <p>
-          <a href="${deliverable.brief_doc_url}" style="display:inline-block;padding:10px 20px;background:#b91c1c;color:#fff;border-radius:6px;text-decoration:none;font-weight:600;">
+          <a href="${deliverable.brief_doc_url}" style="display:inline-block;padding:10px 20px;background:#50000B;color:#fff;border-radius:100px;text-decoration:none;font-weight:700;font-size:13px;letter-spacing:0.05em;">
             View brief →
           </a>
         </p>
@@ -93,5 +93,38 @@ export async function POST(
     return NextResponse.json({ error: "Failed to send email. Check SMTP configuration." }, { status: 500 });
   }
 
-  return NextResponse.json({ success: true });
+  // ── Record timestamps + auto-calculate due dates ──────────────────────────
+  const now = new Date();
+
+  // Creator submit deadline: +10 days from brief send
+  const day10 = new Date(now);
+  day10.setDate(now.getDate() + 10);
+
+  // Admin review deadline: +13 days from brief send (10 filming + 3 review)
+  const day13 = new Date(now);
+  day13.setDate(now.getDate() + 13);
+
+  await admin.from("deliverables").update({
+    status: "in_progress",
+    brief_sent_at: now.toISOString(),
+    brief_sent_by: user.id,
+    // Only set deadlines if not already manually entered
+    due_date: (deliverable.due_date as string | null) ?? day10.toISOString().split("T")[0],
+    admin_review_due_date: (deliverable.admin_review_due_date as string | null) ?? day13.toISOString().split("T")[0],
+  }).eq("id", id);
+
+  // Mark the linked brief as sent too
+  if (deliverable.brief_id) {
+    await admin.from("briefs").update({
+      status: "sent",
+      sent_at: now.toISOString(),
+    }).eq("id", deliverable.brief_id as string);
+  }
+
+  return NextResponse.json({
+    success: true,
+    briefSentAt: now.toISOString(),
+    creatorDeadline: day10.toISOString().split("T")[0],
+    reviewDeadline: day13.toISOString().split("T")[0],
+  });
 }

@@ -38,7 +38,7 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
       .order("created_at", { ascending: false }),
     admin
       .from("deliverables")
-      .select("id, deliverable_type, sequence, title, status, due_date, brief_doc_url")
+      .select("id, deliverable_type, sequence, title, status, due_date, brief_doc_url, brief_sent_at, admin_review_due_date, brief_sent_by(full_name)")
       .eq("deal_id", id)
       .order("deliverable_type", { ascending: true })
       .order("sequence", { ascending: true, nullsFirst: false })
@@ -99,6 +99,12 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
     prevContract = prev ?? null;
   }
 
+  // Deliverable progress counts
+  const allDeliverables = deliverables ?? [];
+  const completedCount = allDeliverables.filter(d =>
+    ["approved", "live", "completed"].includes((d as Record<string, unknown>).status as string)
+  ).length;
+
   return (
     <div className="space-y-6 animate-fade-in max-w-6xl">
       <div className="flex items-center gap-3 flex-wrap">
@@ -123,11 +129,13 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
         briefs={briefs ?? []}
         submissions={submissions ?? []}
         giftingRequests={giftingRequests ?? []}
-        deliverables={deliverables ?? []}
+        deliverables={allDeliverables as unknown as Parameters<typeof DealDetailClient>[0]["deliverables"]}
         partnerShippingAddress={partnerShippingAddress}
         canViewRates={showRates}
         role={profile?.role ?? ""}
         managementFeedback={managementFeedback}
+        completedDeliverables={completedCount}
+        totalDeliverables={allDeliverables.length}
       />
     </div>
   );

@@ -42,6 +42,22 @@ const Icons: Record<string, React.FC<{ className?: string }>> = {
       <path d="M5 5.5h6M5 8.5h6M5 11.5h3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
     </svg>
   ),
+  calendar: ({ className }) => (
+    <svg className={className} width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <rect x="1.5" y="2.5" width="13" height="12" rx="2" stroke="currentColor" strokeWidth="1.5"/>
+      <path d="M5 1v3M11 1v3M1.5 7h13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+      <circle cx="5" cy="10.5" r="1" fill="currentColor"/>
+      <circle cx="8" cy="10.5" r="1" fill="currentColor"/>
+      <circle cx="11" cy="10.5" r="1" fill="currentColor"/>
+    </svg>
+  ),
+  inbox: ({ className }) => (
+    <svg className={className} width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <rect x="1.5" y="2.5" width="13" height="11" rx="2" stroke="currentColor" strokeWidth="1.5"/>
+      <path d="M1.5 9.5h3.5l1.5 2h3l1.5-2h3.5" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
+      <path d="M4 5.5l4 3 4-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  ),
   review: ({ className }) => (
     <svg className={className} width="16" height="16" viewBox="0 0 16 16" fill="none">
       <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5"/>
@@ -62,7 +78,9 @@ const NAV = [
   { href: "/admin/approvals",    label: "Approvals",      icon: "approvals"    },
   { href: "/admin/deals",        label: "Partner Tracker",icon: "tracker"      },
   { href: "/admin/deliverables", label: "Deliverables",   icon: "deliverables" },
+  { href: "/admin/calendar",     label: "Calendar",       icon: "calendar"     },
   { href: "/admin/review",       label: "Content Review", icon: "review"       },
+  { href: "/admin/inbox",        label: "Inbox",          icon: "inbox"        },
   { href: "/admin/settings",     label: "Settings",       icon: "settings"     },
 ];
 
