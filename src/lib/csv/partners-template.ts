@@ -48,8 +48,8 @@ export const PARTNER_COLUMNS: PartnerColumn[] = [
   { key: "campaign_end",      label: "Campaign End",                      hint: "YYYY-MM-DD — leave blank to auto-calc",          example: "2026-08-01" },
   { key: "status",            label: "Status",                            hint: "live | contracted | approved — default live",    example: "live" },
   { key: "deliverables",      label: "Deliverables",                      hint: "code:count; e.g. IGR:2; IGS:3; WHITELIST:1",     example: "IGR:2; IGS:3; WHITELIST:1" },
-  { key: "discount_code",     label: "Discount Code",                     hint: "Optional",                                       example: "JANE15" },
-  { key: "affiliate_link",    label: "Affiliate Link",                    hint: "Optional — full URL",                            example: "https://im8health.com/jane" },
+  { key: "discount_code",     label: "Discount Code",                     hint: "Optional — used to build the affiliate link",   example: "JANE15" },
+  { key: "affiliate_link",    label: "Affiliate Link",                    hint: "Format: https://im8health.com/discount/{CODE}",  example: "https://im8health.com/discount/JANE15" },
   { key: "phone",             label: "Phone",                             hint: "Optional",                                       example: "+1 555 1234" },
   { key: "manager_email",     label: "Manager Email",                     hint: "Optional — agency contact",                      example: "manager@agency.com" },
   { key: "notes",             label: "Notes",                             hint: "Internal notes",                                 example: "Returning partner — Q4 2025" },
@@ -220,6 +220,14 @@ export function validateRow(row: Record<string, string>, rowIndex: number): Pars
     return { rowIndex, raw: row, errors, payload: null };
   }
 
+  // If an affiliate link wasn't provided but a discount code was, derive the
+  // canonical URL: https://im8health.com/discount/{CODE}
+  const discountCode = optStr("discount_code");
+  let affiliate = optStr("affiliate_link");
+  if (!affiliate && discountCode) {
+    affiliate = `https://im8health.com/discount/${discountCode.trim().toUpperCase()}`;
+  }
+
   const payload: PartnerPayload = {
     influencer_name: get("influencer_name"),
     influencer_email: get("influencer_email"),
@@ -237,8 +245,8 @@ export function validateRow(row: Record<string, string>, rowIndex: number): Pars
     campaign_end: end && /^\d{4}-\d{2}-\d{2}$/.test(end) ? end : null,
     status,
     deliverables: parseDeliverablesCell(get("deliverables")),
-    discount_code: optStr("discount_code"),
-    affiliate_link: optStr("affiliate_link"),
+    discount_code: discountCode,
+    affiliate_link: affiliate,
     phone: optStr("phone"),
     manager_email: optStr("manager_email"),
     rationale: optStr("notes"),
