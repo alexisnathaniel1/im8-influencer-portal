@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
 import InboxClient from "./inbox-client";
+import SummarizeAllButton from "./summarize-all-button";
 
 export default async function InboxPage() {
   const supabase = await createClient();
@@ -28,21 +29,25 @@ export default async function InboxPage() {
   }
 
   const unreadCount = (emails ?? []).filter(e => !e.is_read).length;
+  const pendingSummaryCount = (emails ?? []).filter(e => !e.ai_summary).length;
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <div className="flex items-center gap-3">
-          <h1 className="text-3xl font-bold text-im8-burgundy">Partner Inbox</h1>
-          {unreadCount > 0 && (
-            <span className="px-2.5 py-1 bg-im8-red text-white text-xs font-bold rounded-full">
-              {unreadCount} new
-            </span>
-          )}
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <div className="flex items-center gap-3">
+            <h1 className="text-3xl font-bold text-im8-burgundy">Partner Inbox</h1>
+            {unreadCount > 0 && (
+              <span className="px-2.5 py-1 bg-im8-red text-white text-xs font-bold rounded-full">
+                {unreadCount} new
+              </span>
+            )}
+          </div>
+          <p className="text-im8-burgundy/60 mt-1 text-sm">
+            Emails received at partners@im8health.com — synced automatically every 4 hours.
+          </p>
         </div>
-        <p className="text-im8-burgundy/60 mt-1 text-sm">
-          Emails received at partners@im8health.com — synced automatically every 4 hours.
-        </p>
+        <SummarizeAllButton pendingCount={pendingSummaryCount} />
       </div>
 
       <InboxClient emails={emails ?? []} dealNames={dealNames} />
