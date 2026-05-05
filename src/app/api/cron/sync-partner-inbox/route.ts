@@ -19,22 +19,24 @@ export async function GET(request: Request) {
 
   const admin = createAdminClient();
 
-  // Find the highest UID already stored so we only fetch newer messages
-  const { data: latest } = await admin
+  // Use the most recent received_at stored to set the IMAP search window.
+  // On first run: sync the last 60 days so we get recent emails, not the oldest.
+  const { data: latestStored } = await admin
     .from("inbox_emails")
-    .select("imap_uid")
+    .select("received_at")
     .eq("imap_account", imapUser)
-    .order("imap_uid", { ascending: false })
+    .order("received_at", { ascending: false })
     .limit(1)
     .single();
 
-  const sinceUid = ((latest as { imap_uid: number } | null)?.imap_uid ?? 0) + 1;
+  const sinceDate = latestStored?.received_at
+    ? new Date(new Date(latestStored.received_at as string).getTime() - 60 * 60 * 1000) // 1h overlap to avoid gaps
+    : new Date(Date.now() - 60 * 24 * 60 * 60 * 1000); // 60 days ago on first run
 
   let fetched = 0;
   let inserted = 0;
 
   try {
-    // Dynamic import — avoids bundling issues in Next.js edge/RSC contexts
     const { ImapFlow } = await import("imapflow");
     const { simpleParser } = await import("mailparser");
 
@@ -60,31 +62,37 @@ export async function GET(request: Request) {
     }> = [];
 
     try {
-      // Fetch messages with UID >= sinceUid (up to 50 at a time to stay within function limits)
-      const sequence = `${sinceUid}:${sinceUid + 49}`;
+      // Search by date so we always get recent emails (not oldest-first by UID)
+      const uidResult = await client.search({ since: sinceDate }, { uid: true });
+      const uids: number[] = Array.isArray(uidResult) ? uidResult : [];
 
-      for await (const msg of client.fetch(
-        { uid: sequence },
-        { envelope: true, source: true },
-        { uid: true },
-      )) {
-        fetched++;
-        if (!msg.source) continue;
-        try {
-          const parsed = await (simpleParser as (source: Buffer | string) => Promise<import("mailparser").ParsedMail>)(msg.source);
-          const fromAddr = parsed.from?.value?.[0];
-          rows.push({
-            imap_uid: msg.uid,
-            imap_account: imapUser,
-            from_email: fromAddr?.address ?? "",
-            from_name: fromAddr?.name ?? null,
-            subject: parsed.subject ?? "(no subject)",
-            // Truncate body to 8k chars to keep rows manageable
-            body_text: parsed.text ? parsed.text.slice(0, 8000) : null,
-            received_at: (parsed.date ?? new Date()).toISOString(),
-          });
-        } catch (parseErr) {
-          console.error(`[sync-inbox] Failed to parse UID ${msg.uid}:`, parseErr);
+      // Take the most recent 100 (highest UIDs = newest)
+      const recentUids = uids.slice(-100);
+
+      if (recentUids.length > 0) {
+        const uidRange = recentUids.join(",");
+        for await (const msg of client.fetch(
+          { uid: uidRange },
+          { envelope: true, source: true },
+          { uid: true },
+        )) {
+          fetched++;
+          if (!msg.source) continue;
+          try {
+            const parsed = await (simpleParser as (source: Buffer | string) => Promise<import("mailparser").ParsedMail>)(msg.source);
+            const fromAddr = parsed.from?.value?.[0];
+            rows.push({
+              imap_uid: msg.uid,
+              imap_account: imapUser,
+              from_email: fromAddr?.address ?? "",
+              from_name: fromAddr?.name ?? null,
+              subject: parsed.subject ?? "(no subject)",
+              body_text: parsed.text ? parsed.text.slice(0, 8000) : null,
+              received_at: (parsed.date ?? new Date()).toISOString(),
+            });
+          } catch (parseErr) {
+            console.error(`[sync-inbox] Failed to parse UID ${msg.uid}:`, parseErr);
+          }
         }
       }
     } finally {

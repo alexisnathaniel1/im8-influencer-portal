@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { summarizeEmail } from "@/lib/email/summary";
+import { parseEmailBody } from "@/lib/email/parse-body";
 
 type InboxEmail = {
   id: string;
@@ -61,7 +61,7 @@ export default function InboxClient({
           const isRead = readSet.has(email.id);
           const isOpen = expanded === email.id;
           const linkedDealName = email.linked_deal_id ? dealNames[email.linked_deal_id] : null;
-          const preview = summarizeEmail(email.body_text, 160);
+          const { summary, nextSteps } = parseEmailBody(email.body_text);
           const receivedDate = new Date(email.received_at).toLocaleString("en-AU", {
             day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
           });
@@ -77,7 +77,6 @@ export default function InboxClient({
                 className="w-full text-left px-5 py-4 hover:bg-im8-offwhite transition-colors"
               >
                 <div className="flex items-start gap-3">
-                  {/* Unread dot */}
                   <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${
                     isRead ? "bg-transparent border border-im8-stone/40" : "bg-im8-red"
                   }`} />
@@ -94,11 +93,23 @@ export default function InboxClient({
                       {email.subject}
                     </p>
 
-                    {/* Body snippet */}
-                    {preview && (
-                      <p className="text-xs text-im8-muted mt-1 leading-relaxed">
-                        {preview}
+                    {/* Summary snippet */}
+                    {summary && (
+                      <p className="text-xs text-im8-muted mt-1 leading-relaxed line-clamp-2">
+                        {summary}
                       </p>
+                    )}
+
+                    {/* Next steps extracted from body */}
+                    {nextSteps.length > 0 && (
+                      <div className="mt-2 space-y-1">
+                        {nextSteps.map((step, i) => (
+                          <div key={i} className="flex items-start gap-1.5">
+                            <span className="mt-1 w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+                            <p className="text-[11px] text-amber-800 leading-relaxed">{step}</p>
+                          </div>
+                        ))}
+                      </div>
                     )}
 
                     {linkedDealName && (
@@ -113,6 +124,31 @@ export default function InboxClient({
               {/* ── Expanded view ── */}
               {isOpen && (
                 <div className="px-10 pb-6 pt-1 space-y-4">
+                  {/* Summary + next steps banner */}
+                  {(summary || nextSteps.length > 0) && (
+                    <div className="bg-im8-offwhite rounded-xl px-5 py-4 space-y-3">
+                      {summary && (
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-im8-muted mb-1">Summary</p>
+                          <p className="text-sm text-im8-burgundy leading-relaxed">{summary}</p>
+                        </div>
+                      )}
+                      {nextSteps.length > 0 && (
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-im8-muted mb-2">Action Items</p>
+                          <ul className="space-y-1.5">
+                            {nextSteps.map((step, i) => (
+                              <li key={i} className="flex items-start gap-2">
+                                <span className="mt-1.5 w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+                                <span className="text-sm text-im8-burgundy leading-relaxed">{step}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* From */}
                   <div className="bg-im8-offwhite rounded-lg px-4 py-3">
                     <p className="text-[10px] text-im8-muted font-bold uppercase tracking-wider mb-0.5">From</p>
@@ -121,6 +157,7 @@ export default function InboxClient({
 
                   {/* Full body */}
                   <div className="bg-white border border-im8-stone/20 rounded-lg px-5 py-4 max-h-[480px] overflow-y-auto">
+                    <p className="text-[10px] text-im8-muted font-bold uppercase tracking-wider mb-2">Full Email</p>
                     <p className="text-sm text-im8-burgundy/80 whitespace-pre-wrap leading-relaxed">
                       {email.body_text ?? "(no body)"}
                     </p>
