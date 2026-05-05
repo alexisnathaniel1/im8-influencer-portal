@@ -95,6 +95,23 @@ export default function DealDetailClient({
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<"overview" | "contract" | "briefs" | "submissions" | "gifting" | "edited-videos">("overview");
+
+  // Auto-sync missing tracker rows whenever the Briefs tab is opened.
+  // Handles the case where deliverables were added to the contract AFTER the
+  // initial auto-populate (e.g. deal started with IGR×1, later updated to IGR×3).
+  useEffect(() => {
+    if (tab !== "briefs") return;
+    const dealDeliverables = ((deal.deliverables as Array<{ code: string; count: number }> | null) ?? [])
+      .filter(d => d?.code && d.count > 0);
+    const expectedCount = dealDeliverables.reduce((s, d) => s + d.count, 0);
+    if (expectedCount <= deliverables.length) return; // all tracker rows exist already
+    fetch(`/api/deals/${deal.id}/sync-deliverables`, { method: "POST" })
+      .then(r => r.json())
+      .then(j => { if ((j.created ?? 0) > 0) router.refresh(); })
+      .catch(console.error);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
+
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [creatingBrief, setCreatingBrief] = useState(false);
@@ -472,7 +489,7 @@ export default function DealDetailClient({
             const agreedMonths = deal.total_months as number | null;
             const agreedRateCents = deal.monthly_rate_cents as number | null;
             const agreedTotalCents = deal.total_rate_cents as number | null;
-            const currency = (deal.currency as string) || "AUD";
+            const currency = (deal.currency_code as string) || "USD";
             if (!agreedMonths && !agreedRateCents) return null;
             return (
               <div className="bg-im8-offwhite border border-im8-stone/30 rounded-lg px-4 py-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
