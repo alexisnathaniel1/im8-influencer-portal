@@ -83,15 +83,23 @@ export async function POST(request: Request) {
 
     const timestamp = Date.now();
     let canonicalName = dealName;
+    let draftNum: number | null = null;
 
     // Build a human-readable canonical filename when deliverable context is available
     if (deliverableId) {
-      const { data: deliv } = await admin
-        .from("deliverables")
-        .select("deliverable_type, sequence, deal:deal_id(contract_sequence, influencer_name)")
-        .eq("id", deliverableId)
-        .single();
+      const [delivResult, countResult] = await Promise.all([
+        admin
+          .from("deliverables")
+          .select("deliverable_type, sequence, deal:deal_id(contract_sequence, influencer_name)")
+          .eq("id", deliverableId)
+          .single(),
+        admin
+          .from("submissions")
+          .select("*", { count: "exact", head: true })
+          .eq("deliverable_id", deliverableId),
+      ]);
 
+      const deliv = delivResult.data;
       if (deliv) {
         const deal2 = Array.isArray(deliv.deal) ? deliv.deal[0] : deliv.deal as { contract_sequence: number | null; influencer_name: string } | null;
         const name = (deal2?.influencer_name ?? dealName)
@@ -103,9 +111,14 @@ export async function POST(request: Request) {
         const seqSuffix = deliv.sequence ? `${deliv.sequence}` : "1";
         canonicalName = `${name}_Contract${contractSeq}_${delivType}${seqSuffix}`;
       }
+      // Draft number = existing submissions for this deliverable + 1
+      draftNum = (countResult.count ?? 0) + 1;
     }
 
-    const fileName = `${canonicalName}_${timestamp}`;
+    // Use DRAFT_N suffix when uploading for a deliverable; fall back to timestamp for misc uploads
+    const fileName = draftNum !== null
+      ? `${canonicalName}_DRAFT_${draftNum}`
+      : `${canonicalName}_${timestamp}`;
     const clientOrigin = request.headers.get("origin") || `https://${request.headers.get("host")}`;
 
     const { sessionUri } = await initiateResumableUpload(folderId, fileName, mimeType, fileSize, clientOrigin);

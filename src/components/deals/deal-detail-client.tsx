@@ -467,15 +467,58 @@ export default function DealDetailClient({
             <p className="text-xs text-im8-burgundy/50">Fill these in once the contract is signed.</p>
           </div>
 
+          {/* Agreed terms summary — sourced from the approved deal */}
+          {(() => {
+            const agreedMonths = deal.total_months as number | null;
+            const agreedRateCents = deal.monthly_rate_cents as number | null;
+            const agreedTotalCents = deal.total_rate_cents as number | null;
+            const currency = (deal.currency as string) || "AUD";
+            if (!agreedMonths && !agreedRateCents) return null;
+            return (
+              <div className="bg-im8-offwhite border border-im8-stone/30 rounded-lg px-4 py-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                <span className="text-[11px] font-bold text-im8-muted uppercase tracking-[0.08em]">Agreed terms</span>
+                {agreedMonths ? <span className="font-semibold text-im8-burgundy">{agreedMonths} months</span> : null}
+                {agreedRateCents ? (
+                  <span className="text-im8-burgundy/70">
+                    {currencySymbol(currency)}{(agreedRateCents / 100).toLocaleString()}/mo
+                  </span>
+                ) : null}
+                {agreedTotalCents ? (
+                  <span className="text-im8-burgundy font-medium">
+                    = {currencySymbol(currency)}{(agreedTotalCents / 100).toLocaleString()} total
+                  </span>
+                ) : null}
+              </div>
+            );
+          })()}
+
           <div className="grid grid-cols-2 gap-5">
             <div>
               <label className="block text-sm font-medium text-im8-burgundy mb-1">Campaign start</label>
               <input type="date" value={contract.campaignStart}
-                onChange={e => setContract(c => ({ ...c, campaignStart: e.target.value }))}
+                onChange={e => {
+                  const start = e.target.value;
+                  const months = deal.total_months as number | null;
+                  let end = contract.campaignEnd;
+                  // Auto-compute end date from agreed duration when a start date is picked
+                  if (start && months) {
+                    const d = new Date(start);
+                    d.setMonth(d.getMonth() + months);
+                    end = d.toISOString().split("T")[0];
+                  }
+                  setContract(c => ({ ...c, campaignStart: start, campaignEnd: end }));
+                }}
                 className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-im8-burgundy mb-1">Campaign end</label>
+              <label className="block text-sm font-medium text-im8-burgundy mb-1">
+                Campaign end
+                {(deal.total_months as number | null) && contract.campaignStart ? (
+                  <span className="ml-2 text-[11px] font-normal text-im8-burgundy/40">
+                    auto-set · {deal.total_months as number}-month deal
+                  </span>
+                ) : null}
+              </label>
               <input type="date" value={contract.campaignEnd}
                 onChange={e => setContract(c => ({ ...c, campaignEnd: e.target.value }))}
                 className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40" />

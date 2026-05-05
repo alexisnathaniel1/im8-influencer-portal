@@ -28,6 +28,15 @@ interface PendingSubmission {
   deliverable_type: string | null;
   deliverable_sequence: number | null;
   caption: string | null;
+  /** Draft number parsed from file_name (_DRAFT_N suffix) — null if not determinable */
+  draftNum: number | null;
+}
+
+/** Parse the DRAFT N number from a filename like "…_DRAFT_2" */
+function parseDraftNum(fileName: string | null): number | null {
+  if (!fileName) return null;
+  const m = fileName.match(/_DRAFT_(\d+)$/);
+  return m ? parseInt(m[1], 10) : null;
 }
 
 export default function AdminReviewPage() {
@@ -79,6 +88,7 @@ export default function AdminReviewPage() {
         deliverable_type: deliv?.deliverable_type ?? null,
         deliverable_sequence: deliv?.sequence ?? null,
         caption: (s as Record<string, unknown>).caption as string | null,
+        draftNum: parseDraftNum(s.file_name),
       });
     }
 
@@ -106,7 +116,7 @@ export default function AdminReviewPage() {
     }).catch(console.error);
   }
 
-  function notifyCreator(submissionId: string, action: "approved" | "revision_requested" | "rejected", feedbackText?: string) {
+  function notifyCreator(submissionId: string, action: "approved" | "revision_requested", feedbackText?: string) {
     fetch(`/api/submissions/${submissionId}/notify`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -129,6 +139,8 @@ export default function AdminReviewPage() {
     setActionLoading(null);
     syncContentLog(submissionId);
     notifyCreator(submissionId, "approved");
+    // Rename the Drive file to …_APPROVED (fire-and-forget — non-blocking)
+    fetch(`/api/submissions/${submissionId}/rename-approved`, { method: "POST" }).catch(console.error);
   }
 
   function combinedFeedback(submissionId: string): string {
@@ -136,24 +148,6 @@ export default function AdminReviewPage() {
     const caption = feedbackCaption[submissionId]?.trim();
     if (content && caption) return `Content: ${content}\n\nCaption: ${caption}`;
     return content || caption || "";
-  }
-
-  async function handleReject(submissionId: string) {
-    setActionLoading(submissionId);
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    await supabase.from("submissions").update({
-      status: "rejected",
-      feedback: feedback[submissionId] || null,
-      feedback_caption: feedbackCaption[submissionId] || null,
-      reviewed_by: user?.id ?? null,
-      reviewed_at: new Date().toISOString(),
-    }).eq("id", submissionId);
-    setSubmissions((prev) => prev.filter((s) => s.id !== submissionId));
-    setSelectedIds((prev) => { const next = new Set(prev); next.delete(submissionId); return next; });
-    if (expandedId === submissionId) setExpandedId(null);
-    setActionLoading(null);
-    notifyCreator(submissionId, "rejected", combinedFeedback(submissionId));
   }
 
   async function handleRevisionRequest(submissionId: string) {
@@ -252,9 +246,11 @@ export default function AdminReviewPage() {
                         </span>
                       )}
                       {sub.brief_title && !sub.deliverable_type && <span className="text-xs text-im8-burgundy/50">{sub.brief_title}</span>}
-                      <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${sub.content_type === "final" ? "bg-im8-flamingo/20 text-im8-red" : "bg-im8-sand text-im8-burgundy"}`}>
-                        {sub.content_type}
-                      </span>
+                      {sub.draftNum !== null && (
+                        <span className="inline-block px-2 py-0.5 rounded text-xs font-bold bg-slate-100 text-slate-600 font-mono">
+                          DRAFT {sub.draftNum}
+                        </span>
+                      )}
                       {sub.platform && <span className="text-xs text-im8-burgundy/50 capitalize">{sub.platform}</span>}
                     </div>
                     <div className="flex items-center gap-4 mt-1">
@@ -270,7 +266,6 @@ export default function AdminReviewPage() {
                   <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                     <Button size="sm" variant="primary" onClick={() => handleApprove(sub.id)} loading={actionLoading === sub.id}>Approve</Button>
                     <Button size="sm" variant="outline" onClick={() => handleRevisionRequest(sub.id)} loading={actionLoading === sub.id}>Revise</Button>
-                    <Button size="sm" variant="danger" onClick={() => handleReject(sub.id)} loading={actionLoading === sub.id}>Reject</Button>
                   </div>
                   <span className="text-im8-burgundy/30 text-lg">{isExpanded ? "▾" : "▸"}</span>
                 </div>
@@ -340,7 +335,7 @@ export default function AdminReviewPage() {
                         />
                       </div>
                     </div>
-                    <p className="text-[11px] text-im8-muted">Both fields are sent to the creator on Reject or Revise.</p>
+                    <p className="text-[11px] text-im8-muted">Both fields are sent to the creator when requesting a revision.</p>
                   </div>
                 )}
               </Card>

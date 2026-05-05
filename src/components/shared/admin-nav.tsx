@@ -89,9 +89,9 @@ const Icons: Record<string, React.FC<{ className?: string }>> = {
 
 const NAV = [
   { href: "/admin",              label: "Dashboard",      icon: "dashboard"    },
-  { href: "/admin/workflow",     label: "Workflow",       icon: "workflow"     },
   { href: "/admin/discovery",    label: "Discovery",      icon: "discovery"    },
   { href: "/admin/approvals",    label: "Approvals",      icon: "approvals"    },
+  { href: "/admin/workflow",     label: "Workflow",       icon: "workflow"     },
   { href: "/admin/deals",        label: "Partner Tracker",icon: "tracker"      },
   { href: "/admin/roster",       label: "Roster",         icon: "roster"       },
   { href: "/admin/deliverables", label: "Deliverables",   icon: "deliverables" },
