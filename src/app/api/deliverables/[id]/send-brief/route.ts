@@ -113,12 +113,48 @@ export async function POST(
     admin_review_due_date: (deliverable.admin_review_due_date as string | null) ?? day13.toISOString().split("T")[0],
   }).eq("id", id);
 
-  // Mark the linked brief as sent too
-  if (deliverable.brief_id) {
+  // Ensure a briefs-table row exists and is marked sent so it appears on /partner/briefs
+  let briefId = deliverable.brief_id as string | null;
+
+  if (briefId) {
+    // Brief record already exists — just mark it sent
     await admin.from("briefs").update({
       status: "sent",
       sent_at: now.toISOString(),
-    }).eq("id", deliverable.brief_id as string);
+    }).eq("id", briefId);
+  } else {
+    // No brief record yet — auto-create one from the deliverable's brief_doc_url
+    const { data: dealForBrief } = await admin
+      .from("deals")
+      .select("platform_primary")
+      .eq("id", deliverable.deal_id)
+      .single();
+
+    const { data: newBrief } = await admin
+      .from("briefs")
+      .insert({
+        deal_id: deliverable.deal_id,
+        title: `Brief for ${label}`,
+        body_markdown: "",
+        google_doc_url: deliverable.brief_doc_url,
+        platform: (dealForBrief as { platform_primary?: string } | null)?.platform_primary ?? null,
+        deliverable_type: deliverable.deliverable_type as string,
+        due_date: day10.toISOString().split("T")[0],
+        status: "sent",
+        sent_at: now.toISOString(),
+        created_by: user.id,
+      })
+      .select("id")
+      .single();
+
+    if (newBrief?.id) {
+      briefId = newBrief.id;
+      // Link the new brief back to this deliverable
+      await admin
+        .from("deliverables")
+        .update({ brief_id: newBrief.id })
+        .eq("id", id);
+    }
   }
 
   return NextResponse.json({
@@ -126,5 +162,6 @@ export async function POST(
     briefSentAt: now.toISOString(),
     creatorDeadline: day10.toISOString().split("T")[0],
     reviewDeadline: day13.toISOString().split("T")[0],
+    briefId,
   });
 }
