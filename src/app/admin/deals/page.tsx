@@ -105,6 +105,22 @@ export default async function DealsPage({
   const { data: dealsData } = await query;
   const deals = (dealsData ?? []) as DealRow[];
 
+  // Fetch deliverable counts per deal so each contract row can show
+  // "X/Y done" alongside the status. Same query pattern as Roster.
+  const dealIds = deals.map(d => d.id);
+  const { data: deliverableRows } = dealIds.length
+    ? await admin.from("deliverables").select("deal_id, status").in("deal_id", dealIds)
+    : { data: [] as { deal_id: string; status: string }[] };
+
+  const progressByDeal = new Map<string, { total: number; done: number }>();
+  for (const r of deliverableRows ?? []) {
+    const id = r.deal_id as string;
+    const cur = progressByDeal.get(id) ?? { total: 0, done: 0 };
+    cur.total += 1;
+    if (r.status === "live" || r.status === "completed") cur.done += 1;
+    progressByDeal.set(id, cur);
+  }
+
   // Group deals by creator (profile_id if linked, name as fallback)
   const groupMap = new Map<
     string,
@@ -172,6 +188,7 @@ export default async function DealsPage({
         key={JSON.stringify(params)}
         groups={creatorGroups}
         showRates={showRates}
+        progressByDeal={Object.fromEntries(progressByDeal)}
       />
     </div>
   );

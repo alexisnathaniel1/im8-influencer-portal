@@ -23,6 +23,11 @@ export type RosterRow = {
   status: string;
   contractSequence: number;
   pic: string | null;
+  // Progress on the contract — surfaced in the new "Progress" column.
+  // Total = all tracker rows for this deal (rights/extras already excluded).
+  // Done = rows with status 'live' or 'completed'.
+  deliverablesTotal: number;
+  deliverablesDone: number;
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -65,6 +70,22 @@ function daysUntil(iso: string | null): number | null {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   return Math.ceil((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+// "Month 2 of 3" — current contract month based on today vs campaign_start.
+// Returns null if no start date or contract hasn't started yet.
+// Caps at total_months even if the contract has run over.
+function contractMonth(start: string | null, totalMonths: number | null): { current: number; total: number } | null {
+  if (!start || !totalMonths) return null;
+  const startDate = new Date(start);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  if (today < startDate) return null;
+  const monthsElapsed = Math.floor(
+    (today.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24 * 30.4375)
+  );
+  const current = Math.min(monthsElapsed + 1, totalMonths);
+  return { current, total: totalMonths };
 }
 
 function handleFor(row: RosterRow): string | null {
@@ -416,6 +437,7 @@ export default function RosterTable({
                 <Th onClick={() => toggleSort("campaignEnd")} sortKey="campaignEnd" current={sortKey} dir={sortDir}>End</Th>
                 <Th onClick={() => toggleSort("contractSequence")} sortKey="contractSequence" current={sortKey} dir={sortDir}>#</Th>
                 <Th onClick={() => toggleSort("status")} sortKey="status" current={sortKey} dir={sortDir}>Status</Th>
+                <th className="px-4 py-3 font-semibold">Progress</th>
                 <th className="px-4 py-3 font-semibold">PIC</th>
                 <th className="px-4 py-3 font-semibold text-right">Actions</th>
               </tr>
@@ -423,7 +445,7 @@ export default function RosterTable({
             <tbody className="divide-y divide-im8-stone/15">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="px-4 py-12 text-center text-im8-muted">
+                  <td colSpan={13} className="px-4 py-12 text-center text-im8-muted">
                     {hasFilters ? "No creators match these filters." : "No active creators yet."}
                   </td>
                 </tr>
@@ -497,6 +519,13 @@ export default function RosterTable({
                         <span className={`px-1.5 py-0.5 rounded-[6px] text-[10px] font-semibold whitespace-nowrap ${STATUS_COLORS[r.status] ?? ""}`}>
                           {STATUS_LABELS[r.status] ?? r.status}
                         </span>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <ProgressCell
+                          done={r.deliverablesDone}
+                          total={r.deliverablesTotal}
+                          month={contractMonth(getStart(r), r.totalMonths)}
+                        />
                       </td>
                       <td className="px-4 py-3 text-im8-burgundy/80 truncate max-w-[100px]">{r.pic ?? "—"}</td>
                       <td className="px-4 py-3 text-right whitespace-nowrap">
@@ -578,5 +607,53 @@ function DateCell({
         className="absolute inset-0 opacity-0 cursor-pointer"
       />
     </label>
+  );
+}
+
+/**
+ * Compact progress display for the Roster:
+ *   [▰▰▰░░] 3/5 done
+ *   Month 2 of 3
+ *
+ * Shows nothing if there are no deliverables AND no contract dates.
+ * "Month X of Y" only shown when start date + total months are set.
+ */
+function ProgressCell({
+  done,
+  total,
+  month,
+}: {
+  done: number;
+  total: number;
+  month: { current: number; total: number } | null;
+}) {
+  const pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
+  const allDone = total > 0 && done === total;
+
+  if (total === 0 && !month) {
+    return <span className="text-im8-muted/40 text-[11px]">—</span>;
+  }
+
+  return (
+    <div className="flex flex-col gap-1 min-w-[110px]">
+      {total > 0 && (
+        <div className="flex items-center gap-1.5">
+          <div className="flex-1 h-1.5 bg-im8-stone/40 rounded-full overflow-hidden">
+            <div
+              className={`h-full transition-all ${allDone ? "bg-emerald-500" : "bg-im8-burgundy"}`}
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+          <span className="text-[10px] font-semibold text-im8-burgundy tabular-nums">
+            {done}/{total}
+          </span>
+        </div>
+      )}
+      {month && (
+        <div className="text-[10px] text-im8-muted">
+          Month {month.current} of {month.total}
+        </div>
+      )}
+    </div>
   );
 }

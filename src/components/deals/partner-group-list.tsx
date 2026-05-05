@@ -68,9 +68,12 @@ function primarySocialUrl(d: DealRow): { url: string; label: string } | null {
 export default function PartnerGroupList({
   groups,
   showRates,
+  progressByDeal,
 }: {
   groups: CreatorGroup[];
   showRates: boolean;
+  // dealId -> { total, done } so each row can render its deliverable progress
+  progressByDeal?: Record<string, { total: number; done: number }>;
 }) {
   // Active groups open by default; archived-only groups collapsed by default
   const [expanded, setExpanded] = useState<Record<string, boolean>>(
@@ -95,6 +98,18 @@ export default function PartnerGroupList({
         const isOpen = expanded[g.key] ?? g.isActive;
         const mostRecentDeal = g.deals[g.deals.length - 1];
 
+        // Aggregate progress across all of this creator's contracts so the
+        // group header can show "5/12 done" at a glance.
+        let groupTotal = 0;
+        let groupDone = 0;
+        for (const d of g.deals) {
+          const p = progressByDeal?.[d.id];
+          if (p) {
+            groupTotal += p.total;
+            groupDone += p.done;
+          }
+        }
+
         return (
           <div key={g.key} className="bg-white rounded-xl border border-im8-stone/30 overflow-hidden">
             {/* Creator header — click left side to toggle */}
@@ -111,6 +126,18 @@ export default function PartnerGroupList({
                   {g.isActive && (
                     <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">
                       Active
+                    </span>
+                  )}
+                  {groupTotal > 0 && (
+                    <span
+                      className={`text-xs px-2 py-0.5 rounded-full font-medium tabular-nums ${
+                        groupDone === groupTotal
+                          ? "bg-emerald-50 text-emerald-700"
+                          : "bg-im8-offwhite text-im8-burgundy/70"
+                      }`}
+                      title={`${groupDone} of ${groupTotal} deliverables live`}
+                    >
+                      {groupDone}/{groupTotal} done
                     </span>
                   )}
                   <span className="text-[11px] text-im8-burgundy/30 ml-0.5" aria-hidden>
@@ -140,6 +167,7 @@ export default function PartnerGroupList({
                       "Contract",
                       "Platform",
                       "Status",
+                      "Progress",
                       "Type",
                       ...(showRates ? ["Rate/mo"] : []),
                       "Duration",
@@ -160,6 +188,7 @@ export default function PartnerGroupList({
                 <tbody className="divide-y divide-im8-stone/20">
                   {g.deals.map(d => {
                     const social = primarySocialUrl(d);
+                    const dealProgress = progressByDeal?.[d.id];
                     return (
                       <tr key={d.id} className="hover:bg-im8-offwhite transition-colors">
                         {/* Contract badge + View link */}
@@ -203,6 +232,16 @@ export default function PartnerGroupList({
                           >
                             {STATUS_LABELS[d.status] ?? d.status.replace(/_/g, " ")}
                           </span>
+                        </td>
+
+                        {/* Progress — N/M done with bar + month X of Y */}
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <DealProgress
+                            done={dealProgress?.done ?? 0}
+                            total={dealProgress?.total ?? 0}
+                            campaignStart={d.campaign_start}
+                            totalMonths={d.total_months}
+                          />
                         </td>
 
                         {/* Paid / Gifted */}
@@ -264,6 +303,64 @@ export default function PartnerGroupList({
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// Inline contract progress: progress bar + N/M done + "Month X of Y".
+// Mirrors the Roster ProgressCell but compact for table rows.
+function DealProgress({
+  done,
+  total,
+  campaignStart,
+  totalMonths,
+}: {
+  done: number;
+  total: number;
+  campaignStart: string | null;
+  totalMonths: number | null;
+}) {
+  const pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
+  const allDone = total > 0 && done === total;
+
+  // Month X of Y — current contract month based on today vs campaign_start
+  let month: { current: number; total: number } | null = null;
+  if (campaignStart && totalMonths) {
+    const start = new Date(campaignStart);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (today >= start) {
+      const monthsElapsed = Math.floor(
+        (today.getTime() - start.getTime()) / (1000 * 60 * 60 * 24 * 30.4375)
+      );
+      month = { current: Math.min(monthsElapsed + 1, totalMonths), total: totalMonths };
+    }
+  }
+
+  if (total === 0 && !month) {
+    return <span className="text-im8-burgundy/30 text-xs">—</span>;
+  }
+
+  return (
+    <div className="flex flex-col gap-1 min-w-[100px]">
+      {total > 0 && (
+        <div className="flex items-center gap-1.5">
+          <div className="flex-1 h-1.5 bg-im8-stone/40 rounded-full overflow-hidden">
+            <div
+              className={`h-full transition-all ${allDone ? "bg-emerald-500" : "bg-im8-burgundy"}`}
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+          <span className="text-[10px] font-semibold text-im8-burgundy tabular-nums">
+            {done}/{total}
+          </span>
+        </div>
+      )}
+      {month && (
+        <div className="text-[10px] text-im8-burgundy/50">
+          Month {month.current} of {month.total}
+        </div>
+      )}
     </div>
   );
 }

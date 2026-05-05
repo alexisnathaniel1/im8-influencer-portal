@@ -31,8 +31,29 @@ export default async function RosterPage({
     .in("status", ["pending_approval", "approved", "contracted", "live"])
     .order("influencer_name");
 
+  // Fetch deliverable counts per deal so we can show "X/Y done" progress
+  // alongside each row without a second click. Single bulk query is cheaper
+  // than per-row fetches.
+  const dealIds = (deals ?? []).map((d) => d.id as string);
+  const { data: deliverableRows } = dealIds.length
+    ? await admin
+        .from("deliverables")
+        .select("deal_id, status")
+        .in("deal_id", dealIds)
+    : { data: [] as { deal_id: string; status: string }[] };
+
+  const progressByDeal = new Map<string, { total: number; done: number }>();
+  for (const r of deliverableRows ?? []) {
+    const id = r.deal_id as string;
+    const cur = progressByDeal.get(id) ?? { total: 0, done: 0 };
+    cur.total += 1;
+    if (r.status === "live" || r.status === "completed") cur.done += 1;
+    progressByDeal.set(id, cur);
+  }
+
   const rows: RosterRow[] = (deals ?? []).map((d) => {
     const assigned = d.assigned_to as unknown as { full_name: string } | null;
+    const progress = progressByDeal.get(d.id as string) ?? { total: 0, done: 0 };
     return {
       id: d.id as string,
       influencerName: (d.influencer_name as string) ?? "—",
@@ -52,6 +73,8 @@ export default async function RosterPage({
       status: (d.status as string) ?? "pending_approval",
       contractSequence: (d.contract_sequence as number | null) ?? 1,
       pic: assigned?.full_name ?? null,
+      deliverablesTotal: progress.total,
+      deliverablesDone: progress.done,
     };
   });
 

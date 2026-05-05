@@ -17,7 +17,12 @@ export default function BulkUploadPage() {
   const [parsed, setParsed] = useState<ParsedPartnerRow[]>([]);
   const [fileName, setFileName] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [result, setResult] = useState<{ inserted: number; skipped: { email: string; reason: string }[] } | null>(null);
+  const [result, setResult] = useState<{
+    inserted: number;
+    deliverablesCreated?: number;
+    markedLive?: number;
+    skipped: { email: string; reason: string }[];
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
@@ -72,7 +77,12 @@ export default function BulkUploadPage() {
       if (!res.ok) {
         setError(data.error ?? "Upload failed");
       } else {
-        setResult({ inserted: data.inserted, skipped: data.skipped ?? [] });
+        setResult({
+          inserted: data.inserted,
+          deliverablesCreated: data.deliverablesCreated,
+          markedLive: data.markedLive,
+          skipped: data.skipped ?? [],
+        });
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Upload failed");
@@ -213,6 +223,7 @@ export default function BulkUploadPage() {
                   <th className="px-3 py-2 font-semibold text-right">Monthly</th>
                   <th className="px-3 py-2 font-semibold">Months</th>
                   <th className="px-3 py-2 font-semibold">Deliverables</th>
+                  <th className="px-3 py-2 font-semibold">Already done</th>
                   <th className="px-3 py-2 font-semibold">Errors</th>
                 </tr>
               </thead>
@@ -247,6 +258,11 @@ export default function BulkUploadPage() {
                       <td className="px-3 py-2 text-im8-burgundy/70 text-[11px]">
                         {(r.payload?.deliverables ?? []).map(d => `${d.code}×${d.count}`).join(", ") || "—"}
                       </td>
+                      <td className="px-3 py-2 text-emerald-700 text-[11px]">
+                        {(r.payload?.completed_deliverables ?? []).length > 0
+                          ? r.payload!.completed_deliverables.map(d => `${d.code}×${d.count}`).join(", ")
+                          : "—"}
+                      </td>
                       <td className="px-3 py-2 text-red-700 text-[11px]">
                         {r.errors.map(e => `${e.field}: ${e.message}`).join("; ")}
                       </td>
@@ -265,6 +281,12 @@ export default function BulkUploadPage() {
           <h3 className="text-lg font-bold text-emerald-900 mb-2">
             ✓ Imported {result.inserted} {result.inserted === 1 ? "partner" : "partners"}
           </h3>
+          {(result.deliverablesCreated ?? 0) > 0 && (
+            <p className="text-sm text-emerald-800 mb-1">
+              Created {result.deliverablesCreated} tracker {result.deliverablesCreated === 1 ? "row" : "rows"}
+              {(result.markedLive ?? 0) > 0 && <> · {result.markedLive} marked already-live</>}.
+            </p>
+          )}
           {result.skipped.length > 0 && (
             <p className="text-sm text-emerald-800">
               Skipped {result.skipped.length} duplicate{result.skipped.length === 1 ? "" : "s"}: {result.skipped.map(s => s.email).join(", ")}

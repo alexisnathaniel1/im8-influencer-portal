@@ -162,14 +162,14 @@ export default function DeliverablesTable({
           <table className="w-full text-sm min-w-[900px]">
             <thead className="bg-white border-b border-im8-stone/20">
               <tr>
-                {["Influencer", "Type", "Status", "Due", "Draft", "Edit", "QA", "Post URL", "Views", "PIC"].map(h => (
+                {["Done", "Influencer", "Type", "Status", "Due", "Draft", "Edit", "QA", "Post URL", "Views", "PIC"].map(h => (
                   <th key={h} className="px-5 py-2.5 text-left text-[11px] font-semibold text-im8-muted uppercase tracking-[0.07em] whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-im8-stone/10">
               {deliverables.length === 0 && (
-                <tr><td colSpan={10} className="px-4 py-12 text-center text-im8-burgundy/40">No deliverables yet. They&rsquo;ll appear here automatically once a deal is approved and deliverables are saved on the contract.</td></tr>
+                <tr><td colSpan={11} className="px-4 py-12 text-center text-im8-burgundy/40">No deliverables yet. They&rsquo;ll appear here automatically once a deal is approved and deliverables are saved on the contract.</td></tr>
               )}
               {deliverables.map(d => (
                 <tr
@@ -177,6 +177,9 @@ export default function DeliverablesTable({
                   onClick={() => setSelectedId(selectedId === d.id ? null : d.id)}
                   className={`cursor-pointer transition-colors hover:bg-im8-sand/30 ${selectedId === d.id ? "bg-im8-sand/50" : ""}`}
                 >
+                  <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                    <DoneToggle deliverableId={d.id} current={d.status} />
+                  </td>
                   <td className="px-4 py-3">
                     <div className="font-medium text-im8-burgundy whitespace-nowrap">
                       {d.deal?.influencer_name ?? "—"}
@@ -389,6 +392,55 @@ function AdsDateCell({ deliverableId, field, current }: { deliverableId: string;
       onChange={e => save(e.target.value)}
       className="px-2 py-1 text-xs border border-im8-stone/40 rounded text-im8-burgundy bg-white focus:outline-none focus:ring-2 focus:ring-im8-red/30"
     />
+  );
+}
+
+// One-click "Done" toggle. Flips between the current status and 'live':
+// • If the deliverable is live or completed → click reverts to 'pending'
+// • Otherwise → click promotes to 'live' (and stamps live_date with today)
+// Used for mid-contract bulk-upload partners and ongoing manual marking
+// without having to open the status dropdown.
+function DoneToggle({ deliverableId, current }: { deliverableId: string; current: string }) {
+  const router = useRouter();
+  const [status, setStatus] = useState(current);
+  const [saving, setSaving] = useState(false);
+  const isDone = status === "live" || status === "completed";
+
+  async function toggle() {
+    if (saving) return;
+    setSaving(true);
+    const next = isDone ? "pending" : "live";
+    setStatus(next);
+    await fetch(`/api/deliverables/${deliverableId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        status: next,
+        live_date: next === "live" ? new Date().toISOString().split("T")[0] : null,
+      }),
+    });
+    setSaving(false);
+    router.refresh();
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={toggle}
+      disabled={saving}
+      title={isDone ? "Mark as pending" : "Mark as done"}
+      className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-colors ${
+        isDone
+          ? "bg-emerald-500 border-emerald-500 text-white hover:bg-emerald-600"
+          : "bg-white border-im8-stone hover:border-im8-burgundy"
+      } ${saving ? "opacity-50" : ""}`}
+    >
+      {isDone && (
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+        </svg>
+      )}
+    </button>
   );
 }
 
