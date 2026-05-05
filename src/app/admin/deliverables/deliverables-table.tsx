@@ -404,7 +404,9 @@ function DoneToggle({ deliverableId, current }: { deliverableId: string; current
   const router = useRouter();
   const [status, setStatus] = useState(current);
   const [saving, setSaving] = useState(false);
-  const isDone = status === "live" || status === "completed";
+  // Matches the Roster/Tracker "done" definition — approved/live/completed
+  // all count as done. Toggling reverts to pending.
+  const isDone = status === "approved" || status === "live" || status === "completed";
 
   async function toggle() {
     if (saving) return;

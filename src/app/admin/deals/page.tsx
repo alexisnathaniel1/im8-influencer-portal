@@ -113,12 +113,14 @@ export default async function DealsPage({
     ? await admin.from("deliverables").select("deal_id, status").in("deal_id", dealIds)
     : { data: [] as { deal_id: string; status: string }[] };
 
+  // "Done" = approved/live/completed — same set as Roster + deal-detail page.
+  const DONE_STATUSES = new Set(["approved", "live", "completed"]);
   const progressByDeal = new Map<string, { total: number; done: number }>();
   for (const r of deliverableRows ?? []) {
     const id = r.deal_id as string;
     const cur = progressByDeal.get(id) ?? { total: 0, done: 0 };
     cur.total += 1;
-    if (r.status === "live" || r.status === "completed") cur.done += 1;
+    if (DONE_STATUSES.has(r.status as string)) cur.done += 1;
     progressByDeal.set(id, cur);
   }
 

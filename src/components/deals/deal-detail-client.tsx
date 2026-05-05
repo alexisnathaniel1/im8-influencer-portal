@@ -99,10 +99,13 @@ export default function DealDetailClient({
   // Auto-sync missing tracker rows whenever the Briefs tab is opened.
   // Handles the case where deliverables were added to the contract AFTER the
   // initial auto-populate (e.g. deal started with IGR×1, later updated to IGR×3).
+  // Excludes rights/extras (WHITELIST etc.) from the expected count — they
+  // don't get tracker rows, so including them would trigger a wasted sync call
+  // every time the tab opens.
   useEffect(() => {
     if (tab !== "briefs") return;
     const dealDeliverables = ((deal.deliverables as Array<{ code: string; count: number }> | null) ?? [])
-      .filter(d => d?.code && d.count > 0);
+      .filter(d => d?.code && d.count > 0 && !BINARY_DELIVERABLE_CODES.has(d.code));
     const expectedCount = dealDeliverables.reduce((s, d) => s + d.count, 0);
     if (expectedCount <= deliverables.length) return; // all tracker rows exist already
     fetch(`/api/deals/${deal.id}/sync-deliverables`, { method: "POST" })
@@ -266,10 +269,17 @@ export default function DealDetailClient({
                 }`}>
                 {label[t]}
                 {t === "briefs" && (() => {
-                  const n = ((deal.deliverables as Array<{ code: string; count: number }> | null) ?? [])
+                  // Total schedulable briefs (excludes WHITELIST etc.)
+                  const total = ((deal.deliverables as Array<{ code: string; count: number }> | null) ?? [])
                     .filter(d => d && d.code && d.count > 0 && !BINARY_DELIVERABLE_CODES.has(d.code))
                     .reduce((s, d) => s + d.count, 0);
-                  return n > 0 ? <span className="ml-1 text-xs">({n})</span> : null;
+                  // Outstanding = total minus tracker rows already approved/live/completed,
+                  // since "already done" deliverables don't need a brief sent.
+                  const alreadyDone = (deliverables ?? []).filter(d =>
+                    ["approved", "live", "completed"].includes((d as Record<string, unknown>).status as string)
+                  ).length;
+                  const outstanding = Math.max(0, total - alreadyDone);
+                  return total > 0 ? <span className="ml-1 text-xs">({outstanding}/{total})</span> : null;
                 })()}
                 {t === "submissions" && submissions.length > 0 && <span className="ml-1 text-xs">({submissions.length})</span>}
               </button>
@@ -2297,7 +2307,36 @@ function DeliverableBriefRow({
     }
   }
 
-  const label = `${deliverableType}${sequence > 1 ? ` #${sequence}` : ""}`;
+  // Always include the sequence number — keeps "IGR #1" consistent with the
+  // deliverables tracker so admins know exactly which row this brief maps to.
+  const label = `${deliverableType} #${sequence}`;
+
+  // If this deliverable was already marked done (status = approved/live/completed),
+  // suppress the brief input — there's nothing left to brief the creator on.
+  const trackerStatus = (trackerRow?.status as string | undefined) ?? "pending";
+  const isAlreadyDone = ["approved", "live", "completed"].includes(trackerStatus);
+
+  if (isAlreadyDone) {
+    return (
+      <div className="px-5 py-3 flex items-center gap-3 flex-wrap">
+        <div className="shrink-0 w-24">
+          <span className="inline-block px-2 py-0.5 rounded text-xs font-bold font-mono bg-purple-100 text-purple-700">
+            {label}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+            </svg>
+            Already completed
+          </span>
+          <span className="text-xs text-im8-burgundy/50 italic">no brief needed</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="px-5 py-3 space-y-2">
       <div className="flex items-center gap-3 flex-wrap">
