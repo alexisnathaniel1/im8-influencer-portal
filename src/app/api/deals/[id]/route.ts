@@ -41,50 +41,63 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
           && !["WHITELIST", "PAID_AD", "RAW_FOOTAGE", "LINK_BIO"].includes(item.code));
 
     if (effectiveDeliverables.length > 0) {
-      const { count, error: countErr } = await admin.from("deliverables")
-        .select("*", { count: "exact", head: true }).eq("deal_id", id);
-      if (countErr) console.error("[deals/patch] deliverables count failed:", countErr.message);
-      if ((count ?? 0) === 0) {
-        const PLATFORM_MAP: Record<string, string> = {
-          IGR: "instagram", IGS: "instagram",
-          TIKTOK: "tiktok",
-          YT_DEDICATED: "youtube", YT_INTEGRATED: "youtube", YT_PODCAST: "youtube",
-          UGC: "other",
-          NEWSLETTER: "other", APP_PARTNERSHIP: "other", BLOG: "other",
-        };
-        const rows = effectiveDeliverables.flatMap(item =>
-          Array.from({ length: item.count }, (_, i) => ({
+      const PLATFORM_MAP: Record<string, string> = {
+        IGR: "instagram", IGS: "instagram",
+        TIKTOK: "tiktok",
+        YT_DEDICATED: "youtube", YT_INTEGRATED: "youtube", YT_PODCAST: "youtube",
+        UGC: "other",
+        NEWSLETTER: "other", APP_PARTNERSHIP: "other", BLOG: "other",
+      };
+
+      // Fetch existing deliverable rows so we can insert only MISSING ones.
+      // This handles the case where deliverables are added to the contract after
+      // the initial auto-populate (e.g. deal started with IGR×1, then updated to IGR×3).
+      const { data: existingRows } = await admin
+        .from("deliverables")
+        .select("deliverable_type, sequence")
+        .eq("deal_id", id);
+
+      const existingKeys = new Set(
+        (existingRows ?? []).map(d => `${d.deliverable_type}_${d.sequence ?? 1}`)
+      );
+
+      const rows = effectiveDeliverables.flatMap(item =>
+        Array.from({ length: item.count }, (_, i) => {
+          const seq = i + 1;
+          // Skip rows that already exist in the tracker
+          if (existingKeys.has(`${item.code}_${seq}`)) return null;
+          return {
             deal_id: id,
             deliverable_type: item.code,
             platform: PLATFORM_MAP[item.code] ?? (before?.platform_primary ?? "instagram"),
             is_story: item.code === "IGS",
-            // Per-type sequence (1, 2, 3…) so 3× IGR shows as IGR #1, #2, #3.
-            sequence: i + 1,
-            title: `${before?.influencer_name ?? ""} — ${item.code} #${i + 1}`,
-          }))
-        );
-        if (rows.length > 0) {
-          const { error: insertErr } = await admin.from("deliverables").insert(rows);
-          if (insertErr) {
-            if (insertErr.message.includes("sequence")) {
-              // sequence column not migrated yet — retry without it
-              console.warn("[deals/patch] sequence column absent, retrying without it");
-              const rowsNoSeq = rows.map(({ sequence: _seq, ...rest }) => rest);
-              const { error: insertErr2 } = await admin.from("deliverables").insert(rowsNoSeq);
-              if (insertErr2) {
-                console.error("[deals/patch] auto-populate retry failed:", insertErr2.message);
-              } else {
-                console.log("[deals/patch] auto-populated", rowsNoSeq.length, "deliverable rows (no sequence) for deal", id);
-              }
+            sequence: seq,
+            title: `${before?.influencer_name ?? ""} — ${item.code} #${seq}`,
+          };
+        }).filter((r): r is NonNullable<typeof r> => r !== null)
+      );
+
+      if (rows.length > 0) {
+        const { error: insertErr } = await admin.from("deliverables").insert(rows);
+        if (insertErr) {
+          if (insertErr.message.includes("sequence")) {
+            // sequence column not migrated yet — retry without it
+            console.warn("[deals/patch] sequence column absent, retrying without it");
+            const rowsNoSeq = rows.map(({ sequence: _seq, ...rest }) => rest);
+            const { error: insertErr2 } = await admin.from("deliverables").insert(rowsNoSeq);
+            if (insertErr2) {
+              console.error("[deals/patch] auto-populate retry failed:", insertErr2.message);
             } else {
-              console.error("[deals/patch] deliverables auto-populate failed:", insertErr.message, "deal_id:", id, "rows:", rows.length);
+              console.log("[deals/patch] auto-populated", rowsNoSeq.length, "deliverable rows (no sequence) for deal", id);
             }
           } else {
-            console.log("[deals/patch] auto-populated", rows.length, "deliverable rows for deal", id);
+            console.error("[deals/patch] deliverables auto-populate failed:", insertErr.message, "deal_id:", id, "rows:", rows.length);
           }
+        } else {
+          console.log("[deals/patch] auto-populated", rows.length, "new deliverable rows for deal", id);
         }
       } else {
-        console.log("[deals/patch] skipping auto-populate — deal already has", count, "deliverable rows");
+        console.log("[deals/patch] no new deliverable rows needed for deal", id);
       }
     }
   }
