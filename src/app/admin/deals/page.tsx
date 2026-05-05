@@ -35,6 +35,7 @@ type DealRow = {
   instagram_handle: string | null;
   tiktok_handle: string | null;
   youtube_handle: string | null;
+  contract_url: string | null;
   assigned_to: { full_name: string } | null;
 };
 

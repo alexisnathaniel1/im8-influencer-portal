@@ -68,6 +68,7 @@ export async function POST(request: NextRequest) {
       deliverables: r.deliverables,
       discount_code: r.discount_code,
       affiliate_link: r.affiliate_link,
+      contract_url: r.contract_url,
       contact_phone: r.phone,
       manager_email: r.manager_email,
       rationale: r.rationale,

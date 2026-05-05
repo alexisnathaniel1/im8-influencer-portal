@@ -20,6 +20,7 @@ export type PartnerColumnKey =
   | "completed_deliverables"
   | "discount_code"
   | "affiliate_link"
+  | "contract_url"
   | "phone"
   | "manager_email"
   | "notes";
@@ -52,6 +53,7 @@ export const PARTNER_COLUMNS: PartnerColumn[] = [
   { key: "completed_deliverables", label: "Completed Deliverables",       hint: "Already done — same syntax. e.g. IGR:1; IGS:2",  example: "IGR:1" },
   { key: "discount_code",         label: "Discount Code",                 hint: "Optional — used to build the affiliate link",   example: "JANE15" },
   { key: "affiliate_link",    label: "Affiliate Link",                    hint: "Format: https://im8health.com/discount/{CODE}",  example: "https://im8health.com/discount/JANE15" },
+  { key: "contract_url",      label: "Contract URL",                      hint: "Google Drive link to the signed contract / folder", example: "https://drive.google.com/drive/folders/abc123" },
   { key: "phone",             label: "Phone",                             hint: "Optional",                                       example: "+1 555 1234" },
   { key: "manager_email",     label: "Manager Email",                     hint: "Optional — agency contact",                      example: "manager@agency.com" },
   { key: "notes",             label: "Notes",                             hint: "Internal notes",                                 example: "Returning partner — Q4 2025" },
@@ -167,6 +169,7 @@ export type PartnerPayload = {
   completed_deliverables: { code: string; count: number }[];
   discount_code: string | null;
   affiliate_link: string | null;
+  contract_url: string | null;
   phone: string | null;
   manager_email: string | null;
   rationale: string | null;
@@ -251,6 +254,7 @@ export function validateRow(row: Record<string, string>, rowIndex: number): Pars
     completed_deliverables: parseDeliverablesCell(get("completed_deliverables")),
     discount_code: discountCode,
     affiliate_link: affiliate,
+    contract_url: optStr("contract_url"),
     phone: optStr("phone"),
     manager_email: optStr("manager_email"),
     rationale: optStr("notes"),
