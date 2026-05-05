@@ -87,18 +87,43 @@ const Icons: Record<string, React.FC<{ className?: string }>> = {
   ),
 };
 
+type NavItem = { href: string; label: string; icon: string };
+type NavGroup = { label: string | null; items: NavItem[] };
+
+const NAV_GROUPS: NavGroup[] = [
+  {
+    label: null,
+    items: [
+      { href: "/admin",          label: "Dashboard", icon: "dashboard" },
+      { href: "/admin/workflow", label: "Workflow",  icon: "workflow"  },
+    ],
+  },
+  {
+    label: "Pipeline",
+    items: [
+      { href: "/admin/discovery", label: "Discovery",       icon: "discovery" },
+      { href: "/admin/approvals", label: "Approvals",       icon: "approvals" },
+      { href: "/admin/deals",     label: "Partner Tracker", icon: "tracker"   },
+      { href: "/admin/roster",    label: "Roster",          icon: "roster"    },
+    ],
+  },
+  {
+    label: "Content",
+    items: [
+      { href: "/admin/deliverables", label: "Deliverables",   icon: "deliverables" },
+      { href: "/admin/calendar",     label: "Calendar",       icon: "calendar"     },
+      { href: "/admin/review",       label: "Content Review", icon: "review"       },
+      { href: "/admin/inbox",        label: "Inbox",          icon: "inbox"        },
+    ],
+  },
+];
+
+const NAV_SETTINGS: NavItem = { href: "/admin/settings", label: "Settings", icon: "settings" };
+
+// Flat list used only for permissions check (keeps getAllowedNav compatible)
 const NAV = [
-  { href: "/admin",              label: "Dashboard",      icon: "dashboard"    },
-  { href: "/admin/discovery",    label: "Discovery",      icon: "discovery"    },
-  { href: "/admin/approvals",    label: "Approvals",      icon: "approvals"    },
-  { href: "/admin/workflow",     label: "Workflow",       icon: "workflow"     },
-  { href: "/admin/deals",        label: "Partner Tracker",icon: "tracker"      },
-  { href: "/admin/roster",       label: "Roster",         icon: "roster"       },
-  { href: "/admin/deliverables", label: "Deliverables",   icon: "deliverables" },
-  { href: "/admin/calendar",     label: "Calendar",       icon: "calendar"     },
-  { href: "/admin/review",       label: "Content Review", icon: "review"       },
-  { href: "/admin/inbox",        label: "Inbox",          icon: "inbox"        },
-  { href: "/admin/settings",     label: "Settings",       icon: "settings"     },
+  ...NAV_GROUPS.flatMap(g => g.items),
+  NAV_SETTINGS,
 ];
 
 export default function AdminNav({ profile }: { profile: { full_name: string; role: string; email: string } }) {
@@ -113,6 +138,27 @@ export default function AdminNav({ profile }: { profile: { full_name: string; ro
   }
 
   const visibleNav = NAV.filter(item => allowed.includes(item.href));
+  const allowedHrefs = new Set(visibleNav.map(i => i.href));
+
+  function NavLink({ item }: { item: NavItem }) {
+    const active = pathname === item.href || (item.href !== "/admin" && pathname.startsWith(item.href));
+    const IconComponent = Icons[item.icon];
+    return (
+      <Link
+        href={item.href}
+        className={`flex items-center gap-3 px-5 py-2 text-[13px] transition-colors relative ${
+          active
+            ? "text-white font-medium bg-white/10 border-l-2 border-im8-flamingo"
+            : "text-white/55 hover:text-white hover:bg-white/8 border-l-2 border-transparent"
+        }`}
+      >
+        {IconComponent && (
+          <IconComponent className={`shrink-0 ${active ? "text-white" : "text-white/50"}`} />
+        )}
+        {item.label}
+      </Link>
+    );
+  }
 
   return (
     <nav className="fixed left-0 top-0 h-full w-64 bg-im8-burgundy text-white flex flex-col">
@@ -124,28 +170,29 @@ export default function AdminNav({ profile }: { profile: { full_name: string; ro
         </p>
       </div>
 
-      {/* Nav items */}
-      <div className="flex-1 py-3 overflow-y-auto">
-        {visibleNav.map(item => {
-          const active = pathname === item.href || (item.href !== "/admin" && pathname.startsWith(item.href));
-          const IconComponent = Icons[item.icon];
+      {/* Nav groups */}
+      <div className="flex-1 py-3 overflow-y-auto space-y-1">
+        {NAV_GROUPS.map((group, gi) => {
+          const visibleItems = group.items.filter(i => allowedHrefs.has(i.href));
+          if (visibleItems.length === 0) return null;
           return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`flex items-center gap-3 px-5 py-2.5 text-[13px] transition-colors relative ${
-                active
-                  ? "text-white font-medium bg-white/10 border-l-2 border-im8-flamingo"
-                  : "text-white/55 hover:text-white hover:bg-white/8 border-l-2 border-transparent"
-              }`}
-            >
-              {IconComponent && (
-                <IconComponent className={`shrink-0 ${active ? "text-white" : "text-white/50"}`} />
+            <div key={gi} className={gi > 0 ? "pt-3 mt-1 border-t border-white/8" : ""}>
+              {group.label && (
+                <p className="px-5 pb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-white/25 select-none">
+                  {group.label}
+                </p>
               )}
-              {item.label}
-            </Link>
+              {visibleItems.map(item => <NavLink key={item.href} item={item} />)}
+            </div>
           );
         })}
+
+        {/* Settings — isolated at the bottom */}
+        {allowedHrefs.has(NAV_SETTINGS.href) && (
+          <div className="pt-3 mt-1 border-t border-white/8">
+            <NavLink item={NAV_SETTINGS} />
+          </div>
+        )}
       </div>
 
       {/* User footer */}
