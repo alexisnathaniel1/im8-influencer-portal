@@ -13,13 +13,43 @@ type InboxEmail = {
   received_at: string;
   is_read: boolean;
   linked_deal_id: string | null;
+  ai_summary: string | null;
+  ai_next_steps: string[] | null;
 };
 
-const ASSIGNEE_LABEL: Record<ActionAssignee, { label: string; classes: string; dot: string }> = {
+type LocalSummary = {
+  summary: string;
+  steps: { text: string; assignee: ActionAssignee }[];
+};
+
+const ASSIGNEE_META: Record<ActionAssignee, { label: string; classes: string; dot: string }> = {
   team:    { label: "Team",    classes: "bg-im8-red/10 text-im8-burgundy",   dot: "bg-im8-red" },
   creator: { label: "Creator", classes: "bg-violet-100 text-violet-800",     dot: "bg-violet-500" },
   fyi:     { label: "FYI",     classes: "bg-im8-stone/30 text-im8-muted",    dot: "bg-im8-stone" },
 };
+
+// Parse a "Team: do X" / "Creator: do Y" / "do Z" string into { text, assignee }
+function parseStep(raw: string): { text: string; assignee: ActionAssignee } {
+  const m = raw.match(/^\s*(team|creator|fyi)\s*[:\-–]\s*(.+)$/i);
+  if (m) {
+    return {
+      text: m[2].trim(),
+      assignee: m[1].toLowerCase() as ActionAssignee,
+    };
+  }
+  return { text: raw.trim(), assignee: "team" };
+}
+
+function buildSummary(email: InboxEmail, override?: LocalSummary): LocalSummary | null {
+  if (override) return override;
+  if (email.ai_summary) {
+    return {
+      summary: email.ai_summary,
+      steps: (email.ai_next_steps ?? []).map(parseStep),
+    };
+  }
+  return null;
+}
 
 export default function InboxClient({
   emails,
@@ -33,6 +63,8 @@ export default function InboxClient({
   const [readSet, setReadSet] = useState<Set<string>>(
     new Set(emails.filter(e => e.is_read).map(e => e.id))
   );
+  const [summaryOverrides, setSummaryOverrides] = useState<Record<string, LocalSummary>>({});
+  const [generating, setGenerating] = useState<Set<string>>(new Set());
 
   async function markRead(id: string) {
     if (readSet.has(id)) return;
@@ -44,10 +76,32 @@ export default function InboxClient({
     }).catch(console.error);
   }
 
-  function toggle(id: string) {
+  async function generateSummary(email: InboxEmail) {
+    if (summaryOverrides[email.id] || email.ai_summary || generating.has(email.id)) return;
+    setGenerating(prev => new Set([...prev, email.id]));
+    try {
+      const res = await fetch(`/api/inbox/${email.id}/summarize`, { method: "POST" });
+      if (!res.ok) return;
+      const data = (await res.json()) as { summary: string; next_steps: string[] };
+      setSummaryOverrides(prev => ({
+        ...prev,
+        [email.id]: {
+          summary: data.summary,
+          steps: (data.next_steps ?? []).map(parseStep),
+        },
+      }));
+    } finally {
+      setGenerating(prev => { const s = new Set(prev); s.delete(email.id); return s; });
+    }
+  }
+
+  function toggle(id: string, email: InboxEmail) {
     const next = expanded === id ? null : id;
     setExpanded(next);
-    if (next) markRead(id);
+    if (next) {
+      markRead(id);
+      generateSummary(email);
+    }
   }
 
   function toggleSig(id: string) {
@@ -77,8 +131,19 @@ export default function InboxClient({
           const isRead = readSet.has(email.id);
           const isOpen = expanded === email.id;
           const sigOpen = showSig.has(email.id);
+          const isGenerating = generating.has(email.id);
           const linkedDealName = email.linked_deal_id ? dealNames[email.linked_deal_id] : null;
-          const parsed = parseEmailBody(email.body_text, { fromEmail: email.from_email });
+
+          // For body display we still use parseEmailBody to strip signatures/quoted text
+          const parsedBody = parseEmailBody(email.body_text, { fromEmail: email.from_email });
+          // For summary + next steps, prefer AI if available, otherwise fall back to parsed
+          const aiSummary = buildSummary(email, summaryOverrides[email.id]);
+          const summaryText = aiSummary?.summary ?? parsedBody.summary;
+          const steps = aiSummary
+            ? aiSummary.steps
+            : parsedBody.actionItems.map(a => ({ text: a.text, assignee: a.assignee }));
+          const isAi = !!aiSummary;
+
           const receivedDate = new Date(email.received_at).toLocaleString("en-AU", {
             day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
           });
@@ -90,7 +155,7 @@ export default function InboxClient({
             <div key={email.id} className={`transition-colors ${!isRead ? "bg-blue-50/20" : ""}`}>
               {/* ── Collapsed row ── */}
               <button
-                onClick={() => toggle(email.id)}
+                onClick={() => toggle(email.id, email)}
                 className="w-full text-left px-5 py-4 hover:bg-im8-offwhite transition-colors"
               >
                 <div className="flex items-start gap-3">
@@ -110,25 +175,25 @@ export default function InboxClient({
                       {email.subject}
                     </p>
 
-                    {parsed.summary && (
+                    {summaryText && (
                       <p className="text-xs text-im8-muted mt-1 leading-relaxed line-clamp-2">
-                        {parsed.summary}
+                        {summaryText}
                       </p>
                     )}
 
-                    {parsed.actionItems.length > 0 && (
+                    {steps.length > 0 && (
                       <div className="mt-2 flex flex-wrap gap-1.5">
-                        {parsed.actionItems.map((item, i) => {
-                          const meta = ASSIGNEE_LABEL[item.assignee];
+                        {steps.map((step, i) => {
+                          const meta = ASSIGNEE_META[step.assignee];
                           return (
                             <span
                               key={i}
                               className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full font-medium ${meta.classes}`}
-                              title={item.text}
+                              title={step.text}
                             >
                               <span className={`w-1.5 h-1.5 rounded-full ${meta.dot}`} />
                               <span className="opacity-70 font-bold">{meta.label}</span>
-                              <span className="truncate max-w-[260px]">{item.text}</span>
+                              <span className="truncate max-w-[260px]">{step.text}</span>
                             </span>
                           );
                         })}
@@ -147,47 +212,53 @@ export default function InboxClient({
               {/* ── Expanded view ── */}
               {isOpen && (
                 <div className="px-10 pb-7 pt-2 space-y-5 bg-im8-offwhite/30">
-                  {/* Summary + action items card */}
-                  {(parsed.summary || parsed.actionItems.length > 0) && (
-                    <div className="bg-white rounded-xl border border-im8-stone/30 p-5 space-y-4 shadow-sm">
-                      {parsed.summary && (
-                        <div>
-                          <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-im8-muted mb-1.5">
-                            Summary
-                          </p>
-                          <p className="text-[14px] text-im8-burgundy leading-relaxed">
-                            {parsed.summary}
-                          </p>
-                        </div>
+                  {/* AI summary card */}
+                  <div className="bg-white rounded-xl border border-im8-stone/30 p-5 space-y-4 shadow-sm">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-im8-muted">
+                        {isAi ? "AI Summary" : "Summary"}
+                      </p>
+                      {isGenerating && (
+                        <span className="flex items-center gap-1.5 text-[11px] text-im8-muted">
+                          <span className="w-3 h-3 rounded-full border-2 border-im8-burgundy/30 border-t-im8-burgundy animate-spin" />
+                          Generating…
+                        </span>
                       )}
-
-                      {parsed.actionItems.length > 0 && (
-                        <div className="pt-1">
-                          <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-im8-muted mb-2">
-                            Action Items
-                          </p>
-                          <ul className="space-y-2">
-                            {parsed.actionItems.map((item, i) => {
-                              const meta = ASSIGNEE_LABEL[item.assignee];
-                              return (
-                                <li key={i} className="flex items-start gap-3">
-                                  <span
-                                    className={`shrink-0 mt-0.5 inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${meta.classes}`}
-                                  >
-                                    <span className={`w-1.5 h-1.5 rounded-full ${meta.dot}`} />
-                                    {meta.label}
-                                  </span>
-                                  <span className="text-[14px] text-im8-burgundy leading-relaxed">
-                                    {item.text}
-                                  </span>
-                                </li>
-                              );
-                            })}
-                          </ul>
-                        </div>
+                      {isAi && !isGenerating && (
+                        <span className="text-[10px] font-semibold text-im8-gold uppercase tracking-wider">✦ Gemini</span>
                       )}
                     </div>
-                  )}
+
+                    {summaryText ? (
+                      <p className="text-[14px] text-im8-burgundy leading-relaxed">{summaryText}</p>
+                    ) : (
+                      <p className="text-sm text-im8-muted italic">No summary available yet.</p>
+                    )}
+
+                    {steps.length > 0 && (
+                      <div className="pt-2">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-im8-muted mb-2">
+                          Next Steps
+                        </p>
+                        <ul className="space-y-2">
+                          {steps.map((step, i) => {
+                            const meta = ASSIGNEE_META[step.assignee];
+                            return (
+                              <li key={i} className="flex items-start gap-3">
+                                <span
+                                  className={`shrink-0 mt-0.5 inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${meta.classes}`}
+                                >
+                                  <span className={`w-1.5 h-1.5 rounded-full ${meta.dot}`} />
+                                  {meta.label}
+                                </span>
+                                <span className="text-[14px] text-im8-burgundy leading-relaxed">{step.text}</span>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
 
                   {/* Sender + meta strip */}
                   <div className="flex items-center justify-between gap-4 px-1">
@@ -204,13 +275,13 @@ export default function InboxClient({
                   {/* Email body card */}
                   <div className="bg-white rounded-xl border border-im8-stone/30 shadow-sm">
                     <div className="px-6 py-5 max-h-[480px] overflow-y-auto">
-                      {parsed.bodyClean ? (
-                        <RenderedEmailBody text={parsed.bodyClean} />
+                      {parsedBody.bodyClean ? (
+                        <RenderedEmailBody text={parsedBody.bodyClean} />
                       ) : (
                         <p className="text-sm text-im8-muted italic">(No message body)</p>
                       )}
 
-                      {parsed.signature && (
+                      {parsedBody.signature && (
                         <div className="mt-5 pt-4 border-t border-im8-stone/30">
                           <button
                             type="button"
@@ -222,7 +293,7 @@ export default function InboxClient({
                           </button>
                           {sigOpen && (
                             <div className="mt-3 opacity-70">
-                              <RenderedEmailBody text={parsed.signature} />
+                              <RenderedEmailBody text={parsedBody.signature} />
                             </div>
                           )}
                         </div>

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { summarizeEmail } from "@/lib/ai/email-summary";
 
 // Vercel cron: runs every 4 hours — secured by Authorization: Bearer CRON_SECRET
 // Fetches new emails from partners@im8health.com via IMAP and stores them in inbox_emails.
@@ -102,15 +103,39 @@ export async function GET(request: Request) {
     await client.logout();
 
     if (rows.length > 0) {
-      const { error, count } = await admin
+      const { data: insertedRows, error, count } = await admin
         .from("inbox_emails")
         .upsert(rows, { onConflict: "imap_account,imap_uid", ignoreDuplicates: true })
-        .select("id");
+        .select("id, from_email, from_name, subject, body_text");
 
       if (error) {
         console.error("[sync-inbox] DB upsert failed:", error.message);
       } else {
         inserted = count ?? rows.length;
+
+        // Summarize each new email sequentially. Errors are non-fatal — the email
+        // is still saved without a summary and can be summarized on-demand later.
+        if (insertedRows && insertedRows.length > 0) {
+          console.log(`[sync-inbox] Summarizing ${insertedRows.length} new emails…`);
+          for (const row of insertedRows) {
+            try {
+              const summary = await summarizeEmail({
+                from_name: row.from_name as string | null,
+                from_email: row.from_email as string,
+                subject: row.subject as string,
+                body_text: row.body_text as string | null,
+              });
+              if (summary) {
+                await admin
+                  .from("inbox_emails")
+                  .update({ ai_summary: summary.summary, ai_next_steps: summary.next_steps })
+                  .eq("id", row.id);
+              }
+            } catch (sumErr) {
+              console.error(`[sync-inbox] summary failed for ${row.id}:`, sumErr);
+            }
+          }
+        }
       }
     }
   } catch (err) {
