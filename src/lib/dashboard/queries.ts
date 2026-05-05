@@ -110,23 +110,6 @@ export async function getRecentInboxEmails(admin: SupabaseClient, limit = 5) {
   return { count: (data ?? []).length, items: data ?? [] };
 }
 
-// Recent comments left by creators on briefs — shown in workflow as "Partner updates"
-export async function getRecentBriefComments(admin: SupabaseClient, limit = 5) {
-  // Pull unread first, then any from the last 14 days
-  const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 14);
-  const { data } = await admin
-    .from("brief_comments")
-    .select("id, body, author_name, author_role, created_at, read_by_admin, brief_id, deal_id, deal:deal_id(id, influencer_name)")
-    .eq("author_role", "creator")
-    .gte("created_at", cutoff.toISOString())
-    .order("created_at", { ascending: false })
-    .limit(limit);
-
-  const items = data ?? [];
-  const unread = items.filter(c => !c.read_by_admin).length;
-  return { count: items.length, unread, items };
-}
-
 // 7-day outlook: per day, how many briefs are due, how many reviews are due,
 // and how many posts are scheduled to go live.
 export type OutlookDay = {

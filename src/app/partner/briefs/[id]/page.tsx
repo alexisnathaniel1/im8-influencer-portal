@@ -1,7 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import PartnerCommentThread from "./comment-thread";
 
 export default async function PartnerBriefPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -83,10 +82,6 @@ export default async function PartnerBriefPage({ params }: { params: Promise<{ i
               {brief.body_markdown}
             </div>
           )}
-        </div>
-
-        <div className="mb-6">
-          <PartnerCommentThread briefId={brief.id as string} />
         </div>
 
         {submissions && submissions.length > 0 && (

@@ -8,7 +8,6 @@ import {
   getReviewsDueThisWeek,
   getContractsExpiringSoon,
   getRecentInboxEmails,
-  getRecentBriefComments,
   getWeeklyOutlook,
 } from "@/lib/dashboard/queries";
 import { summarizeEmail } from "@/lib/email/summary";
@@ -51,7 +50,6 @@ export default async function WorkflowDashboardPage() {
     reviewsDueThisWeek,
     contractsExpiring,
     recentEmails,
-    partnerComments,
     outlook,
   ] = await Promise.all([
     getBriefsPendingToSend(admin),
@@ -59,7 +57,6 @@ export default async function WorkflowDashboardPage() {
     getReviewsDueThisWeek(admin),
     getContractsExpiringSoon(admin, 14),
     getRecentInboxEmails(admin, 5),
-    getRecentBriefComments(admin, 5),
     getWeeklyOutlook(admin),
   ]);
 
@@ -267,62 +264,9 @@ export default async function WorkflowDashboardPage() {
           </section>
         </div>
 
-        {/* Right: Partner updates + Recent emails (40%) */}
-        <div className="lg:col-span-2 space-y-4">
-          {/* Partner brief comments */}
-          <section className="bg-white rounded-xl border border-im8-stone/30 overflow-hidden">
-            <header className="px-5 py-3 border-b border-im8-stone/20 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                  <path d="M3 2.5h10a1.5 1.5 0 011.5 1.5v6a1.5 1.5 0 01-1.5 1.5H8l-3.5 2.5v-2.5H3a1.5 1.5 0 01-1.5-1.5v-6A1.5 1.5 0 013 2.5z" stroke="currentColor" strokeWidth="1.5" className="text-im8-maroon"/>
-                </svg>
-                <h2 className="text-[13px] font-bold text-im8-maroon uppercase tracking-[0.08em]">Partner updates</h2>
-                {partnerComments.unread > 0 && (
-                  <span className="px-1.5 py-0.5 bg-im8-red text-white text-[10px] font-bold rounded-full">
-                    {partnerComments.unread} new
-                  </span>
-                )}
-              </div>
-            </header>
-            <div className="divide-y divide-im8-stone/15">
-              {partnerComments.items.length === 0 ? (
-                <p className="px-5 py-6 text-[13px] text-im8-muted text-center">
-                  Creators haven&apos;t left any comments yet.
-                </p>
-              ) : (
-                partnerComments.items.map((c) => {
-                  const deal = c.deal as unknown as { id: string; influencer_name: string } | null;
-                  const isUnread = !c.read_by_admin;
-                  return (
-                    <Link
-                      key={c.id as string}
-                      href={deal ? `/admin/deals/${deal.id}?tab=briefs` : "/admin/calendar"}
-                      className={`block px-5 py-3 hover:bg-im8-offwhite transition-colors ${isUnread ? "bg-blue-50/40" : ""}`}
-                    >
-                      <div className="flex items-start gap-2">
-                        <span className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 ${isUnread ? "bg-im8-red" : "bg-transparent"}`} />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center justify-between gap-2">
-                            <p className={`text-[12px] truncate ${isUnread ? "font-semibold text-im8-maroon" : "text-im8-maroon/70"}`}>
-                              {(c.author_name as string) ?? "Creator"}
-                              {deal && <span className="font-normal text-im8-muted"> · {deal.influencer_name}</span>}
-                            </p>
-                            <span className="text-[10px] text-im8-muted shrink-0">{timeAgo(c.created_at as string)}</span>
-                          </div>
-                          <p className="text-[12px] mt-0.5 text-im8-maroon/70 line-clamp-2 leading-snug">
-                            {c.body as string}
-                          </p>
-                        </div>
-                      </div>
-                    </Link>
-                  );
-                })
-              )}
-            </div>
-          </section>
-
-          {/* Recent emails */}
-          <section className="bg-white rounded-xl border border-im8-stone/30 overflow-hidden">
+        {/* Right: Recent emails (40%) */}
+        <div className="lg:col-span-2">
+          <section className="bg-white rounded-xl border border-im8-stone/30 overflow-hidden sticky top-6">
             <header className="px-5 py-3 border-b border-im8-stone/20 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
