@@ -7,12 +7,15 @@ import type { CalendarDeliverable, PendingBriefItem } from "./page";
 // ── Colour + label config ────────────────────────────────────────────────────
 type EventKind = "submit_due" | "review_due" | "submitted" | "approved" | "live";
 
+// Colour palette tuned for visual distinction at a glance — all 5 states sit
+// in different hue families so Approved/Live and Creator-deadline/Submitted
+// don't blur together.
 const KIND_CONFIG: Record<EventKind, { label: string; bg: string; text: string; dot: string }> = {
-  submit_due: { label: "Creator deadline",  bg: "bg-amber-50",   text: "text-amber-800",  dot: "bg-amber-400" },
-  review_due: { label: "Review deadline",   bg: "bg-blue-50",    text: "text-blue-700",   dot: "bg-blue-400"  },
-  submitted:  { label: "Submitted",         bg: "bg-yellow-50",  text: "text-yellow-800", dot: "bg-yellow-400"},
-  approved:   { label: "Approved",          bg: "bg-green-50",   text: "text-green-700",  dot: "bg-green-500" },
-  live:       { label: "Live",              bg: "bg-emerald-50", text: "text-emerald-700",dot: "bg-emerald-500"},
+  submit_due: { label: "Creator deadline", bg: "bg-orange-50",  text: "text-orange-800",  dot: "bg-orange-500"  },
+  review_due: { label: "Review deadline",  bg: "bg-indigo-50",  text: "text-indigo-700",  dot: "bg-indigo-500"  },
+  submitted:  { label: "Submitted",        bg: "bg-amber-50",   text: "text-amber-800",   dot: "bg-amber-500"   },
+  approved:   { label: "Approved",         bg: "bg-lime-50",    text: "text-lime-800",    dot: "bg-lime-600"    },
+  live:       { label: "Live",             bg: "bg-fuchsia-50", text: "text-fuchsia-700", dot: "bg-fuchsia-500" },
 };
 
 type CalEvent = {

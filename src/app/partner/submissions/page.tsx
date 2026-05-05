@@ -14,6 +14,8 @@ type Submission = {
   drive_url: string | null;
   status: string;
   feedback: string | null;
+  feedback_caption: string | null;
+  caption: string | null;
   submitted_at: string;
   deal_id: string | null;
   deliverable_id: string | null;
@@ -27,7 +29,7 @@ export default async function PartnerSubmissionsPage() {
 
   const { data: rawSubmissions } = await supabase
     .from("submissions")
-    .select("id, file_name, drive_url, status, feedback, submitted_at, deal_id, deliverable_id, briefs(title), deals(influencer_name), deliverables(deliverable_type, sequence)")
+    .select("id, file_name, drive_url, status, feedback, feedback_caption, caption, submitted_at, deal_id, deliverable_id, briefs(title), deals(influencer_name), deliverables(deliverable_type, sequence)")
     .eq("influencer_id", user!.id)
     .order("submitted_at", { ascending: false });
 
@@ -140,12 +142,28 @@ export default async function PartnerSubmissionsPage() {
                             </span>
                           </div>
                           <div className="text-sm text-im8-burgundy mt-0.5">{v.file_name ?? "Video"}</div>
-                          {v.feedback && (
-                            <div className="mt-2 bg-im8-sand/60 border border-im8-stone/20 rounded-lg px-3 py-2 text-sm text-im8-burgundy/80">
+                          {v.caption && (
+                            <div className="mt-2 bg-im8-offwhite border border-im8-stone/20 rounded-lg px-3 py-2 text-sm text-im8-burgundy/80">
                               <span className="text-xs font-semibold text-im8-burgundy/60 uppercase tracking-wide">
-                                Feedback from IM8
+                                Your caption
+                              </span>
+                              <p className="mt-0.5 whitespace-pre-wrap">{v.caption}</p>
+                            </div>
+                          )}
+                          {v.feedback && (
+                            <div className="mt-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-sm text-im8-burgundy/80">
+                              <span className="text-xs font-semibold text-amber-800 uppercase tracking-wide">
+                                Feedback on content
                               </span>
                               <p className="mt-0.5 whitespace-pre-wrap">{v.feedback}</p>
+                            </div>
+                          )}
+                          {v.feedback_caption && (
+                            <div className="mt-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-sm text-im8-burgundy/80">
+                              <span className="text-xs font-semibold text-amber-800 uppercase tracking-wide">
+                                Feedback on caption
+                              </span>
+                              <p className="mt-0.5 whitespace-pre-wrap">{v.feedback_caption}</p>
                             </div>
                           )}
                         </div>

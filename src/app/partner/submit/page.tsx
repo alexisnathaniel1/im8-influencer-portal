@@ -19,10 +19,12 @@ function SubmitForm() {
   const [selectedDealId, setSelectedDealId] = useState(prefillDealId);
   const [selectedDeliverableId, setSelectedDeliverableId] = useState(prefillDeliverableId);
   const [file, setFile] = useState<File | null>(null);
+  const [caption, setCaption] = useState("");
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+  const CAPTION_LIMIT = 2200;
 
   useEffect(() => {
     fetch("/api/influencer/deals")
@@ -93,6 +95,7 @@ function SubmitForm() {
           deliverableId: selectedDeliverableId || undefined,
           fileName,
           fileHash,
+          caption: caption.trim() || undefined,
         }),
       });
       if (!completeRes.ok) {
@@ -169,6 +172,23 @@ function SubmitForm() {
             </div>
           );
         })()}
+
+        {/* Caption */}
+        <div>
+          <label className="block text-sm font-medium text-im8-burgundy mb-1">
+            Caption <span className="text-im8-burgundy/40 font-normal">(paste the exact caption you&apos;ll post)</span>
+          </label>
+          <textarea
+            value={caption}
+            onChange={(e) => setCaption(e.target.value.slice(0, CAPTION_LIMIT))}
+            rows={5}
+            placeholder="Hook, body copy, hashtags, @mentions…"
+            className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40 bg-white resize-y"
+          />
+          <p className="text-[11px] text-im8-burgundy/40 mt-1 text-right">
+            {caption.length} / {CAPTION_LIMIT}
+          </p>
+        </div>
 
         {/* File drop zone */}
         <div

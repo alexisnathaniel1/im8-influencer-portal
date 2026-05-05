@@ -14,7 +14,7 @@ export async function POST(request: Request) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { briefId, dealId, deliverableId, fileName, fileHash } = await request.json();
+    const { briefId, dealId, deliverableId, fileName, fileHash, caption } = await request.json();
 
     if (!fileName) {
       return NextResponse.json({ error: "fileName is required" }, { status: 400 });
@@ -69,6 +69,7 @@ export async function POST(request: Request) {
         drive_url: file.webViewLink,
         file_name: fileName,
         file_hash: fileHash || null,
+        caption: typeof caption === "string" ? caption : null,
         status: "pending",
       })
       .select("id")

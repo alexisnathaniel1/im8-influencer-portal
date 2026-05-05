@@ -27,6 +27,7 @@ interface PendingSubmission {
   brief_title: string | null;
   deliverable_type: string | null;
   deliverable_sequence: number | null;
+  caption: string | null;
 }
 
 export default function AdminReviewPage() {
@@ -36,6 +37,8 @@ export default function AdminReviewPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<Record<string, string>>({});
+  const [feedbackCaption, setFeedbackCaption] = useState<Record<string, string>>({});
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [bulkLoading, setBulkLoading] = useState(false);
 
@@ -44,7 +47,7 @@ export default function AdminReviewPage() {
     const { data, error } = await supabase
       .from("submissions")
       .select(`
-        id, file_name, drive_url, drive_file_id, content_type, platform, post_url, submitted_at,
+        id, file_name, drive_url, drive_file_id, content_type, platform, post_url, submitted_at, caption,
         influencer:influencer_id(full_name),
         deal:deal_id(influencer_name),
         brief:brief_id(title),
@@ -75,6 +78,7 @@ export default function AdminReviewPage() {
         brief_title: brief?.title ?? null,
         deliverable_type: deliv?.deliverable_type ?? null,
         deliverable_sequence: deliv?.sequence ?? null,
+        caption: (s as Record<string, unknown>).caption as string | null,
       });
     }
 
@@ -127,6 +131,13 @@ export default function AdminReviewPage() {
     notifyCreator(submissionId, "approved");
   }
 
+  function combinedFeedback(submissionId: string): string {
+    const content = feedback[submissionId]?.trim();
+    const caption = feedbackCaption[submissionId]?.trim();
+    if (content && caption) return `Content: ${content}\n\nCaption: ${caption}`;
+    return content || caption || "";
+  }
+
   async function handleReject(submissionId: string) {
     setActionLoading(submissionId);
     const supabase = createClient();
@@ -134,6 +145,7 @@ export default function AdminReviewPage() {
     await supabase.from("submissions").update({
       status: "rejected",
       feedback: feedback[submissionId] || null,
+      feedback_caption: feedbackCaption[submissionId] || null,
       reviewed_by: user?.id ?? null,
       reviewed_at: new Date().toISOString(),
     }).eq("id", submissionId);
@@ -141,7 +153,7 @@ export default function AdminReviewPage() {
     setSelectedIds((prev) => { const next = new Set(prev); next.delete(submissionId); return next; });
     if (expandedId === submissionId) setExpandedId(null);
     setActionLoading(null);
-    notifyCreator(submissionId, "rejected", feedback[submissionId]);
+    notifyCreator(submissionId, "rejected", combinedFeedback(submissionId));
   }
 
   async function handleRevisionRequest(submissionId: string) {
@@ -151,6 +163,7 @@ export default function AdminReviewPage() {
     await supabase.from("submissions").update({
       status: "revision_requested",
       feedback: feedback[submissionId] || null,
+      feedback_caption: feedbackCaption[submissionId] || null,
       reviewed_by: user?.id ?? null,
       reviewed_at: new Date().toISOString(),
     }).eq("id", submissionId);
@@ -158,7 +171,7 @@ export default function AdminReviewPage() {
     setSelectedIds((prev) => { const next = new Set(prev); next.delete(submissionId); return next; });
     if (expandedId === submissionId) setExpandedId(null);
     setActionLoading(null);
-    notifyCreator(submissionId, "revision_requested", feedback[submissionId]);
+    notifyCreator(submissionId, "revision_requested", combinedFeedback(submissionId));
   }
 
   async function handleBulkApprove() {
@@ -277,18 +290,57 @@ export default function AdminReviewPage() {
                         containerStyle={{ maxWidth: 640, minHeight: 80 }}
                       />
                     )}
-                    <div>
-                      <label className="block text-sm font-medium text-im8-burgundy mb-1">
-                        Feedback <span className="text-im8-burgundy/40 font-normal">(optional — shown to creator on reject or revision)</span>
-                      </label>
-                      <textarea
-                        value={feedback[sub.id] ?? ""}
-                        onChange={(e) => setFeedback(prev => ({ ...prev, [sub.id]: e.target.value }))}
-                        rows={3}
-                        placeholder="Add feedback notes here…"
-                        className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/30 resize-none"
-                      />
+
+                    {/* Caption */}
+                    {sub.caption ? (
+                      <div className="bg-im8-offwhite border border-im8-stone/30 rounded-lg p-3">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-[11px] font-bold text-im8-muted uppercase tracking-[0.08em]">Caption</span>
+                          <button
+                            onClick={async () => {
+                              await navigator.clipboard.writeText(sub.caption ?? "");
+                              setCopiedId(sub.id);
+                              setTimeout(() => setCopiedId(null), 1500);
+                            }}
+                            className="text-[11px] font-semibold text-im8-red hover:underline"
+                          >
+                            {copiedId === sub.id ? "Copied ✓" : "Copy"}
+                          </button>
+                        </div>
+                        <p className="text-[13px] text-im8-burgundy whitespace-pre-wrap leading-relaxed">{sub.caption}</p>
+                      </div>
+                    ) : (
+                      <div className="text-[12px] text-im8-muted italic">No caption submitted with this content.</div>
+                    )}
+
+                    {/* Two-column feedback */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-im8-burgundy mb-1">
+                          Feedback on content <span className="text-im8-burgundy/40 font-normal">(visual)</span>
+                        </label>
+                        <textarea
+                          value={feedback[sub.id] ?? ""}
+                          onChange={(e) => setFeedback(prev => ({ ...prev, [sub.id]: e.target.value }))}
+                          rows={4}
+                          placeholder="Lighting, pacing, hook, b-roll…"
+                          className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/30 resize-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-im8-burgundy mb-1">
+                          Feedback on caption <span className="text-im8-burgundy/40 font-normal">(text)</span>
+                        </label>
+                        <textarea
+                          value={feedbackCaption[sub.id] ?? ""}
+                          onChange={(e) => setFeedbackCaption(prev => ({ ...prev, [sub.id]: e.target.value }))}
+                          rows={4}
+                          placeholder="Hook line, CTA, hashtags, brand mentions…"
+                          className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/30 resize-none"
+                        />
+                      </div>
                     </div>
+                    <p className="text-[11px] text-im8-muted">Both fields are sent to the creator on Reject or Revise.</p>
                   </div>
                 )}
               </Card>

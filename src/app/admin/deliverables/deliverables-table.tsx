@@ -52,12 +52,14 @@ type Profile = { id: string; full_name: string };
 const STATUS_OPTIONS = ["pending", "in_progress", "submitted", "approved", "live", "completed"];
 const PLATFORM_OPTIONS = ["instagram", "tiktok", "youtube", "other"];
 
+// Status colours mirror the calendar's KIND_CONFIG palette so a deliverable
+// shows the same hue across the calendar pill and this table pill.
 const STATUS_COLORS: Record<string, string> = {
   pending: "bg-gray-100 text-gray-600",
-  in_progress: "bg-blue-100 text-blue-700",
-  submitted: "bg-yellow-100 text-yellow-700",
-  approved: "bg-green-100 text-green-700",
-  live: "bg-emerald-100 text-emerald-700",
+  in_progress: "bg-orange-100 text-orange-800",
+  submitted: "bg-amber-100 text-amber-800",
+  approved: "bg-lime-100 text-lime-800",
+  live: "bg-fuchsia-100 text-fuchsia-700",
   completed: "bg-im8-burgundy/10 text-im8-burgundy",
 };
 

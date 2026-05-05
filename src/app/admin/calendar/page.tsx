@@ -71,7 +71,9 @@ export default async function CalendarPage({
     return deal && ACTIVE_DEAL_STATUSES.has(deal.status);
   });
 
-  // Briefs not yet sent for active deals — shown in the pending sidebar
+  // Briefs not yet sent for active deals — shown in the pending sidebar.
+  // Source of truth = brief_sent_at. We deliberately don't check brief_doc_url
+  // because clearing the URL after sending would otherwise re-flag the row.
   const { data: pendingBriefs } = await admin
     .from("deliverables")
     .select(`
@@ -79,7 +81,6 @@ export default async function CalendarPage({
       deal:deal_id(id, influencer_name, status)
     `)
     .is("brief_sent_at", null)
-    .is("brief_doc_url", null)
     .not("status", "in", '("live","completed","approved")')
     .order("created_at", { ascending: true });
 

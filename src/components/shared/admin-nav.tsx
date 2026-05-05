@@ -70,13 +70,30 @@ const Icons: Record<string, React.FC<{ className?: string }>> = {
       <path d="M8 1v1.5M8 13.5V15M15 8h-1.5M2.5 8H1M12.54 3.46l-1.06 1.06M4.52 11.48l-1.06 1.06M12.54 12.54l-1.06-1.06M4.52 4.52L3.46 3.46" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
     </svg>
   ),
+  workflow: ({ className }) => (
+    <svg className={className} width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path d="M3 2v12M13 2v12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+      <circle cx="8" cy="4" r="1.5" fill="currentColor"/>
+      <circle cx="8" cy="8" r="1.5" fill="currentColor"/>
+      <circle cx="8" cy="12" r="1.5" fill="currentColor"/>
+      <path d="M3 4h5M8 8h5M3 12h5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" opacity="0.6"/>
+    </svg>
+  ),
+  roster: ({ className }) => (
+    <svg className={className} width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <rect x="1.5" y="1.5" width="13" height="13" rx="2" stroke="currentColor" strokeWidth="1.5"/>
+      <path d="M1.5 5.5h13M5.5 1.5v13" stroke="currentColor" strokeWidth="1.5"/>
+    </svg>
+  ),
 };
 
 const NAV = [
   { href: "/admin",              label: "Dashboard",      icon: "dashboard"    },
+  { href: "/admin/workflow",     label: "Workflow",       icon: "workflow"     },
   { href: "/admin/discovery",    label: "Discovery",      icon: "discovery"    },
   { href: "/admin/approvals",    label: "Approvals",      icon: "approvals"    },
   { href: "/admin/deals",        label: "Partner Tracker",icon: "tracker"      },
+  { href: "/admin/roster",       label: "Roster",         icon: "roster"       },
   { href: "/admin/deliverables", label: "Deliverables",   icon: "deliverables" },
   { href: "/admin/calendar",     label: "Calendar",       icon: "calendar"     },
   { href: "/admin/review",       label: "Content Review", icon: "review"       },
