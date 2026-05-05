@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 export type RosterRow = {
   id: string;
@@ -96,6 +97,62 @@ export default function RosterTable({
 
   const [sortKey, setSortKey] = useState<SortKey>("influencerName");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  // Optimistic local override of dates so saved edits show immediately
+  const [dateOverrides, setDateOverrides] = useState<Record<string, { start?: string; end?: string }>>({});
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const router = useRouter();
+
+  function getStart(r: RosterRow): string | null {
+    return dateOverrides[r.id]?.start ?? r.campaignStart;
+  }
+  function getEnd(r: RosterRow): string | null {
+    return dateOverrides[r.id]?.end ?? r.campaignEnd;
+  }
+
+  async function saveDates(rowId: string, payload: { campaign_start?: string | null; campaign_end?: string | null }) {
+    setSavingId(rowId);
+    try {
+      const res = await fetch(`/api/deals/${rowId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        console.error("Failed to save campaign date");
+        return;
+      }
+      // Refresh server data so any auto-calc (end from start + months) flows back in
+      router.refresh();
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  function onChangeStart(row: RosterRow, value: string) {
+    const start = value || null;
+    let end: string | null = null;
+    // Auto-calc end if total_months is known and either no end, or end before new start
+    if (start && row.totalMonths) {
+      const d = new Date(start);
+      d.setMonth(d.getMonth() + row.totalMonths);
+      end = d.toISOString().split("T")[0];
+    }
+    setDateOverrides(prev => ({
+      ...prev,
+      [row.id]: { start: start ?? undefined, end: end ?? prev[row.id]?.end ?? row.campaignEnd ?? undefined },
+    }));
+    void saveDates(row.id, { campaign_start: start, ...(end ? { campaign_end: end } : {}) });
+  }
+
+  function onChangeEnd(row: RosterRow, value: string) {
+    const end = value || null;
+    setDateOverrides(prev => ({
+      ...prev,
+      [row.id]: { start: prev[row.id]?.start ?? row.campaignStart ?? undefined, end: end ?? undefined },
+    }));
+    void saveDates(row.id, { campaign_end: end });
+  }
 
   const allNiches = useMemo(() => {
     const s = new Set<string>();
@@ -372,7 +429,7 @@ export default function RosterTable({
                 </tr>
               ) : (
                 filtered.map((r) => {
-                  const days = daysUntil(r.campaignEnd);
+                  const days = daysUntil(getEnd(r));
                   const handle = handleFor(r);
                   return (
                     <tr key={r.id} className="hover:bg-im8-offwhite transition-colors">
@@ -412,9 +469,19 @@ export default function RosterTable({
                           <div className="text-[10px] text-im8-muted">{r.totalMonths}mo</div>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-im8-burgundy whitespace-nowrap">{formatDate(r.campaignStart)}</td>
-                      <td className="px-4 py-3 text-im8-burgundy whitespace-nowrap">
-                        {formatDate(r.campaignEnd)}
+                      <td className="px-3 py-3 whitespace-nowrap">
+                        <DateCell
+                          value={getStart(r)}
+                          onChange={(v) => onChangeStart(r, v)}
+                          saving={savingId === r.id}
+                        />
+                      </td>
+                      <td className="px-3 py-3 whitespace-nowrap">
+                        <DateCell
+                          value={getEnd(r)}
+                          onChange={(v) => onChangeEnd(r, v)}
+                          saving={savingId === r.id}
+                        />
                         {days != null && days <= 30 && (
                           <div className={`inline-block ml-1 text-[10px] px-1 rounded font-semibold ${
                             days <= 7 ? "bg-red-100 text-red-700"
@@ -480,5 +547,36 @@ function Th({
         {active && <span className="text-[9px]">{dir === "asc" ? "▲" : "▼"}</span>}
       </span>
     </th>
+  );
+}
+
+/**
+ * Inline date cell — shows "Set date" when null, formatted date when set.
+ * Click to reveal a native date picker; saves on change.
+ */
+function DateCell({
+  value,
+  onChange,
+  saving,
+}: {
+  value: string | null;
+  onChange: (v: string) => void;
+  saving: boolean;
+}) {
+  return (
+    <label className="group relative inline-flex items-center cursor-pointer rounded-md hover:bg-im8-offwhite px-1.5 py-1 transition-colors">
+      <span className={`text-[12px] tabular-nums ${value ? "text-im8-burgundy" : "text-im8-muted/60 italic"}`}>
+        {value
+          ? new Date(value).toLocaleDateString("en-AU", { day: "2-digit", month: "short", year: "2-digit" })
+          : "Set date"}
+      </span>
+      {saving && <span className="ml-1.5 text-[9px] text-im8-muted">…</span>}
+      <input
+        type="date"
+        value={value ?? ""}
+        onChange={(e) => onChange(e.target.value)}
+        className="absolute inset-0 opacity-0 cursor-pointer"
+      />
+    </label>
   );
 }

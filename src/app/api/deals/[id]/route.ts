@@ -24,7 +24,36 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   const admin = createAdminClient();
 
-  const { data: before } = await admin.from("deals").select("status, deliverables, influencer_name, platform_primary").eq("id", id).single();
+  const { data: before } = await admin
+    .from("deals")
+    .select("status, deliverables, influencer_name, platform_primary, campaign_start, campaign_end, total_months")
+    .eq("id", id)
+    .single();
+
+  // Auto-populate campaign_start/end when a deal becomes contracted or live and dates aren't set.
+  // This avoids partner-tracker / roster rows showing "—" for the campaign timeline.
+  {
+    const newStatus = updates.status as string | undefined;
+    const becameActive =
+      newStatus && ["contracted", "live"].includes(newStatus) && before?.status !== newStatus;
+    if (becameActive) {
+      const months =
+        (updates.total_months as number | undefined) ??
+        (before?.total_months as number | null) ??
+        3;
+      const existingStart = (updates.campaign_start as string | undefined) ?? (before?.campaign_start as string | null);
+      const existingEnd = (updates.campaign_end as string | undefined) ?? (before?.campaign_end as string | null);
+
+      if (!existingStart) {
+        updates.campaign_start = new Date().toISOString().split("T")[0];
+      }
+      if (!existingEnd) {
+        const start = new Date((updates.campaign_start as string) ?? existingStart!);
+        start.setMonth(start.getMonth() + months);
+        updates.campaign_end = start.toISOString().split("T")[0];
+      }
+    }
+  }
 
   const { error } = await admin.from("deals").update(updates).eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
