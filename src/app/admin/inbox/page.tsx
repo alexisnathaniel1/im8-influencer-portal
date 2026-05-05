@@ -12,7 +12,7 @@ export default async function InboxPage() {
 
   const { data: emails } = await admin
     .from("inbox_emails")
-    .select("id, from_email, from_name, subject, body_text, received_at, is_read, linked_deal_id, ai_summary, ai_next_steps")
+    .select("id, from_email, from_name, subject, body_text, received_at, is_read, linked_deal_id")
     .order("received_at", { ascending: false })
     .limit(100);
 
