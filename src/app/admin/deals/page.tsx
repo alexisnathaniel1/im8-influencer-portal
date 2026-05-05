@@ -149,12 +149,20 @@ export default async function DealsPage({
             {totalContracts} contract{totalContracts === 1 ? "" : "s"}
           </p>
         </div>
-        <Link
-          href="/admin/deals/new"
-          className="px-4 py-2 bg-im8-red text-white text-sm rounded-lg hover:bg-im8-burgundy transition-colors"
-        >
-          + New partnership
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/admin/deals/bulk-upload"
+            className="px-4 py-2 border border-im8-stone/40 text-im8-burgundy text-sm rounded-lg hover:bg-im8-offwhite transition-colors"
+          >
+            ↑ Bulk upload
+          </Link>
+          <Link
+            href="/admin/deals/new"
+            className="px-4 py-2 bg-im8-red text-white text-sm rounded-lg hover:bg-im8-burgundy transition-colors"
+          >
+            + New partnership
+          </Link>
+        </div>
       </div>
 
       <DealsFilterBar current={params} />
