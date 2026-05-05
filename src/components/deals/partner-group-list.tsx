@@ -33,6 +33,7 @@ export type CreatorGroup = {
 };
 
 const STATUS_LABELS: Record<string, string> = {
+  pending_approval: "In Approval",
   approved: "Pending Contract",
   contracted: "Active",
   live: "Active",
@@ -41,6 +42,7 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const STATUS_COLORS: Record<string, string> = {
+  pending_approval: "bg-blue-50 text-blue-600",
   approved: "bg-amber-100 text-amber-700",
   contracted: "bg-emerald-100 text-emerald-700",
   live: "bg-emerald-100 text-emerald-700",

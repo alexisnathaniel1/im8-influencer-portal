@@ -3,12 +3,12 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
-// Simplified display statuses for the Partner Tracker (post-approval only)
+// Simplified display statuses for the Partner Tracker
 const STATUSES: { value: string; label: string }[] = [
+  { value: "in_approval",      label: "In Approval" },
   { value: "pending_contract", label: "Pending Contract" },
   { value: "active",           label: "Active" },
   { value: "completed",        label: "Completed" },
-  { value: "cancelled",        label: "Cancelled" },
 ];
 const PLATFORMS = ["instagram", "tiktok", "youtube", "facebook", "other"];
 

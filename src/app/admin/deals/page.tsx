@@ -6,14 +6,17 @@ import DealsFilterBar from "@/components/deals/deals-filter-bar";
 import PartnerGroupList, { type CreatorGroup } from "@/components/deals/partner-group-list";
 import { canViewRates } from "@/lib/permissions";
 
-// Statuses that belong in Partner Tracker (post-approval only).
+// Statuses that belong in Partner Tracker.
+// "pending_approval" = waiting for management review (comes from Discovery approve flow).
+// "approved"         = management approved, awaiting contract signing.
+// "contracted/live"  = active partnership.
+// "completed"        = finished.
 // NOTE: "cancelled" requires the deal_status enum to include it
 // (run: ALTER TYPE deal_status ADD VALUE IF NOT EXISTS 'cancelled').
-// We query for it separately so a missing enum value doesn't crash the whole query.
-const TRACKER_STATUSES_CORE = ["approved", "contracted", "live", "completed"] as const;
+const TRACKER_STATUSES_CORE = ["pending_approval", "approved", "contracted", "live", "completed"] as const;
 
 // Active deal statuses — these groups start expanded
-const ACTIVE_STATUSES = new Set(["approved", "contracted", "live"]);
+const ACTIVE_STATUSES = new Set(["pending_approval", "approved", "contracted", "live"]);
 
 type DealRow = {
   id: string;
@@ -69,16 +72,16 @@ export default async function DealsPage({
   // "cancelled" hasn't been added to the deal_status enum yet.
   let statusFilter: string[];
   const s = params.status ?? "";
-  if (s === "pending_contract" || s === "approved") {
+  if (s === "in_approval" || s === "pending_approval") {
+    statusFilter = ["pending_approval"];
+  } else if (s === "pending_contract" || s === "approved") {
     statusFilter = ["approved"];
   } else if (s === "active" || s === "contracted" || s === "live") {
     statusFilter = ["contracted", "live"];
   } else if (s === "completed") {
     statusFilter = ["completed"];
-  } else if (s === "cancelled") {
-    statusFilter = ["cancelled"];
   } else {
-    // Default: all tracker statuses (excludes pre-approval pipeline)
+    // Default: show all partner tracker statuses
     statusFilter = [...TRACKER_STATUSES_CORE];
   }
 
