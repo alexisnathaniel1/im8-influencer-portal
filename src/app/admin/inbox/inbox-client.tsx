@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { parseEmailBody } from "@/lib/email/parse-body";
+import { parseEmailBody, type ActionAssignee } from "@/lib/email/parse-body";
+import { RenderedEmailBody } from "@/lib/email/render-body";
 
 type InboxEmail = {
   id: string;
@@ -14,6 +15,12 @@ type InboxEmail = {
   linked_deal_id: string | null;
 };
 
+const ASSIGNEE_LABEL: Record<ActionAssignee, { label: string; classes: string; dot: string }> = {
+  team:    { label: "Team",    classes: "bg-im8-red/10 text-im8-burgundy",   dot: "bg-im8-red" },
+  creator: { label: "Creator", classes: "bg-violet-100 text-violet-800",     dot: "bg-violet-500" },
+  fyi:     { label: "FYI",     classes: "bg-im8-stone/30 text-im8-muted",    dot: "bg-im8-stone" },
+};
+
 export default function InboxClient({
   emails,
   dealNames,
@@ -22,6 +29,7 @@ export default function InboxClient({
   dealNames: Record<string, string>;
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [showSig, setShowSig] = useState<Set<string>>(new Set());
   const [readSet, setReadSet] = useState<Set<string>>(
     new Set(emails.filter(e => e.is_read).map(e => e.id))
   );
@@ -42,6 +50,14 @@ export default function InboxClient({
     if (next) markRead(id);
   }
 
+  function toggleSig(id: string) {
+    setShowSig(prev => {
+      const s = new Set(prev);
+      if (s.has(id)) s.delete(id); else s.add(id);
+      return s;
+    });
+  }
+
   if (emails.length === 0) {
     return (
       <div className="bg-white rounded-xl border border-im8-stone/30 p-12 text-center text-im8-burgundy/40">
@@ -60,8 +76,9 @@ export default function InboxClient({
         {emails.map(email => {
           const isRead = readSet.has(email.id);
           const isOpen = expanded === email.id;
+          const sigOpen = showSig.has(email.id);
           const linkedDealName = email.linked_deal_id ? dealNames[email.linked_deal_id] : null;
-          const { summary, nextSteps } = parseEmailBody(email.body_text);
+          const parsed = parseEmailBody(email.body_text, { fromEmail: email.from_email });
           const receivedDate = new Date(email.received_at).toLocaleString("en-AU", {
             day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
           });
@@ -93,22 +110,28 @@ export default function InboxClient({
                       {email.subject}
                     </p>
 
-                    {/* Summary snippet */}
-                    {summary && (
+                    {parsed.summary && (
                       <p className="text-xs text-im8-muted mt-1 leading-relaxed line-clamp-2">
-                        {summary}
+                        {parsed.summary}
                       </p>
                     )}
 
-                    {/* Next steps extracted from body */}
-                    {nextSteps.length > 0 && (
-                      <div className="mt-2 space-y-1">
-                        {nextSteps.map((step, i) => (
-                          <div key={i} className="flex items-start gap-1.5">
-                            <span className="mt-1 w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
-                            <p className="text-[11px] text-amber-800 leading-relaxed">{step}</p>
-                          </div>
-                        ))}
+                    {parsed.actionItems.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {parsed.actionItems.map((item, i) => {
+                          const meta = ASSIGNEE_LABEL[item.assignee];
+                          return (
+                            <span
+                              key={i}
+                              className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full font-medium ${meta.classes}`}
+                              title={item.text}
+                            >
+                              <span className={`w-1.5 h-1.5 rounded-full ${meta.dot}`} />
+                              <span className="opacity-70 font-bold">{meta.label}</span>
+                              <span className="truncate max-w-[260px]">{item.text}</span>
+                            </span>
+                          );
+                        })}
                       </div>
                     )}
 
@@ -123,48 +146,92 @@ export default function InboxClient({
 
               {/* ── Expanded view ── */}
               {isOpen && (
-                <div className="px-10 pb-6 pt-1 space-y-4">
-                  {/* Summary + next steps banner */}
-                  {(summary || nextSteps.length > 0) && (
-                    <div className="bg-im8-offwhite rounded-xl px-5 py-4 space-y-3">
-                      {summary && (
+                <div className="px-10 pb-7 pt-2 space-y-5 bg-im8-offwhite/30">
+                  {/* Summary + action items card */}
+                  {(parsed.summary || parsed.actionItems.length > 0) && (
+                    <div className="bg-white rounded-xl border border-im8-stone/30 p-5 space-y-4 shadow-sm">
+                      {parsed.summary && (
                         <div>
-                          <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-im8-muted mb-1">Summary</p>
-                          <p className="text-sm text-im8-burgundy leading-relaxed">{summary}</p>
+                          <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-im8-muted mb-1.5">
+                            Summary
+                          </p>
+                          <p className="text-[14px] text-im8-burgundy leading-relaxed">
+                            {parsed.summary}
+                          </p>
                         </div>
                       )}
-                      {nextSteps.length > 0 && (
-                        <div>
-                          <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-im8-muted mb-2">Action Items</p>
-                          <ul className="space-y-1.5">
-                            {nextSteps.map((step, i) => (
-                              <li key={i} className="flex items-start gap-2">
-                                <span className="mt-1.5 w-2 h-2 rounded-full bg-amber-500 shrink-0" />
-                                <span className="text-sm text-im8-burgundy leading-relaxed">{step}</span>
-                              </li>
-                            ))}
+
+                      {parsed.actionItems.length > 0 && (
+                        <div className="pt-1">
+                          <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-im8-muted mb-2">
+                            Action Items
+                          </p>
+                          <ul className="space-y-2">
+                            {parsed.actionItems.map((item, i) => {
+                              const meta = ASSIGNEE_LABEL[item.assignee];
+                              return (
+                                <li key={i} className="flex items-start gap-3">
+                                  <span
+                                    className={`shrink-0 mt-0.5 inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${meta.classes}`}
+                                  >
+                                    <span className={`w-1.5 h-1.5 rounded-full ${meta.dot}`} />
+                                    {meta.label}
+                                  </span>
+                                  <span className="text-[14px] text-im8-burgundy leading-relaxed">
+                                    {item.text}
+                                  </span>
+                                </li>
+                              );
+                            })}
                           </ul>
                         </div>
                       )}
                     </div>
                   )}
 
-                  {/* From */}
-                  <div className="bg-im8-offwhite rounded-lg px-4 py-3">
-                    <p className="text-[10px] text-im8-muted font-bold uppercase tracking-wider mb-0.5">From</p>
-                    <p className="text-sm text-im8-burgundy">{fromDisplay}</p>
+                  {/* Sender + meta strip */}
+                  <div className="flex items-center justify-between gap-4 px-1">
+                    <div>
+                      <p className="text-[10px] text-im8-muted font-bold uppercase tracking-wider">From</p>
+                      <p className="text-sm text-im8-burgundy mt-0.5">{fromDisplay}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] text-im8-muted font-bold uppercase tracking-wider">Received</p>
+                      <p className="text-sm text-im8-burgundy mt-0.5">{receivedDate}</p>
+                    </div>
                   </div>
 
-                  {/* Full body */}
-                  <div className="bg-white border border-im8-stone/20 rounded-lg px-5 py-4 max-h-[480px] overflow-y-auto">
-                    <p className="text-[10px] text-im8-muted font-bold uppercase tracking-wider mb-2">Full Email</p>
-                    <p className="text-sm text-im8-burgundy/80 whitespace-pre-wrap leading-relaxed">
-                      {email.body_text ?? "(no body)"}
-                    </p>
+                  {/* Email body card */}
+                  <div className="bg-white rounded-xl border border-im8-stone/30 shadow-sm">
+                    <div className="px-6 py-5 max-h-[480px] overflow-y-auto">
+                      {parsed.bodyClean ? (
+                        <RenderedEmailBody text={parsed.bodyClean} />
+                      ) : (
+                        <p className="text-sm text-im8-muted italic">(No message body)</p>
+                      )}
+
+                      {parsed.signature && (
+                        <div className="mt-5 pt-4 border-t border-im8-stone/30">
+                          <button
+                            type="button"
+                            onClick={() => toggleSig(email.id)}
+                            className="text-[11px] font-semibold text-im8-muted hover:text-im8-burgundy uppercase tracking-wider flex items-center gap-1.5 transition-colors"
+                          >
+                            <span className={`inline-block transition-transform ${sigOpen ? "rotate-90" : ""}`}>›</span>
+                            {sigOpen ? "Hide signature" : "Show signature"}
+                          </button>
+                          {sigOpen && (
+                            <div className="mt-3 opacity-70">
+                              <RenderedEmailBody text={parsed.signature} />
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* Link to deal */}
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 px-1">
                     <p className="text-[11px] text-im8-muted uppercase tracking-wider font-semibold shrink-0">
                       Link to deal
                     </p>
