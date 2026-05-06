@@ -33,6 +33,10 @@ interface PendingSubmission {
   caption: string | null;
   variant_label: string | null;
   is_script: boolean;
+  /** Short creator bio for reviewer context, sourced from deals.creator_bio */
+  creator_bio: string | null;
+  /** Niche category tags from deals.niche_tags — surfaced as inline pills */
+  niche_tags: string[];
   /** Additional assets bundled with this submission. Empty for legacy single-asset rows. */
   variants: VariantAsset[];
   /** Draft number parsed from file_name (_DRAFT_N or _SCRIPT_N suffix) — null if not determinable */
@@ -86,7 +90,7 @@ export default function AdminReviewPage() {
     for (const raw of data) {
       const s = raw as Record<string, unknown>;
       const inf = s.influencer as { full_name: string } | null;
-      const deal = s.deal as { influencer_name: string; drive_folder_id?: string | null } | null;
+      const deal = s.deal as { influencer_name: string; drive_folder_id?: string | null; creator_bio?: string | null; niche_tags?: string[] | null } | null;
       const brief = s.brief as { title: string } | null;
       const deliv = s.deliverable as { deliverable_type: string; sequence: number | null } | null;
       rows.push({
@@ -108,6 +112,8 @@ export default function AdminReviewPage() {
         caption: s.caption as string | null,
         variant_label: s.variant_label as string | null,
         is_script: !!(s.is_script),
+        creator_bio: deal?.creator_bio ?? null,
+        niche_tags: Array.isArray(deal?.niche_tags) ? (deal!.niche_tags as string[]) : [],
         variants: Array.isArray(s.variants) ? (s.variants as VariantAsset[]) : [],
         draftNum: parseDraftNum(s.file_name as string | null),
       });
@@ -121,7 +127,7 @@ export default function AdminReviewPage() {
       id, file_name, drive_url, drive_file_id, content_type, platform, post_url, submitted_at, caption,
       deliverable_id, variant_label, is_script, variants,
       influencer:influencer_id(full_name),
-      deal:deal_id(influencer_name, drive_folder_id),
+      deal:deal_id(influencer_name, drive_folder_id, creator_bio, niche_tags),
       brief:brief_id(title),
       deliverable:deliverable_id(deliverable_type, sequence)
     `;
@@ -547,7 +553,29 @@ export default function AdminReviewPage() {
                         </span>
                       )}
                       {sub.platform && <span className="text-xs text-im8-burgundy/50 capitalize">{sub.platform}</span>}
+                      {sub.niche_tags.slice(0, 2).map((tag) => (
+                        <span
+                          key={tag}
+                          className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-im8-sand/60 text-im8-burgundy/70 border border-im8-stone/40 capitalize"
+                          title={sub.niche_tags.join(", ")}
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                      {sub.niche_tags.length > 2 && (
+                        <span
+                          className="inline-block px-1.5 py-0.5 rounded-full text-[10px] font-semibold text-im8-burgundy/50"
+                          title={sub.niche_tags.slice(2).join(", ")}
+                        >
+                          +{sub.niche_tags.length - 2}
+                        </span>
+                      )}
                     </div>
+                    {sub.creator_bio && (
+                      <p className="mt-1 text-[12px] text-im8-burgundy/65 italic leading-snug line-clamp-2">
+                        {sub.creator_bio}
+                      </p>
+                    )}
                     <div className="flex items-center gap-4 mt-1">
                       {sub.post_url && (
                         <a href={sub.post_url} target="_blank" rel="noopener noreferrer" className="text-xs text-im8-red hover:underline" onClick={(e) => e.stopPropagation()}>View Post</a>
@@ -556,6 +584,15 @@ export default function AdminReviewPage() {
                         <a href={sub.drive_url} target="_blank" rel="noopener noreferrer" className="text-xs text-im8-red hover:underline" onClick={(e) => e.stopPropagation()}>View File</a>
                       )}
                       <span className="text-xs text-im8-burgundy/40">{new Date(sub.submitted_at).toLocaleDateString()}</span>
+                      {!sub.creator_bio && (
+                        <Link
+                          href={`/admin/deals/${sub.deal_id}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="text-xs text-im8-burgundy/40 hover:text-im8-burgundy hover:underline italic"
+                        >
+                          + Add bio
+                        </Link>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>

@@ -132,6 +132,7 @@ export default function DealDetailClient({
     youtubeHandle: (deal.youtube_handle as string) ?? "",
     followerCount: deal.follower_count ? String(deal.follower_count) : "",
     nicheTags: (deal.niche_tags as string[] | null) ?? [],
+    creatorBio: (deal.creator_bio as string) ?? "",
     needsApproval: deal.needs_approval !== false,
     discountCode: (deal.discount_code as string) ?? "",
     affiliateLink: (deal.affiliate_link as string) ?? "",
@@ -184,6 +185,7 @@ export default function DealDetailClient({
         youtube_handle: form.youtubeHandle.trim().replace(/^@/, "") || null,
         follower_count: form.followerCount ? parseInt(form.followerCount) : null,
         niche_tags: form.nicheTags,
+        creator_bio: form.creatorBio || null,
         needs_approval: form.needsApproval,
         discount_code: form.discountCode || null,
         affiliate_link: form.affiliateLink || null,
@@ -370,7 +372,18 @@ export default function DealDetailClient({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-im8-burgundy mb-1">Rationale <span className="text-im8-burgundy/40 font-normal">(shown to managers)</span></label>
+              <label className="block text-sm font-medium text-im8-burgundy mb-1">
+                Creator bio <span className="text-im8-burgundy/40 font-normal">(2–3 sentences — shown on review cards for reviewer context)</span>
+              </label>
+              <textarea value={form.creatorBio} onChange={e => setForm(f => ({ ...f, creatorBio: e.target.value }))}
+                rows={2} placeholder='e.g. "Team GB marathon runner, top 10 at London 2024. Niche audience of UK endurance athletes."'
+                maxLength={400}
+                className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40 resize-none" />
+              <p className="mt-1 text-[11px] text-im8-burgundy/40">{form.creatorBio.length}/400</p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-im8-burgundy mb-1">Rationale <span className="text-im8-burgundy/40 font-normal">(shown to managers — why we approved this deal)</span></label>
               <textarea value={form.rationale} onChange={e => setForm(f => ({ ...f, rationale: e.target.value }))}
                 rows={3} placeholder="Why this influencer? Niche fit, audience quality, past performance..."
                 className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/40 resize-none" />

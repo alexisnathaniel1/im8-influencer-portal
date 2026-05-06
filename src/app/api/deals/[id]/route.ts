@@ -17,7 +17,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     "campaign_end", "rationale", "outreach_thread_url", "status", "rejection_reason",
     "instagram_handle", "tiktok_handle", "youtube_handle",
     "is_gifted", "gifted_product", "gifted_quantity", "product_sent_at", "needs_approval",
-    "niche_tags", "follower_count",
+    "niche_tags", "follower_count", "creator_bio",
     "contract_url", "payment_terms", "contract_requirements", "usage_rights_months",
     "discount_code", "affiliate_link", "currency_code",
   ];
