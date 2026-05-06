@@ -273,8 +273,8 @@ export default function DeliverablesTable({
                         </Link>
                       )}
                     </td>
-                    <td className="px-4 py-3">
-                      <span className="font-mono text-xs bg-im8-sand/60 px-2 py-0.5 rounded text-im8-burgundy">
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <span className="font-mono text-xs bg-im8-sand/60 px-2 py-0.5 rounded text-im8-burgundy whitespace-nowrap">
                         {d.deliverable_type}{d.sequence ? ` #${d.sequence}` : ""}
                       </span>
                       {d.is_story && <span className="ml-1 text-[10px] text-im8-burgundy/40">story</span>}

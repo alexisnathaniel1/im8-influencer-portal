@@ -27,6 +27,7 @@ import { extractDriveFileId, extractFolderId, copyDriveFile } from "@/lib/google
 import { getOrCreateDeliverableFolder } from "@/lib/drive/deal-folders";
 import { notifyContentSubmitted } from "@/lib/slack/notify";
 import { logAuditEvent } from "@/lib/audit/log";
+import { revalidatePath } from "next/cache";
 import { ADMIN_ROLES } from "@/lib/permissions";
 import { assetSlug, assetLabel, isAssetType, type AssetType, type VariantAsset } from "@/lib/submissions/asset-types";
 
@@ -328,6 +329,9 @@ export async function POST(request: Request) {
         },
       },
     });
+
+    // Bust deliverables page cache so amber "Review →" badge appears immediately
+    if (!primaryIsScript) revalidatePath("/admin/deliverables");
 
     return NextResponse.json({
       id: submissionId,

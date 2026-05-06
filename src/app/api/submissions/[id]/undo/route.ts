@@ -11,6 +11,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { ADMIN_ROLES } from "@/lib/permissions";
 import { logAuditEvent } from "@/lib/audit/log";
 import { renameDriveFile } from "@/lib/google/drive";
+import { revalidatePath } from "next/cache";
 
 export async function POST(
   _request: NextRequest,
@@ -96,6 +97,8 @@ export async function POST(
       before: { status: previousStatus },
       after: { status: "pending" },
     });
+
+    revalidatePath("/admin/deliverables");
 
     return NextResponse.json({ ok: true });
   } catch (error) {

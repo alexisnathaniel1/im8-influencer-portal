@@ -11,6 +11,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { ADMIN_ROLES } from "@/lib/permissions";
 import { logAuditEvent } from "@/lib/audit/log";
 import { renameDriveFile } from "@/lib/google/drive";
+import { revalidatePath } from "next/cache";
 
 export async function POST(
   request: NextRequest,
@@ -126,6 +127,9 @@ export async function POST(
         }
       }).catch((err) => console.warn("[approve] Drive rename failed", err));
     }
+
+    // Bust the deliverables page cache so the status/content columns update immediately
+    revalidatePath("/admin/deliverables");
 
     return NextResponse.json({ ok: true });
   } catch (error) {

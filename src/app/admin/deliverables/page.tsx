@@ -5,6 +5,9 @@ import { redirect } from "next/navigation";
 import DeliverablesTable from "./deliverables-table";
 import { canViewRates } from "@/lib/permissions";
 
+// Always fetch fresh data — status and content columns must reflect review-queue actions
+export const dynamic = "force-dynamic";
+
 export default async function DeliverablesPage({
   searchParams,
 }: {
