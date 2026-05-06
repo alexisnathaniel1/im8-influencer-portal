@@ -1916,19 +1916,33 @@ function LinkProfileSection({ dealId, currentProfileId, driveFolderId }: {
         </div>
       )}
 
-      {currentProfileId && (
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-im8-burgundy/60">
-            {driveFolderId ? "Sub-folder created ✓" : "No talent sub-folder yet"}
-          </span>
-          {!driveFolderId && (
-            <button onClick={createSubFolder} disabled={subFolderStatus === "creating" || subFolderStatus === "created"}
-              className="text-xs px-2.5 py-1 border border-im8-stone/40 rounded-lg text-im8-burgundy/60 hover:text-im8-burgundy hover:border-im8-stone/70 disabled:opacity-50 transition-colors">
-              {subFolderStatus === "creating" ? "Creating…" : subFolderStatus === "created" ? "Created ✓" : "Create sub-folder"}
+      {/* Drive folder row — visible whether or not the profile is linked */}
+      <div className="flex items-center gap-3 flex-wrap">
+        {(driveFolderId || subFolderStatus === "created") ? (
+          <a
+            href={`https://drive.google.com/drive/folders/${driveFolderId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 text-xs text-im8-burgundy/70 hover:text-im8-red hover:underline"
+          >
+            <svg className="w-3.5 h-3.5 text-[#4285F4]" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M4.5 19.5L9 12l4.5 7.5H4.5zM19.5 19.5l-3-7.5H12l3 7.5h4.5zM12 4.5L8.25 12h7.5L12 4.5z"/>
+            </svg>
+            Open Drive folder ↗
+          </a>
+        ) : (
+          <>
+            <span className="text-xs text-im8-burgundy/50">No Drive folder yet</span>
+            <button
+              onClick={createSubFolder}
+              disabled={subFolderStatus === "creating" || subFolderStatus === "created"}
+              className="text-xs px-2.5 py-1 border border-im8-stone/40 rounded-lg text-im8-burgundy/60 hover:text-im8-burgundy hover:border-im8-stone/70 disabled:opacity-50 transition-colors"
+            >
+              {subFolderStatus === "creating" ? "Creating…" : subFolderStatus === "created" ? "Created ✓" : "Create Drive folder"}
             </button>
-          )}
-        </div>
-      )}
+          </>
+        )}
+      </div>
 
       {msg && <p className={`text-xs ${status === "error" || subFolderStatus === "error" ? "text-red-500" : "text-green-700"}`}>{msg}</p>}
     </div>

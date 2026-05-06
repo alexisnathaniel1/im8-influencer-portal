@@ -113,20 +113,30 @@ export async function getRecentInboxEmails(admin: SupabaseClient, limit = 5) {
 // Financial summary — total active monthly retainer spend across all active deals.
 // Only shown to admin + management roles (gated in the page component).
 export type FinancialSummary = {
-  totalMonthlyUsd: number;         // sum of monthly_rate_cents / 100
-  activePartners: number;          // number of deals included
+  totalMonthlyUsd: number;            // sum of monthly_rate_cents / 100
+  totalContractUsd: number;           // sum of monthly_rate_cents * total_months / 100
+  activePartners: number;             // number of deals included
   byPlatform: Record<string, number>; // platform → monthly USD
 };
 
 export async function getFinancialSummary(admin: SupabaseClient): Promise<FinancialSummary> {
   const { data } = await admin
     .from("deals")
-    .select("monthly_rate_cents, platform_primary")
+    .select("monthly_rate_cents, total_months, platform_primary")
     .in("status", ["approved", "contracted", "live"]);
 
   const rows = data ?? [];
   const totalMonthlyUsd = rows.reduce(
     (sum, d) => sum + ((d.monthly_rate_cents as number | null) ?? 0),
+    0,
+  ) / 100;
+
+  const totalContractUsd = rows.reduce(
+    (sum, d) => {
+      const monthly = (d.monthly_rate_cents as number | null) ?? 0;
+      const months = (d.total_months as number | null) ?? 1;
+      return sum + monthly * months;
+    },
     0,
   ) / 100;
 
@@ -137,7 +147,7 @@ export async function getFinancialSummary(admin: SupabaseClient): Promise<Financ
     byPlatform[platform] = (byPlatform[platform] ?? 0) + monthly;
   }
 
-  return { totalMonthlyUsd, activePartners: rows.length, byPlatform };
+  return { totalMonthlyUsd, totalContractUsd, activePartners: rows.length, byPlatform };
 }
 
 // 7-day outlook: per day, how many briefs are due, how many reviews are due,

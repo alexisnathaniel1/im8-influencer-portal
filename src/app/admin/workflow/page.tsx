@@ -39,10 +39,17 @@ function formatMoney(cents: number | null, months: number | null): string {
   return monthly;
 }
 
+function driveUrl(folderId: string | null | undefined): string | null {
+  if (!folderId) return null;
+  return `https://drive.google.com/drive/folders/${folderId}`;
+}
+
 export default async function WorkflowDashboardPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
+
+  const masterFolderUrl = driveUrl(process.env.GOOGLE_DRIVE_MASTER_FOLDER_ID);
 
   const { data: currentProfile } = await supabase
     .from("profiles")
@@ -115,11 +122,26 @@ export default async function WorkflowDashboardPage() {
   return (
     <div className="space-y-8 animate-fade-in">
       {/* Page header */}
-      <div>
-        <h1 className="text-[40px] leading-tight font-bold text-im8-maroon">Workflow</h1>
-        <p className="text-im8-muted mt-1 text-[14px]">
-          Today&apos;s briefs to send, content in review, contract renewals, and recent partner emails.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-[40px] leading-tight font-bold text-im8-maroon">Workflow</h1>
+          <p className="text-im8-muted mt-1 text-[14px]">
+            Today&apos;s briefs to send, content in review, contract renewals, and recent partner emails.
+          </p>
+        </div>
+        {masterFolderUrl && (
+          <a
+            href={masterFolderUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-im8-stone/40 bg-white hover:bg-im8-offwhite hover:border-im8-stone/60 transition-colors text-sm text-im8-burgundy font-medium"
+          >
+            <svg className="w-4 h-4 text-[#4285F4]" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M4.5 19.5L9 12l4.5 7.5H4.5zM19.5 19.5l-3-7.5H12l3 7.5h4.5zM12 4.5L8.25 12h7.5L12 4.5z"/>
+            </svg>
+            Master Drive folder
+          </a>
+        )}
       </div>
 
       {/* Band 1 — KPI cards */}
@@ -140,7 +162,8 @@ export default async function WorkflowDashboardPage() {
       {/* Band 1b — Financial summary (admin + management only) */}
       {canSeeFinancials && financials && (
         <div className="bg-white rounded-xl border border-im8-stone/30 p-5">
-          <div className="flex flex-wrap items-center gap-6">
+          <div className="flex flex-wrap items-start gap-8">
+            {/* Monthly spend */}
             <div>
               <div className="text-[11px] font-bold text-im8-muted uppercase tracking-[0.1em] mb-1">
                 💰 Active Monthly Spend
@@ -158,8 +181,26 @@ export default async function WorkflowDashboardPage() {
               </div>
             </div>
 
+            {/* Total contract value */}
+            <div>
+              <div className="text-[11px] font-bold text-im8-muted uppercase tracking-[0.1em] mb-1">
+                📋 Total Contract Value
+              </div>
+              <div className="text-[28px] font-bold text-im8-maroon leading-none">
+                {financials.totalContractUsd.toLocaleString("en-US", {
+                  style: "currency",
+                  currency: "USD",
+                  maximumFractionDigits: 0,
+                })}
+              </div>
+              <div className="text-[12px] text-im8-muted mt-1">
+                across all active contracts
+              </div>
+            </div>
+
             {Object.keys(financials.byPlatform).length > 0 && (
-              <div className="flex flex-wrap gap-4 ml-auto">
+              <div className="flex flex-wrap gap-4 ml-auto self-center">
+                <div className="text-[11px] font-bold text-im8-muted uppercase tracking-[0.08em] self-center mr-1">By platform</div>
                 {Object.entries(financials.byPlatform)
                   .sort(([, a], [, b]) => b - a)
                   .map(([platform, amount]) => (

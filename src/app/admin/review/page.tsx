@@ -24,6 +24,7 @@ interface PendingSubmission {
   submitted_at: string;
   influencer_name: string;
   deal_id: string;
+  deal_drive_folder_id: string | null;
   brief_title: string | null;
   deliverable_type: string | null;
   deliverable_sequence: number | null;
@@ -58,7 +59,7 @@ export default function AdminReviewPage() {
       .select(`
         id, file_name, drive_url, drive_file_id, content_type, platform, post_url, submitted_at, caption,
         influencer:influencer_id(full_name),
-        deal:deal_id(influencer_name),
+        deal:deal_id(influencer_name, drive_folder_id),
         brief:brief_id(title),
         deliverable:deliverable_id(deliverable_type, sequence)
       `)
@@ -70,7 +71,7 @@ export default function AdminReviewPage() {
     const rows: PendingSubmission[] = [];
     for (const s of data || []) {
       const inf = s.influencer as unknown as { full_name: string } | null;
-      const deal = s.deal as unknown as { influencer_name: string } | null;
+      const deal = s.deal as unknown as { influencer_name: string; drive_folder_id?: string | null } | null;
       const brief = s.brief as unknown as { title: string } | null;
       const deliv = s.deliverable as unknown as { deliverable_type: string; sequence: number | null } | null;
       rows.push({
@@ -84,6 +85,7 @@ export default function AdminReviewPage() {
         submitted_at: s.submitted_at,
         influencer_name: inf?.full_name || deal?.influencer_name || "Unknown",
         deal_id: (s as Record<string, unknown>).deal_id as string,
+        deal_drive_folder_id: deal?.drive_folder_id ?? null,
         brief_title: brief?.title ?? null,
         deliverable_type: deliv?.deliverable_type ?? null,
         deliverable_sequence: deliv?.sequence ?? null,
@@ -251,6 +253,20 @@ export default function AdminReviewPage() {
                       <Link href={`/admin/deals/${sub.deal_id}`} className="text-sm font-semibold text-im8-burgundy hover:underline" onClick={(e) => e.stopPropagation()}>
                         {sub.influencer_name}
                       </Link>
+                      {sub.deal_drive_folder_id && (
+                        <a
+                          href={`https://drive.google.com/drive/folders/${sub.deal_drive_folder_id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="Open Drive folder"
+                          onClick={(e) => e.stopPropagation()}
+                          className="text-im8-burgundy/30 hover:text-[#4285F4] transition-colors"
+                        >
+                          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M4.5 19.5L9 12l4.5 7.5H4.5zM19.5 19.5l-3-7.5H12l3 7.5h4.5zM12 4.5L8.25 12h7.5L12 4.5z"/>
+                          </svg>
+                        </a>
+                      )}
                       {sub.deliverable_type && (
                         <span className="inline-block px-2 py-0.5 rounded text-xs font-bold font-mono bg-purple-100 text-purple-700">
                           {sub.deliverable_type}{sub.deliverable_sequence ? ` #${sub.deliverable_sequence}` : ""}

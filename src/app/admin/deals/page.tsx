@@ -36,6 +36,7 @@ type DealRow = {
   tiktok_handle: string | null;
   youtube_handle: string | null;
   contract_url: string | null;
+  drive_folder_id: string | null;
   assigned_to: { full_name: string } | null;
 };
 

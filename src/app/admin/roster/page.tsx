@@ -25,7 +25,7 @@ export default async function RosterPage({
       follower_count, niche_tags,
       monthly_rate_cents, total_months, total_rate_cents,
       campaign_start, campaign_end, status,
-      contract_sequence,
+      contract_sequence, drive_folder_id,
       assigned_to(full_name)
     `)
     .in("status", ["pending_approval", "approved", "contracted", "live"])
@@ -75,6 +75,7 @@ export default async function RosterPage({
       campaignEnd: (d.campaign_end as string | null) ?? null,
       status: (d.status as string) ?? "pending_approval",
       contractSequence: (d.contract_sequence as number | null) ?? 1,
+      driveFolderId: (d.drive_folder_id as string | null) ?? null,
       pic: assigned?.full_name ?? null,
       deliverablesTotal: progress.total,
       deliverablesDone: progress.done,

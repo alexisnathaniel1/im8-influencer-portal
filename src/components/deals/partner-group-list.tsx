@@ -22,6 +22,7 @@ type DealRow = {
   tiktok_handle: string | null;
   youtube_handle: string | null;
   contract_url: string | null;
+  drive_folder_id: string | null;
   assigned_to: { full_name: string } | null;
 };
 
@@ -176,6 +177,7 @@ export default function PartnerGroupList({
                       "Owner",
                       "Updated",
                       "Doc",
+                      "Drive",
                       "",
                     ].map(h => (
                       <th
@@ -299,6 +301,25 @@ export default function PartnerGroupList({
                             </a>
                           ) : (
                             <span className="text-xs text-im8-burgundy/30">—</span>
+                          )}
+                        </td>
+                        {/* Partner Drive folder */}
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          {d.drive_folder_id ? (
+                            <a
+                              href={`https://drive.google.com/drive/folders/${d.drive_folder_id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title="Open partner Drive folder"
+                              className="inline-flex items-center gap-1 text-xs text-im8-burgundy/60 hover:text-[#4285F4] transition-colors"
+                            >
+                              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M4.5 19.5L9 12l4.5 7.5H4.5zM19.5 19.5l-3-7.5H12l3 7.5h4.5zM12 4.5L8.25 12h7.5L12 4.5z"/>
+                              </svg>
+                              Drive
+                            </a>
+                          ) : (
+                            <span className="text-xs text-im8-burgundy/20">—</span>
                           )}
                         </td>
                         <td className="px-4 py-3 text-right">

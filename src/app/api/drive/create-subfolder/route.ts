@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createInfluencerFolder, extractFolderId } from "@/lib/google/drive";
+import { createInfluencerFolder, createSubFolder, extractFolderId } from "@/lib/google/drive";
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
@@ -16,59 +16,26 @@ export async function POST(request: NextRequest) {
   // ── 1. Load the deal ───────────────────────────────────────────────────────
   const { data: deal, error: dealErr } = await admin
     .from("deals")
-    .select("influencer_name, influencer_profile_id, drive_folder_id")
+    .select("influencer_name, influencer_profile_id, drive_folder_id, contract_sequence")
     .eq("id", dealId)
     .single();
 
   if (dealErr || !deal) {
-    console.error("[create-subfolder] deal lookup failed:", dealErr?.message ?? "no row", "dealId:", dealId);
     return NextResponse.json(
       { error: dealErr?.message || "Deal not found" },
       { status: dealErr ? 500 : 404 }
     );
   }
 
-  // Already linked — nothing to do
+  // Already has a folder — return it
   if (deal.drive_folder_id) {
-    return NextResponse.json({ folderId: deal.drive_folder_id, alreadyLinked: true });
+    return NextResponse.json({
+      folderId: deal.drive_folder_id,
+      folderUrl: `https://drive.google.com/drive/folders/${deal.drive_folder_id}`,
+      alreadyLinked: true,
+    });
   }
 
-  if (!deal.influencer_profile_id) {
-    return NextResponse.json({ error: "Deal has no linked partner profile" }, { status: 400 });
-  }
-
-  // ── 2. Check whether the creator already has a Drive folder ────────────────
-  const { data: profile, error: profileErr } = await admin
-    .from("profiles")
-    .select("drive_folder_url, email")
-    .eq("id", deal.influencer_profile_id)
-    .single();
-
-  if (profileErr) {
-    console.error("[create-subfolder] profile lookup failed:", profileErr.message);
-    return NextResponse.json({ error: profileErr.message }, { status: 500 });
-  }
-
-  // ── 3a. Profile already has a folder (auto-created during first upload) ─────
-  //    Just link that folder to the deal — no need to create another one.
-  if (profile?.drive_folder_url) {
-    const folderId = extractFolderId(profile.drive_folder_url);
-    if (folderId) {
-      const { error: updateErr } = await admin
-        .from("deals")
-        .update({ drive_folder_id: folderId })
-        .eq("id", dealId);
-
-      if (updateErr) {
-        console.error("[create-subfolder] deal update failed:", updateErr.message);
-        return NextResponse.json({ error: updateErr.message }, { status: 500 });
-      }
-
-      return NextResponse.json({ folderId, folderUrl: profile.drive_folder_url, linked: true });
-    }
-  }
-
-  // ── 3b. No folder exists at all — create one in the master Drive folder ──────
   if (!process.env.GOOGLE_DRIVE_MASTER_FOLDER_ID || !process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
     return NextResponse.json(
       { error: "Drive not configured — ask your administrator to set GOOGLE_DRIVE_MASTER_FOLDER_ID" },
@@ -77,30 +44,91 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const folderName = `IM8_${(deal.influencer_name as string)
-      .toUpperCase()
-      .replace(/[^A-Z0-9 ]/g, "")
-      .trim()
-      .replace(/\s+/g, "_")}`;
+    const influencerName = (deal.influencer_name as string) ?? "Unknown";
+    const contractSeq = (deal.contract_sequence as number | null) ?? 1;
+    const contractLabel = `Contract ${contractSeq}`;
 
-    const newFolderUrl = await createInfluencerFolder(
-      folderName,
-      (profile?.email as string | null) ?? ""
+    // ── 2. Try to find or create the partner's top-level folder ───────────────
+
+    let partnerFolderId: string | null = null;
+    let creatorEmail = "";
+
+    // If deal is linked to a profile, check for an existing folder there first
+    if (deal.influencer_profile_id) {
+      const { data: profile } = await admin
+        .from("profiles")
+        .select("drive_folder_url, email")
+        .eq("id", deal.influencer_profile_id)
+        .single();
+
+      creatorEmail = (profile?.email as string | null) ?? "";
+
+      if (profile?.drive_folder_url) {
+        partnerFolderId = extractFolderId(profile.drive_folder_url as string);
+      }
+    }
+
+    // Check if any other deal for the same influencer already has a folder
+    // (so we share one partner-level folder across all their contracts)
+    if (!partnerFolderId) {
+      const { data: siblingDeals } = await admin
+        .from("deals")
+        .select("drive_folder_id, influencer_profile_id")
+        .eq("influencer_name", influencerName)
+        .not("id", "eq", dealId)
+        .not("drive_folder_id", "is", null);
+
+      if (siblingDeals && siblingDeals.length > 0) {
+        // A sibling exists; its drive_folder_id is a contract subfolder
+        // so we can't directly use it — we need to create within the same parent.
+        // For simplicity, fall through to create a fresh partner folder.
+        // (Drive API parent traversal would be needed to reuse the sibling's parent.)
+      }
+    }
+
+    // ── 3. Create partner top-level folder if we don't have one ───────────────
+    if (!partnerFolderId) {
+      const partnerFolderName = `IM8_${influencerName
+        .toUpperCase()
+        .replace(/[^A-Z0-9 ]/g, "")
+        .trim()
+        .replace(/\s+/g, "_")}`;
+
+      const newFolderUrl = await createInfluencerFolder(partnerFolderName, creatorEmail);
+      partnerFolderId = extractFolderId(newFolderUrl);
+
+      // Store on profile if linked
+      if (deal.influencer_profile_id && partnerFolderId) {
+        await admin
+          .from("profiles")
+          .update({ drive_folder_url: newFolderUrl })
+          .eq("id", deal.influencer_profile_id);
+      }
+    }
+
+    if (!partnerFolderId) {
+      return NextResponse.json({ error: "Could not determine partner Drive folder" }, { status: 500 });
+    }
+
+    // ── 4. Create the Contract N subfolder ────────────────────────────────────
+    const { folderId: contractFolderId, folderUrl: contractFolderUrl } = await createSubFolder(
+      partnerFolderId,
+      contractLabel,
+      creatorEmail || undefined,
     );
 
-    const folderId = extractFolderId(newFolderUrl);
+    // ── 5. Persist to deal ────────────────────────────────────────────────────
+    await admin
+      .from("deals")
+      .update({ drive_folder_id: contractFolderId })
+      .eq("id", dealId);
 
-    // Persist to both profile and deal so future uploads use this folder
-    await Promise.all([
-      admin.from("profiles")
-        .update({ drive_folder_url: newFolderUrl })
-        .eq("id", deal.influencer_profile_id),
-      admin.from("deals")
-        .update({ drive_folder_id: folderId })
-        .eq("id", dealId),
-    ]);
-
-    return NextResponse.json({ folderId, folderUrl: newFolderUrl, created: true });
+    return NextResponse.json({
+      folderId: contractFolderId,
+      folderUrl: contractFolderUrl,
+      partnerFolderId,
+      created: true,
+    });
   } catch (driveErr) {
     console.error("[create-subfolder] Drive folder creation failed:", driveErr);
     return NextResponse.json(

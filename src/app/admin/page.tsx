@@ -8,6 +8,11 @@ export default async function AdminDashboard() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
 
+  const masterFolderId = process.env.GOOGLE_DRIVE_MASTER_FOLDER_ID;
+  const masterFolderUrl = masterFolderId
+    ? `https://drive.google.com/drive/folders/${masterFolderId}`
+    : null;
+
   const admin = createAdminClient();
 
   const [
@@ -64,6 +69,7 @@ export default async function AdminDashboard() {
               { href: "/admin/approvals", label: "Send deals for approval" },
               { href: "/admin/review",    label: "Review pending content" },
               { href: "/intake",          label: "Share intake form link ↗", external: true },
+              ...(masterFolderUrl ? [{ href: masterFolderUrl, label: "Master Drive folder ↗", external: true }] : []),
             ].map(({ href, label, external }) => (
               <Link
                 key={href}

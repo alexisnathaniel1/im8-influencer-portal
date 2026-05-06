@@ -22,6 +22,7 @@ export type RosterRow = {
   campaignEnd: string | null;
   status: string;
   contractSequence: number;
+  driveFolderId: string | null;
   pic: string | null;
   // Progress on the contract — surfaced in the new "Progress" column.
   // Total = all tracker rows for this deal (rights/extras already excluded).
@@ -240,7 +241,7 @@ export default function RosterTable({
     const headers = [
       "Influencer", "Email", "Agency", "Platform", "Handle", "Followers",
       "Niche", "Monthly Rate ($)", "Total ($)", "Months",
-      "Start", "End", "Days Until Expiry", "Contract", "Status", "PIC",
+      "Start", "End", "Days Until Expiry", "Contract", "Status", "PIC", "Drive Folder URL",
     ];
     const lines = [headers.join(",")];
     for (const r of filtered) {
@@ -262,6 +263,7 @@ export default function RosterTable({
         r.contractSequence.toString(),
         STATUS_LABELS[r.status] ?? r.status,
         r.pic ?? "",
+        r.driveFolderId ? `https://drive.google.com/drive/folders/${r.driveFolderId}` : "",
       ].map((c) => {
         const v = String(c);
         return /[,"\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
@@ -439,13 +441,14 @@ export default function RosterTable({
                 <Th onClick={() => toggleSort("status")} sortKey="status" current={sortKey} dir={sortDir}>Status</Th>
                 <th className="px-4 py-3 font-semibold">Progress</th>
                 <th className="px-4 py-3 font-semibold">PIC</th>
+                <th className="px-4 py-3 font-semibold">Drive</th>
                 <th className="px-4 py-3 font-semibold text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-im8-stone/15">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={13} className="px-4 py-12 text-center text-im8-muted">
+                  <td colSpan={14} className="px-4 py-12 text-center text-im8-muted">
                     {hasFilters ? "No creators match these filters." : "No active creators yet."}
                   </td>
                 </tr>
@@ -528,6 +531,24 @@ export default function RosterTable({
                         />
                       </td>
                       <td className="px-4 py-3 text-im8-burgundy/80 truncate max-w-[100px]">{r.pic ?? "—"}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {r.driveFolderId ? (
+                          <a
+                            href={`https://drive.google.com/drive/folders/${r.driveFolderId}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="Open Drive folder"
+                            className="inline-flex items-center gap-1 text-[11px] text-im8-burgundy/50 hover:text-[#4285F4] transition-colors"
+                          >
+                            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+                              <path d="M4.5 19.5L9 12l4.5 7.5H4.5zM19.5 19.5l-3-7.5H12l3 7.5h4.5zM12 4.5L8.25 12h7.5L12 4.5z"/>
+                            </svg>
+                            Drive
+                          </a>
+                        ) : (
+                          <span className="text-[11px] text-im8-burgundy/20">—</span>
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-right whitespace-nowrap">
                         <Link href={`/admin/deals/${r.id}`} className="text-[11px] text-im8-muted hover:text-im8-red mr-3">
                           Open
