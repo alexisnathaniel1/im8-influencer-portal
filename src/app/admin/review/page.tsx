@@ -205,6 +205,8 @@ export default function AdminReviewPage() {
     if (expandedId === submissionId) setExpandedId(null);
     setActionLoading(null);
     notifyCreator(submissionId, "revision_requested", combinedFeedback(submissionId));
+    // Rename the Drive file(s) to …_NEED_REVISION so the team can see status in Drive (fire-and-forget)
+    fetch(`/api/submissions/${submissionId}/rename-revision`, { method: "POST" }).catch(console.error);
   }
 
   async function handleBulkApprove() {
@@ -229,7 +231,7 @@ export default function AdminReviewPage() {
     const label = sub
       ? `${sub.influencer_name} — ${sub.deliverable_type ?? "submission"}${sub.deliverable_sequence ? ` #${sub.deliverable_sequence}` : ""}`
       : "this submission";
-    if (!confirm(`Delete ${label}?\n\nThe submissions row will be removed from the review queue. The Drive file(s) will be left in place — clean those up manually if needed.`)) {
+    if (!confirm(`Delete ${label}?\n\nThe submissions row will be removed from the review queue. Drive file(s) will be renamed with a "DELETED_" prefix so they're flagged but not lost.`)) {
       return;
     }
     setActionLoading(submissionId);
@@ -250,7 +252,7 @@ export default function AdminReviewPage() {
 
   async function handleBulkDelete() {
     if (selectedIds.size === 0) return;
-    if (!confirm(`Delete ${selectedIds.size} submission${selectedIds.size === 1 ? "" : "s"}?\n\nThe submissions rows will be removed from the review queue. Drive files are left in place.`)) {
+    if (!confirm(`Delete ${selectedIds.size} submission${selectedIds.size === 1 ? "" : "s"}?\n\nThe submissions rows will be removed from the review queue. Drive files will be renamed with a "DELETED_" prefix.`)) {
       return;
     }
     setBulkLoading(true);

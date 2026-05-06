@@ -5,10 +5,8 @@
  *
  * What we delete vs. keep:
  *  - The submissions row is hard-deleted.
- *  - The Drive file(s) are LEFT IN PLACE. Drive cleanup is intentional —
- *    reviewers may have already opened these in another tab, and we'd rather
- *    leak a duplicate than permanently lose content. The team can clean Drive
- *    manually if they want to.
+ *  - The Drive file(s) are renamed with a "DELETED_" prefix so reviewers
+ *    can see the status at a glance in Drive without losing the actual file.
  *  - Cascade: deliverable_comments link to deliverable, not submission, so
  *    they're untouched. submissions has no FK children we own.
  */
@@ -18,6 +16,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ADMIN_ROLES } from "@/lib/permissions";
 import { logAuditEvent } from "@/lib/audit/log";
+import { renameDriveFile } from "@/lib/google/drive";
+import type { VariantAsset } from "@/lib/submissions/asset-types";
 
 export async function DELETE(
   _request: NextRequest,
@@ -69,6 +69,10 @@ export async function DELETE(
       before,
     });
 
+    // Rename Drive files to prefix with DELETED_ so the team can see the
+    // status at a glance in Drive without actually losing the file.
+    void renameDriveFilesDeleted(before);
+
     return NextResponse.json({ ok: true, id: submissionId });
   } catch (error) {
     console.error("[submissions/DELETE] Error:", error);
@@ -76,5 +80,41 @@ export async function DELETE(
       { error: error instanceof Error ? error.message : "Failed to delete submission" },
       { status: 500 },
     );
+  }
+}
+
+/** Fire-and-forget: rename every Drive file attached to a deleted submission. */
+async function renameDriveFilesDeleted(sub: {
+  drive_file_id?: string | null;
+  file_name?: string | null;
+  variants?: unknown;
+}) {
+  const filesToRename: Array<{ fileId: string; baseName: string }> = [];
+
+  if (sub.drive_file_id) {
+    filesToRename.push({
+      fileId: sub.drive_file_id,
+      baseName: sub.file_name ?? "content",
+    });
+  }
+
+  const variants = Array.isArray(sub.variants) ? (sub.variants as VariantAsset[]) : [];
+  for (const v of variants) {
+    if (v.drive_file_id) {
+      filesToRename.push({ fileId: v.drive_file_id, baseName: v.file_name ?? "content" });
+    }
+  }
+
+  for (const { fileId, baseName } of filesToRename) {
+    // Strip any existing status suffix, then prepend DELETED_
+    const cleaned = baseName
+      .replace(/_APPROVED$/, "")
+      .replace(/_NEED_REVISION$/, "");
+    const newName = `DELETED_${cleaned}`;
+    try {
+      await renameDriveFile(fileId, newName);
+    } catch (err) {
+      console.warn("[submissions/DELETE] Drive rename failed for", fileId, err);
+    }
   }
 }
