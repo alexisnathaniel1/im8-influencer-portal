@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useMemo, useTransition } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 
@@ -34,6 +34,7 @@ type Deliverable = {
   pic: { id: string; full_name: string } | null;
   editor: { id: string; full_name: string } | null;
   approved_submission?: { id: string; drive_url: string | null; file_name: string | null } | null;
+  pending_submission?: { id: string; drive_url: string | null; file_name: string | null } | null;
 };
 
 const QA_STATUS_COLORS: Record<string, string> = {
@@ -52,16 +53,17 @@ type Profile = { id: string; full_name: string };
 const STATUS_OPTIONS = ["pending", "in_progress", "submitted", "approved", "live", "completed"];
 const PLATFORM_OPTIONS = ["instagram", "tiktok", "youtube", "other"];
 
-// Status colours mirror the calendar's KIND_CONFIG palette so a deliverable
-// shows the same hue across the calendar pill and this table pill.
+// Status colours mirror the calendar's KIND_CONFIG palette.
 const STATUS_COLORS: Record<string, string> = {
-  pending: "bg-gray-100 text-gray-600",
+  pending: "bg-gray-100 text-gray-500",
   in_progress: "bg-orange-100 text-orange-800",
   submitted: "bg-amber-100 text-amber-800",
   approved: "bg-lime-100 text-lime-800",
   live: "bg-fuchsia-100 text-fuchsia-700",
   completed: "bg-im8-burgundy/10 text-im8-burgundy",
 };
+
+type SortKey = "influencer" | "type" | "status" | "due" | null;
 
 export default function DeliverablesTable({
   deliverables,
@@ -70,23 +72,23 @@ export default function DeliverablesTable({
   currentFilters,
   availableNiches = [],
   availableTypes = [],
-  canViewRates = true,
 }: {
   deliverables: Deliverable[];
   pics: Profile[];
   editors: Profile[];
-  currentFilters: { status?: string; platform?: string; q?: string; month?: string; niche?: string; type?: string; view?: string };
+  currentFilters: { status?: string; platform?: string; q?: string; month?: string; niche?: string; type?: string };
   availableNiches?: string[];
   availableTypes?: string[];
   canViewRates?: boolean;
 }) {
-  const isAdsView = currentFilters.view === "ads";
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [, startTransition] = useTransition();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [previewDraft, setPreviewDraft] = useState<{ url: string; name: string } | null>(null);
+  const [sortKey, setSortKey] = useState<SortKey>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   function setFilter(key: string, value: string) {
     const p = new URLSearchParams(searchParams.toString());
@@ -94,7 +96,46 @@ export default function DeliverablesTable({
     startTransition(() => router.push(`${pathname}?${p.toString()}`));
   }
 
-  const selected = deliverables.find(d => d.id === selectedId) ?? null;
+  function handleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir(d => d === "asc" ? "desc" : "asc");
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  }
+
+  const sortedDeliverables = useMemo(() => {
+    if (!sortKey) return deliverables;
+    return [...deliverables].sort((a, b) => {
+      let va: string | number = "";
+      let vb: string | number = "";
+      if (sortKey === "influencer") {
+        va = (a.deal?.influencer_name ?? "").toLowerCase();
+        vb = (b.deal?.influencer_name ?? "").toLowerCase();
+      } else if (sortKey === "type") {
+        va = `${a.deliverable_type}${String(a.sequence ?? 0).padStart(4, "0")}`;
+        vb = `${b.deliverable_type}${String(b.sequence ?? 0).padStart(4, "0")}`;
+      } else if (sortKey === "status") {
+        va = STATUS_OPTIONS.indexOf(a.status);
+        vb = STATUS_OPTIONS.indexOf(b.status);
+      } else if (sortKey === "due") {
+        va = a.due_date ?? "9999-12-31";
+        vb = b.due_date ?? "9999-12-31";
+      }
+      if (va < vb) return sortDir === "asc" ? -1 : 1;
+      if (va > vb) return sortDir === "asc" ? 1 : -1;
+      return 0;
+    });
+  }, [deliverables, sortKey, sortDir]);
+
+  const selected = sortedDeliverables.find(d => d.id === selectedId) ?? null;
+
+  const SortIndicator = ({ col }: { col: SortKey }) => (
+    <span className={`ml-1 inline-block transition-opacity ${sortKey === col ? "opacity-100" : "opacity-0 group-hover:opacity-40"}`}>
+      {sortKey === col ? (sortDir === "asc" ? "↑" : "↓") : "↕"}
+    </span>
+  );
 
   return (
     <div className="flex gap-6">
@@ -104,7 +145,7 @@ export default function DeliverablesTable({
         <div className="flex flex-wrap gap-3 bg-white rounded-xl border border-im8-stone/30 p-4">
           <input
             type="text"
-            placeholder="Search influencer or title..."
+            placeholder="Search influencer or title…"
             defaultValue={currentFilters.q ?? ""}
             onBlur={e => setFilter("q", e.target.value)}
             onKeyDown={e => e.key === "Enter" && setFilter("q", (e.target as HTMLInputElement).value)}
@@ -150,91 +191,142 @@ export default function DeliverablesTable({
               {availableNiches.map(n => <option key={n} value={n}>{n}</option>)}
             </select>
           )}
-          <div className="ml-auto text-xs text-im8-burgundy/50 self-center">{deliverables.length} rows</div>
+          <div className="ml-auto text-xs text-im8-burgundy/50 self-center">{sortedDeliverables.length} rows</div>
         </div>
 
         {/* Table */}
         <div className="bg-white rounded-xl border border-im8-stone/30 overflow-hidden">
-          {isAdsView ? (
-            <AdsTable deliverables={deliverables} selectedId={selectedId} setSelectedId={setSelectedId} />
-          ) : (
           <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[900px]">
-            <thead className="bg-white border-b border-im8-stone/20">
-              <tr>
-                {["Done", "Influencer", "Type", "Status", "Due", "Draft", "Edit", "QA", "Post URL", "Views", "PIC"].map(h => (
-                  <th key={h} className="px-5 py-2.5 text-left text-[11px] font-semibold text-im8-muted uppercase tracking-[0.07em] whitespace-nowrap">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-im8-stone/10">
-              {deliverables.length === 0 && (
-                <tr><td colSpan={11} className="px-4 py-12 text-center text-im8-burgundy/40">No deliverables yet. They&rsquo;ll appear here automatically once a deal is approved and deliverables are saved on the contract.</td></tr>
-              )}
-              {deliverables.map(d => (
-                <tr
-                  key={d.id}
-                  onClick={() => setSelectedId(selectedId === d.id ? null : d.id)}
-                  className={`cursor-pointer transition-colors hover:bg-im8-sand/30 ${selectedId === d.id ? "bg-im8-sand/50" : ""}`}
-                >
-                  <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                    <DoneToggle deliverableId={d.id} current={d.status} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="font-medium text-im8-burgundy whitespace-nowrap">
-                      {d.deal?.influencer_name ?? "—"}
-                    </div>
-                    {d.brief && (
-                      <Link href={`/admin/briefs/${d.brief.id}`} onClick={e => e.stopPropagation()}
-                        className="text-xs text-im8-red hover:underline">
-                        {d.brief.title}
-                      </Link>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="font-mono text-xs bg-im8-sand px-2 py-0.5 rounded text-im8-burgundy">{d.deliverable_type}{d.sequence ? ` #${d.sequence}` : ""}</span>
-                    {d.is_story && <span className="ml-1 text-xs text-im8-burgundy/40">story</span>}
-                  </td>
-                  <td className="px-4 py-3">
-                    <StatusSelect deliverableId={d.id} current={d.status} />
-                  </td>
-                  <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                    <DueDateCell deliverableId={d.id} current={d.due_date} />
-                  </td>
-                  <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                    {d.approved_submission?.drive_url ? (
-                      <button
-                        onClick={() => setPreviewDraft({ url: d.approved_submission!.drive_url!, name: d.approved_submission!.file_name ?? "Approved draft" })}
-                        className="text-xs text-im8-red hover:underline inline-flex items-center gap-1 text-left"
-                      >
-                        <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-                        <span className="truncate max-w-[120px]">{d.approved_submission.file_name ?? "Approved draft"}</span>
-                      </button>
-                    ) : (
-                      <span className="text-xs text-im8-burgundy/30">—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                    <EditedVideoCell deliverableId={d.id} current={d.edited_video_url ?? null} />
-                  </td>
-                  <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                    <QaStatusCell deliverableId={d.id} current={d.qa_status ?? "pending"} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <PostUrlCell deliverableId={d.id} current={d.post_url} isStory={d.is_story} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <MetricsCell deliverable={d} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <PicSelect deliverableId={d.id} current={d.pic?.id ?? ""} pics={pics} />
-                  </td>
+            <table className="w-full text-sm min-w-[860px]">
+              <thead className="bg-white border-b border-im8-stone/20">
+                <tr>
+                  <th className="px-5 py-2.5 text-left text-[11px] font-semibold text-im8-muted uppercase tracking-[0.07em] whitespace-nowrap w-10">Done</th>
+
+                  {/* Sortable: Influencer */}
+                  <th
+                    onClick={() => handleSort("influencer")}
+                    className="px-5 py-2.5 text-left text-[11px] font-semibold text-im8-muted uppercase tracking-[0.07em] whitespace-nowrap cursor-pointer select-none group hover:text-im8-burgundy transition-colors"
+                  >
+                    Influencer <SortIndicator col="influencer" />
+                  </th>
+
+                  {/* Sortable: Type */}
+                  <th
+                    onClick={() => handleSort("type")}
+                    className="px-5 py-2.5 text-left text-[11px] font-semibold text-im8-muted uppercase tracking-[0.07em] whitespace-nowrap cursor-pointer select-none group hover:text-im8-burgundy transition-colors"
+                  >
+                    Type <SortIndicator col="type" />
+                  </th>
+
+                  {/* Sortable: Status */}
+                  <th
+                    onClick={() => handleSort("status")}
+                    className="px-5 py-2.5 text-left text-[11px] font-semibold text-im8-muted uppercase tracking-[0.07em] whitespace-nowrap cursor-pointer select-none group hover:text-im8-burgundy transition-colors"
+                  >
+                    Status <SortIndicator col="status" />
+                  </th>
+
+                  {/* Sortable: Due */}
+                  <th
+                    onClick={() => handleSort("due")}
+                    className="px-5 py-2.5 text-left text-[11px] font-semibold text-im8-muted uppercase tracking-[0.07em] whitespace-nowrap cursor-pointer select-none group hover:text-im8-burgundy transition-colors"
+                  >
+                    Due <SortIndicator col="due" />
+                  </th>
+
+                  <th className="px-5 py-2.5 text-left text-[11px] font-semibold text-im8-muted uppercase tracking-[0.07em] whitespace-nowrap">Content</th>
+                  <th className="px-5 py-2.5 text-left text-[11px] font-semibold text-im8-muted uppercase tracking-[0.07em] whitespace-nowrap">QA</th>
+                  <th className="px-5 py-2.5 text-left text-[11px] font-semibold text-im8-muted uppercase tracking-[0.07em] whitespace-nowrap">Post URL</th>
+                  <th className="px-5 py-2.5 text-left text-[11px] font-semibold text-im8-muted uppercase tracking-[0.07em] whitespace-nowrap">Views</th>
+                  <th className="px-5 py-2.5 text-left text-[11px] font-semibold text-im8-muted uppercase tracking-[0.07em] whitespace-nowrap">PIC</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-im8-stone/10">
+                {sortedDeliverables.length === 0 && (
+                  <tr><td colSpan={10} className="px-4 py-12 text-center text-im8-burgundy/40">No deliverables yet. They&rsquo;ll appear here automatically once a deal is approved and deliverables are saved on the contract.</td></tr>
+                )}
+                {sortedDeliverables.map(d => (
+                  <tr
+                    key={d.id}
+                    onClick={() => setSelectedId(selectedId === d.id ? null : d.id)}
+                    className={`cursor-pointer transition-colors hover:bg-im8-offwhite ${selectedId === d.id ? "bg-im8-sand/40" : ""}`}
+                  >
+                    <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                      <DoneToggle deliverableId={d.id} current={d.status} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-im8-burgundy whitespace-nowrap">
+                        {d.deal ? (
+                          <Link
+                            href={`/admin/deals/${d.deal.id}`}
+                            onClick={e => e.stopPropagation()}
+                            className="hover:text-im8-red hover:underline"
+                          >
+                            {d.deal.influencer_name}
+                          </Link>
+                        ) : "—"}
+                      </div>
+                      {d.brief && (
+                        <Link href={`/admin/briefs/${d.brief.id}`} onClick={e => e.stopPropagation()}
+                          className="text-xs text-im8-red/70 hover:underline">
+                          {d.brief.title}
+                        </Link>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="font-mono text-xs bg-im8-sand/60 px-2 py-0.5 rounded text-im8-burgundy">
+                        {d.deliverable_type}{d.sequence ? ` #${d.sequence}` : ""}
+                      </span>
+                      {d.is_story && <span className="ml-1 text-[10px] text-im8-burgundy/40">story</span>}
+                    </td>
+                    <td className="px-4 py-3">
+                      <StatusSelect deliverableId={d.id} current={d.status} />
+                    </td>
+                    <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                      <DueDateCell deliverableId={d.id} current={d.due_date} />
+                    </td>
+
+                    {/* Content column: pending → amber "Review" link; approved → green dot */}
+                    <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                      {d.pending_submission ? (
+                        <Link
+                          href="/admin/review"
+                          onClick={e => e.stopPropagation()}
+                          className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 px-2 py-0.5 rounded-full transition-colors"
+                        >
+                          <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse shrink-0" />
+                          Review →
+                        </Link>
+                      ) : d.approved_submission?.drive_url ? (
+                        <button
+                          onClick={() => setPreviewDraft({ url: d.approved_submission!.drive_url!, name: d.approved_submission!.file_name ?? "Approved draft" })}
+                          className="text-xs text-im8-red hover:underline inline-flex items-center gap-1 text-left"
+                        >
+                          <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                          <span className="truncate max-w-[120px]">{d.approved_submission.file_name ?? "Approved draft"}</span>
+                        </button>
+                      ) : (
+                        <span className="text-xs text-im8-burgundy/25">—</span>
+                      )}
+                    </td>
+
+                    <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                      <QaStatusCell deliverableId={d.id} current={d.qa_status ?? "pending"} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <PostUrlCell deliverableId={d.id} current={d.post_url} isStory={d.is_story} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <MetricsCell deliverable={d} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <PicSelect deliverableId={d.id} current={d.pic?.id ?? ""} pics={pics} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-          )}
         </div>
       </div>
 
@@ -251,161 +343,11 @@ export default function DeliverablesTable({
   );
 }
 
-// Ads team table — focused columns: Scheduled for Ads, Usage Rights,
-// Whitelisting Granted, Start/End dates. One row per deliverable.
-function AdsTable({
-  deliverables, selectedId, setSelectedId,
-}: {
-  deliverables: Deliverable[];
-  selectedId: string | null;
-  setSelectedId: (id: string | null) => void;
-}) {
-  return (
-    <table className="w-full text-sm">
-      <thead className="bg-im8-burgundy/90 text-white border-b border-im8-stone/20">
-        <tr>
-          {["Influencer", "Type", "Scheduled for Ads", "Usage Rights", "Whitelisting Granted", "Whitelisted Start", "Whitelisted End"].map(h => (
-            <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">{h}</th>
-          ))}
-        </tr>
-      </thead>
-      <tbody className="divide-y divide-im8-stone/10">
-        {deliverables.length === 0 && (
-          <tr><td colSpan={7} className="px-4 py-12 text-center text-im8-burgundy/40">No deliverables with whitelisting or paid-ad usage rights yet.</td></tr>
-        )}
-        {deliverables.map(d => (
-          <tr
-            key={d.id}
-            onClick={() => setSelectedId(selectedId === d.id ? null : d.id)}
-            className={`cursor-pointer transition-colors hover:bg-im8-sand/30 ${selectedId === d.id ? "bg-im8-sand/50" : ""}`}
-          >
-            <td className="px-4 py-3 font-medium text-im8-burgundy truncate max-w-[180px]">
-              {d.deal?.influencer_name ?? "—"}
-            </td>
-            <td className="px-4 py-3">
-              <span className="font-mono text-xs bg-im8-sand px-2 py-0.5 rounded text-im8-burgundy">
-                {d.deliverable_type}{d.sequence ? ` #${d.sequence}` : ""}
-              </span>
-            </td>
-            <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-              <BoolPillCell deliverableId={d.id} field="scheduled_for_ads" current={Boolean(d.scheduled_for_ads)} />
-            </td>
-            <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-              <UsageRightsCell deliverableId={d.id} current={d.ad_usage_rights_status ?? ""} />
-            </td>
-            <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-              <BoolPillCell deliverableId={d.id} field="whitelisting_granted" current={Boolean(d.whitelisting_granted)} />
-            </td>
-            <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-              <AdsDateCell deliverableId={d.id} field="whitelisted_start_date" current={d.whitelisted_start_date ?? null} />
-            </td>
-            <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-              <AdsDateCell deliverableId={d.id} field="whitelisted_end_date" current={d.whitelisted_end_date ?? null} />
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-}
-
-// Yes/No pill that toggles a boolean field on save.
-function BoolPillCell({ deliverableId, field, current }: { deliverableId: string; field: string; current: boolean }) {
-  const router = useRouter();
-  const [value, setValue] = useState(current);
-
-  async function toggle() {
-    const next = !value;
-    setValue(next);
-    await fetch(`/api/deliverables/${deliverableId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ [field]: next }),
-    });
-    router.refresh();
-  }
-
-  return (
-    <button onClick={toggle}
-      className={`text-xs px-3 py-1 rounded-full font-semibold transition-colors ${value
-        ? "bg-amber-200 text-amber-900 hover:bg-amber-300"
-        : "bg-im8-stone/20 text-im8-burgundy/50 hover:bg-im8-stone/30"}`}>
-      {value ? "Yes" : "—"}
-    </button>
-  );
-}
-
-// Usage rights status dropdown.
-function UsageRightsCell({ deliverableId, current }: { deliverableId: string; current: string }) {
-  const router = useRouter();
-  const [value, setValue] = useState(current);
-  const OPTIONS = ["", "granted", "pending", "not_needed", "expired"];
-  const LABELS: Record<string, string> = {
-    "": "—",
-    granted: "Granted",
-    pending: "Pending",
-    not_needed: "Not needed",
-    expired: "Expired",
-  };
-
-  async function onChange(next: string) {
-    setValue(next);
-    await fetch(`/api/deliverables/${deliverableId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ad_usage_rights_status: next || null }),
-    });
-    router.refresh();
-  }
-
-  return (
-    <select
-      value={value}
-      onChange={e => onChange(e.target.value)}
-      className="text-xs px-2 py-1 border border-im8-stone/40 rounded text-im8-burgundy bg-white focus:outline-none"
-    >
-      {OPTIONS.map(o => <option key={o} value={o}>{LABELS[o]}</option>)}
-    </select>
-  );
-}
-
-// Ads-view date cell (start / end). Always-visible so the ads team doesn't
-// need to click twice. Saves on change.
-function AdsDateCell({ deliverableId, field, current }: { deliverableId: string; field: string; current: string | null }) {
-  const router = useRouter();
-  const [val, setVal] = useState(current ?? "");
-
-  async function save(next: string) {
-    setVal(next);
-    await fetch(`/api/deliverables/${deliverableId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ [field]: next || null }),
-    });
-    router.refresh();
-  }
-
-  return (
-    <input
-      type="date"
-      value={val}
-      onChange={e => save(e.target.value)}
-      className="px-2 py-1 text-xs border border-im8-stone/40 rounded text-im8-burgundy bg-white focus:outline-none focus:ring-2 focus:ring-im8-red/30"
-    />
-  );
-}
-
-// One-click "Done" toggle. Flips between the current status and 'live':
-// • If the deliverable is live or completed → click reverts to 'pending'
-// • Otherwise → click promotes to 'live' (and stamps live_date with today)
-// Used for mid-contract bulk-upload partners and ongoing manual marking
-// without having to open the status dropdown.
+// One-click "Done" toggle.
 function DoneToggle({ deliverableId, current }: { deliverableId: string; current: string }) {
   const router = useRouter();
   const [status, setStatus] = useState(current);
   const [saving, setSaving] = useState(false);
-  // Matches the Roster/Tracker "done" definition — approved/live/completed
-  // all count as done. Toggling reverts to pending.
   const isDone = status === "approved" || status === "live" || status === "completed";
 
   async function toggle() {
@@ -474,8 +416,6 @@ function StatusSelect({ deliverableId, current }: { deliverableId: string; curre
   );
 }
 
-// Editable due date cell. Click the date (or "+ Set") to open a date picker;
-// saves on change. Shows current value as short AU date.
 function DueDateCell({ deliverableId, current }: { deliverableId: string; current: string | null }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
@@ -506,57 +446,11 @@ function DueDateCell({ deliverableId, current }: { deliverableId: string; curren
   return (
     <button onClick={() => setEditing(true)}
       className="text-xs text-im8-burgundy/70 hover:text-im8-red hover:underline">
-      {current ? new Date(current).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "2-digit" }) : "+ Set"}
+      {current ? new Date(current).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "2-digit" }) : <span className="text-im8-burgundy/30">+ Set</span>}
     </button>
   );
 }
 
-// Editor's finished-cut link cell. Click "+ Add edit" to open an inline URL input.
-function EditedVideoCell({ deliverableId, current }: { deliverableId: string; current: string | null }) {
-  const router = useRouter();
-  const [editing, setEditing] = useState(false);
-  const [val, setVal] = useState(current ?? "");
-
-  async function save() {
-    setEditing(false);
-    await fetch(`/api/deliverables/${deliverableId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ edited_video_url: val || null }),
-    });
-    router.refresh();
-  }
-
-  if (editing) return (
-    <input
-      autoFocus
-      value={val}
-      onChange={e => setVal(e.target.value)}
-      onBlur={save}
-      onKeyDown={e => e.key === "Enter" && save()}
-      placeholder="https://drive.google.com/…"
-      className="w-36 px-2 py-1 text-xs border border-im8-stone/40 rounded focus:outline-none"
-    />
-  );
-
-  if (current) return (
-    <a href={current} target="_blank" rel="noopener noreferrer"
-      className="text-xs text-im8-red hover:underline inline-flex items-center gap-1">
-      <span className="inline-block w-2 h-2 rounded-full bg-im8-burgundy/60" />
-      Edit
-      <span className="text-im8-burgundy/30">↗</span>
-    </a>
-  );
-
-  return (
-    <button onClick={() => setEditing(true)}
-      className="text-xs text-im8-burgundy/40 hover:text-im8-red">
-      + Add edit
-    </button>
-  );
-}
-
-// QA status dropdown. Pending → Ready to go live / Revisions needed.
 function QaStatusCell({ deliverableId, current }: { deliverableId: string; current: string }) {
   const router = useRouter();
   const [value, setValue] = useState(current);
@@ -622,7 +516,7 @@ function PostUrlCell({ deliverableId, current, isStory }: { deliverableId: strin
 
   return (
     <button onClick={e => { e.stopPropagation(); setEditing(true); }}
-      className="text-xs text-im8-burgundy/40 hover:text-im8-red">
+      className="text-xs text-im8-burgundy/30 hover:text-im8-red">
       {isStory ? "Manual" : "+ Add URL"}
     </button>
   );
@@ -646,7 +540,7 @@ function MetricsCell({ deliverable }: { deliverable: Deliverable }) {
   }
 
   if (deliverable.views === null && !deliverable.is_story) {
-    return <span className="text-xs text-im8-burgundy/30">—</span>;
+    return <span className="text-xs text-im8-burgundy/25">—</span>;
   }
 
   if (deliverable.is_story && editing) return (
@@ -659,7 +553,7 @@ function MetricsCell({ deliverable }: { deliverable: Deliverable }) {
   if (deliverable.is_story) return (
     <button onClick={e => { e.stopPropagation(); setEditing(true); }}
       className="text-xs text-im8-burgundy/60 hover:text-im8-red">
-      {deliverable.views !== null ? deliverable.views.toLocaleString() : "+ Views"}
+      {deliverable.views !== null ? deliverable.views.toLocaleString() : <span className="text-im8-burgundy/30">+ Views</span>}
     </button>
   );
 
@@ -757,7 +651,6 @@ function DeliverablePanel({ deliverable, editors, onClose }: { deliverable: Deli
     setPosting(false);
   }
 
-  // Load comments on mount
   if (!loaded) loadComments();
 
   return (
@@ -768,6 +661,9 @@ function DeliverablePanel({ deliverable, editors, onClose }: { deliverable: Deli
           <div className="flex items-center gap-2 mt-1">
             <span className="font-mono text-xs bg-im8-sand px-2 py-0.5 rounded text-im8-burgundy">{deliverable.deliverable_type}{deliverable.sequence ? ` #${deliverable.sequence}` : ""}</span>
             {deliverable.is_story && <span className="text-xs text-im8-burgundy/40">story</span>}
+            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[deliverable.status] ?? "bg-gray-100 text-gray-600"}`}>
+              {deliverable.status.replace("_", " ")}
+            </span>
           </div>
         </div>
         <button onClick={onClose} className="text-im8-burgundy/40 hover:text-im8-burgundy text-xl leading-none">×</button>
@@ -785,6 +681,17 @@ function DeliverablePanel({ deliverable, editors, onClose }: { deliverable: Deli
           className="block text-xs text-im8-red hover:underline break-all">
           {deliverable.post_url} ↗
         </a>
+      )}
+
+      {/* Review queue link if pending */}
+      {deliverable.pending_submission && (
+        <Link
+          href="/admin/review"
+          className="flex items-center gap-2 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2"
+        >
+          <span className="inline-block w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
+          Submission pending review — open review queue →
+        </Link>
       )}
 
       {/* Metrics summary */}
@@ -829,23 +736,15 @@ function DeliverablePanel({ deliverable, editors, onClose }: { deliverable: Deli
         )}
       </div>
 
-      {/* Editor + QA */}
+      {/* QA */}
       <div className="space-y-3 border-t border-im8-stone/20 pt-3">
-        <div className="text-xs font-semibold text-im8-burgundy/50 uppercase tracking-wide">Edit &amp; QA</div>
+        <div className="text-xs font-semibold text-im8-burgundy/50 uppercase tracking-wide">QA</div>
 
-        {/* Edited video URL */}
-        <div>
-          <label className="block text-xs text-im8-burgundy/60 mb-1">Edited video URL</label>
-          <EditedVideoInlineField deliverableId={deliverable.id} current={deliverable.edited_video_url ?? null} />
-        </div>
-
-        {/* QA status (larger control) */}
         <div>
           <label className="block text-xs text-im8-burgundy/60 mb-1">QA status</label>
           <QaStatusCell deliverableId={deliverable.id} current={deliverable.qa_status ?? "pending"} />
         </div>
 
-        {/* QA comments */}
         <div>
           <label className="block text-xs text-im8-burgundy/60 mb-1">QA comments</label>
           <QaCommentsField deliverableId={deliverable.id} current={deliverable.qa_comments ?? ""} />
@@ -910,50 +809,7 @@ function DateField({ label, deliverableId, field, value }: {
   );
 }
 
-// Side-panel version of the edited-video URL input. Always-visible input
-// (no click-to-edit) so editors can paste directly.
-function EditedVideoInlineField({ deliverableId, current }: { deliverableId: string; current: string | null }) {
-  const router = useRouter();
-  const [val, setVal] = useState(current ?? "");
-  const [status, setStatus] = useState<"idle" | "saving" | "saved">("idle");
-
-  async function save(next: string) {
-    if (next === (current ?? "")) return;
-    setStatus("saving");
-    await fetch(`/api/deliverables/${deliverableId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ edited_video_url: next || null }),
-    });
-    setStatus("saved");
-    router.refresh();
-    setTimeout(() => setStatus("idle"), 1500);
-  }
-
-  return (
-    <div className="flex items-center gap-2">
-      <input
-        type="url"
-        value={val}
-        onChange={e => setVal(e.target.value)}
-        onBlur={() => save(val.trim())}
-        onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-        placeholder="https://drive.google.com/…"
-        className="flex-1 px-2 py-1.5 text-xs border border-im8-stone/40 rounded-lg focus:outline-none focus:ring-2 focus:ring-im8-red/40 text-im8-burgundy"
-      />
-      {val && (
-        <a href={val} target="_blank" rel="noopener noreferrer"
-          className="text-xs text-im8-red hover:underline">Open ↗</a>
-      )}
-      <span className="text-xs text-im8-burgundy/40 w-12 text-right">
-        {status === "saving" ? "Saving…" : status === "saved" ? "Saved ✓" : ""}
-      </span>
-    </div>
-  );
-}
-
 function DrivePreviewModal({ url, name, onClose }: { url: string; name: string; onClose: () => void }) {
-  // Extract Google Drive file ID for embedding
   const fileId = url.match(/\/d\/([a-zA-Z0-9_-]+)/)?.[1];
   const embedUrl = fileId ? `https://drive.google.com/file/d/${fileId}/preview` : null;
 
@@ -990,7 +846,6 @@ function DrivePreviewModal({ url, name, onClose }: { url: string; name: string; 
   );
 }
 
-// QA comments textarea — saves on blur.
 function QaCommentsField({ deliverableId, current }: { deliverableId: string; current: string }) {
   const router = useRouter();
   const [val, setVal] = useState(current);
@@ -1016,7 +871,7 @@ function QaCommentsField({ deliverableId, current }: { deliverableId: string; cu
         value={val}
         onChange={e => setVal(e.target.value)}
         onBlur={() => save(val.trim())}
-        placeholder="Notes from QA (e.g. fix brand mention timing, re-record CTA)…"
+        placeholder="Notes from QA…"
         className="w-full px-2 py-1.5 text-xs border border-im8-stone/40 rounded-lg focus:outline-none focus:ring-2 focus:ring-im8-red/40 text-im8-burgundy resize-none"
       />
       <span className="text-xs text-im8-burgundy/40">

@@ -10,7 +10,7 @@ export default async function DeliverablesPage({
 }: {
   searchParams: Promise<{
     status?: string; platform?: string; q?: string; month?: string;
-    niche?: string; type?: string; view?: string;
+    niche?: string; type?: string;
   }>;
 }) {
   const supabase = await createClient();
@@ -51,15 +51,11 @@ export default async function DeliverablesPage({
     const end = endDate.toISOString().split("T")[0];
     query = query.gte("due_date", start).lte("due_date", end);
   }
-  // Influencer / title search: match either the deliverable title or the linked
-  // deal's influencer_name. Supabase doesn't support OR across joined tables,
-  // so we filter client-side on influencer_name after fetching.
   if (filters.q) {
     query = query.or(`title.ilike.%${filters.q}%`);
   }
 
   const { data: rawDeliverables } = await query;
-  // Flatten Supabase's array-typed foreign key joins to single objects
   let deliverables = (rawDeliverables ?? []).map(d => ({
     ...d,
     deal: (Array.isArray(d.deal) ? d.deal[0] : d.deal) as
@@ -70,16 +66,7 @@ export default async function DeliverablesPage({
     editor: Array.isArray(d.editor) ? d.editor[0] ?? null : d.editor,
   }));
 
-  // Ads view: only deliverables whose parent deal has WHITELIST or PAID_AD = on.
-  // The ads team lives here because these are the rows where ad-trafficking / usage-rights work happens.
-  if (filters.view === "ads") {
-    deliverables = deliverables.filter(d => {
-      const rights = d.deal?.deliverables ?? [];
-      return rights.some(r => (r.code === "WHITELIST" || r.code === "PAID_AD") && r.count > 0);
-    });
-  }
-
-  // Client-side post-filter for things Supabase can't easily filter on
+  // Client-side post-filters
   if (filters.q) {
     const q = filters.q.toLowerCase();
     deliverables = deliverables.filter(d =>
@@ -91,25 +78,40 @@ export default async function DeliverablesPage({
     deliverables = deliverables.filter(d => (d.deal?.niche_tags ?? []).includes(filters.niche!));
   }
 
-  // Fetch the latest approved submission per deliverable so we can show a draft
-  // link in the table. One round-trip: select all approved subs matching our ids.
+  // Fetch approved and pending submissions per deliverable in one pass each
   const deliverableIds = deliverables.map(d => d.id);
   const approvedByDeliverable = new Map<string, { id: string; drive_url: string | null; file_name: string | null }>();
+  const pendingByDeliverable = new Map<string, { id: string; drive_url: string | null; file_name: string | null }>();
+
   if (deliverableIds.length > 0) {
-    const { data: approvedSubs } = await admin
-      .from("submissions")
-      .select("id, deliverable_id, drive_url, file_name, status, reviewed_at")
-      .in("deliverable_id", deliverableIds)
-      .eq("status", "approved")
-      .order("reviewed_at", { ascending: false });
+    const [{ data: approvedSubs }, { data: pendingSubs }] = await Promise.all([
+      admin
+        .from("submissions")
+        .select("id, deliverable_id, drive_url, file_name, status, reviewed_at")
+        .in("deliverable_id", deliverableIds)
+        .eq("status", "approved")
+        .order("reviewed_at", { ascending: false }),
+      admin
+        .from("submissions")
+        .select("id, deliverable_id, drive_url, file_name, status, submitted_at")
+        .in("deliverable_id", deliverableIds)
+        .eq("status", "pending")
+        .order("submitted_at", { ascending: false }),
+    ]);
+
     for (const s of approvedSubs ?? []) {
       if (s.deliverable_id && !approvedByDeliverable.has(s.deliverable_id)) {
         approvedByDeliverable.set(s.deliverable_id, { id: s.id, drive_url: s.drive_url, file_name: s.file_name });
       }
     }
+    for (const s of pendingSubs ?? []) {
+      if (s.deliverable_id && !pendingByDeliverable.has(s.deliverable_id)) {
+        pendingByDeliverable.set(s.deliverable_id, { id: s.id, drive_url: s.drive_url, file_name: s.file_name });
+      }
+    }
   }
 
-  // Collect all unique niche tags across fetched deliverables for the filter dropdown
+  // Collect niches and types for filter dropdowns
   const nicheSet = new Set<string>();
   const typeSet = new Set<string>();
   for (const d of deliverables) {
@@ -119,10 +121,11 @@ export default async function DeliverablesPage({
   const availableNiches = Array.from(nicheSet).sort();
   const availableTypes = Array.from(typeSet).sort();
 
-  // Annotate each deliverable with its approved-draft link
+  // Annotate each deliverable with its draft links
   const deliverablesWithDraft = deliverables.map(d => ({
     ...d,
     approved_submission: approvedByDeliverable.get(d.id) ?? null,
+    pending_submission: pendingByDeliverable.get(d.id) ?? null,
   }));
 
   const [{ data: pics }, { data: editors }] = await Promise.all([
@@ -130,44 +133,30 @@ export default async function DeliverablesPage({
     admin.from("profiles").select("id, full_name").eq("role", "editor"),
   ]);
 
-  const isAdsView = filters.view === "ads";
-  // Preserve other filters when switching views
-  const shareParams = new URLSearchParams();
-  for (const [k, v] of Object.entries(filters)) {
-    if (v && k !== "view") shareParams.set(k, v);
-  }
-  const standardHref = `/admin/deliverables${shareParams.toString() ? `?${shareParams.toString()}` : ""}`;
-  shareParams.set("view", "ads");
-  const adsHref = `/admin/deliverables?${shareParams.toString()}`;
+  // Count pending items for the page header
+  const pendingReviewCount = deliverablesWithDraft.filter(d => d.pending_submission).length;
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="text-3xl font-bold text-im8-burgundy">Deliverables</h1>
-        <p className="text-im8-burgundy/60 mt-1">
-          {isAdsView
-            ? "Ads team view — track whitelisting, usage rights, and ad scheduling across partnerships."
-            : "Track every content piece across all active partnerships."}
-        </p>
-        <p className="text-xs text-im8-burgundy/40 mt-1">
-          This tracker mirrors every deliverable set on an approved contract. Edit live dates / view counts here; edit scope on the contract.
-        </p>
-      </div>
-
-      {/* View toggle: Standard ↔ Ads */}
-      <div className="inline-flex bg-im8-sand/40 rounded-lg p-1 gap-1">
-        <Link
-          href={standardHref}
-          className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${!isAdsView ? "bg-white text-im8-burgundy shadow-sm" : "text-im8-burgundy/60 hover:text-im8-burgundy"}`}
-        >
-          Standard
-        </Link>
-        <Link
-          href={adsHref}
-          className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${isAdsView ? "bg-white text-im8-burgundy shadow-sm" : "text-im8-burgundy/60 hover:text-im8-burgundy"}`}
-        >
-          Ads team
-        </Link>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-im8-burgundy">Deliverables</h1>
+          <p className="text-im8-burgundy/60 mt-1">
+            Track every content piece across all active partnerships.
+          </p>
+          <p className="text-xs text-im8-burgundy/40 mt-1">
+            Mirrors every deliverable on approved contracts. Edit live dates / view counts here; edit scope on the contract.
+          </p>
+        </div>
+        {pendingReviewCount > 0 && (
+          <Link
+            href="/admin/review"
+            className="inline-flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-800 text-sm font-medium px-4 py-2 rounded-full hover:bg-amber-100 transition-colors"
+          >
+            <span className="inline-block w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+            {pendingReviewCount} pending review
+          </Link>
+        )}
       </div>
 
       <DeliverablesTable

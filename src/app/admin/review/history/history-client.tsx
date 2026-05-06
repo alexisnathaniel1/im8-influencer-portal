@@ -26,15 +26,15 @@ function timeAgo(dateStr: string): string {
   const diffSecs = Math.floor(diffMs / 1000);
   if (diffSecs < 60) return "just now";
   const diffMins = Math.floor(diffSecs / 60);
-  if (diffMins < 60) return `${diffMins} minute${diffMins === 1 ? "" : "s"} ago`;
+  if (diffMins < 60) return `${diffMins}m ago`;
   const diffHours = Math.floor(diffMins / 60);
-  if (diffHours < 24) return `${diffHours} hour${diffHours === 1 ? "" : "s"} ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
   const diffDays = Math.floor(diffHours / 24);
-  if (diffDays < 30) return `${diffDays} day${diffDays === 1 ? "" : "s"} ago`;
+  if (diffDays < 30) return `${diffDays}d ago`;
   const diffMonths = Math.floor(diffDays / 30);
-  if (diffMonths < 12) return `${diffMonths} month${diffMonths === 1 ? "" : "s"} ago`;
+  if (diffMonths < 12) return `${diffMonths}mo ago`;
   const diffYears = Math.floor(diffMonths / 12);
-  return `${diffYears} year${diffYears === 1 ? "" : "s"} ago`;
+  return `${diffYears}y ago`;
 }
 
 interface ActionPillConfig {
@@ -45,7 +45,7 @@ interface ActionPillConfig {
 function getActionPill(action: string): ActionPillConfig {
   switch (action) {
     case "submission_approved":
-      return { label: "✓ Approved", className: "bg-green-100 text-green-800" };
+      return { label: "✓ Approved", className: "bg-lime-100 text-lime-800" };
     case "submission_revision_requested":
       return { label: "↺ Revision", className: "bg-orange-100 text-orange-800" };
     case "submission_deleted":
@@ -53,21 +53,23 @@ function getActionPill(action: string): ActionPillConfig {
     case "submission_edited":
       return { label: "✎ Edited", className: "bg-blue-100 text-blue-800" };
     case "submission_undone":
-      return { label: "↩ Undone", className: "bg-slate-100 text-slate-700" };
+      return { label: "↩ Undone", className: "bg-slate-100 text-slate-600" };
     case "submission_logged_manually":
     case "script_logged_manually":
       return { label: "+ Logged", className: "bg-gray-100 text-gray-700" };
     default:
-      return { label: action, className: "bg-gray-100 text-gray-600" };
+      return { label: action.replace("submission_", "").replace("_", " "), className: "bg-gray-100 text-gray-600" };
   }
 }
 
-function describeEvent(event: AuditEvent): string {
+function describeEvent(event: AuditEvent): { main: string; sub?: string } {
   const b = event.before ?? {};
-  const influencerName = b.influencer_name as string | undefined;
-  const deliverableType = b.deliverable_type as string | undefined;
-  const deliverableSeq = b.deliverable_sequence as number | undefined;
-  const variantLabel = b.variant_label as string | undefined;
+  const a = event.after ?? {};
+
+  const influencerName = (b.influencer_name ?? a.influencer_name) as string | undefined;
+  const deliverableType = (b.deliverable_type ?? a.deliverable_type) as string | undefined;
+  const deliverableSeq = (b.deliverable_sequence ?? a.deliverable_sequence) as number | undefined;
+  const variantLabel = (b.variant_label ?? a.variant_label) as string | undefined;
 
   const parts: string[] = [];
 
@@ -78,18 +80,41 @@ function describeEvent(event: AuditEvent): string {
   if (deliverableType) {
     let delivPart = deliverableType;
     if (deliverableSeq != null) delivPart += ` #${deliverableSeq}`;
-    if (variantLabel) delivPart += ` (${variantLabel})`;
+    if (variantLabel) delivPart += ` — ${variantLabel}`;
     parts.push(delivPart);
   } else if (variantLabel) {
     parts.push(variantLabel);
   }
 
-  if (parts.length > 0) {
-    return parts.join(" — ");
+  // For manually logged events: try to parse from file_name in after
+  if (parts.length === 0 && (event.action === "submission_logged_manually" || event.action === "script_logged_manually")) {
+    const primary = a.primary as Record<string, unknown> | undefined;
+    const fileName = (primary?.file_name as string | undefined)
+      ?? (Array.isArray(a.assets) && a.assets.length > 0
+        ? ((a.assets[0] as Record<string, unknown>)?.file_name as string | undefined)
+        : undefined);
+    if (fileName) {
+      // Humanize: rose_harvey_Contract1_IGR05_Hook1_DRAFT_1 → "rose harvey · IGR05 · Hook1 · Draft 1"
+      const cleaned = fileName
+        .replace(/_/g, " ")
+        .replace(/\s+(DRAFT|SCRIPT)\s+(\d+)$/i, " · Draft $2")
+        .replace(/Contract\s*\d+\s*/i, "")
+        .trim();
+      return { main: cleaned };
+    }
+    // Last resort: show asset count if available
+    const assetCount = a.assetCount as number | undefined;
+    if (assetCount && assetCount > 1) {
+      return { main: `${assetCount} assets logged`, sub: `Deal: ${(a.dealId as string | undefined)?.slice(0, 8) ?? "?"}` };
+    }
   }
 
-  // Fallback: truncated entity ID
-  return event.entity_id.slice(0, 8) + "…";
+  if (parts.length > 0) {
+    return { main: parts.join(" — ") };
+  }
+
+  // Absolute fallback: truncated entity ID
+  return { main: event.entity_id.slice(0, 8) + "…" };
 }
 
 export default function HistoryClient({ events }: Props) {
@@ -109,7 +134,6 @@ export default function HistoryClient({ events }: Props) {
         alert(`Undo failed: ${(json as Record<string, unknown>).error ?? res.statusText}`);
         return;
       }
-      // Optimistic UI: mark as undone
       setUndoneIds((prev) => new Set(prev).add(event.id));
       setLocalEvents((prev) =>
         prev.map((e) =>
@@ -152,52 +176,81 @@ export default function HistoryClient({ events }: Props) {
               const wasUndone = undoneIds.has(event.id);
               const isLoading = loadingIds.has(event.id);
               const showUndo = canUndo(event.action) && !wasUndone;
-              const description = describeEvent(event);
+              const { main: description, sub: descSub } = describeEvent(event);
               const actorRaw = event.actor;
               const actorName = Array.isArray(actorRaw)
                 ? (actorRaw[0]?.full_name ?? "System")
                 : (actorRaw?.full_name ?? "System");
 
+              // Extract feedback for revision events
+              const a = event.after ?? {};
+              const feedbackContent = (a.feedback as string | undefined)?.trim();
+              const feedbackCaption = (a.feedback_caption as string | undefined)?.trim();
+              const hasFeedback = feedbackContent || feedbackCaption;
+
               return (
-                <div key={event.id} className="flex items-center gap-4 py-3 first:pt-0 last:pb-0">
-                  {/* Action pill */}
-                  <span
-                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold flex-shrink-0 ${pill.className}`}
-                  >
-                    {pill.label}
-                  </span>
+                <div key={event.id} className="py-3.5 first:pt-0 last:pb-0">
+                  <div className="flex items-center gap-3">
+                    {/* Action pill */}
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold flex-shrink-0 ${pill.className}`}>
+                      {pill.label}
+                    </span>
 
-                  {/* Who */}
-                  <span className="text-sm font-medium text-im8-burgundy w-32 flex-shrink-0 truncate" title={actorName}>
-                    {actorName}
-                  </span>
+                    {/* Who */}
+                    <span className="text-sm font-medium text-im8-burgundy w-32 flex-shrink-0 truncate" title={actorName}>
+                      {actorName}
+                    </span>
 
-                  {/* What */}
-                  <span className="text-sm text-im8-burgundy/70 flex-1 min-w-0 truncate" title={description}>
-                    {description}
-                  </span>
+                    {/* What */}
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm text-im8-burgundy/80 block truncate" title={description}>
+                        {description}
+                      </span>
+                      {descSub && (
+                        <span className="text-xs text-im8-burgundy/40">{descSub}</span>
+                      )}
+                    </div>
 
-                  {/* When */}
-                  <span
-                    className="text-xs text-im8-burgundy/40 flex-shrink-0 whitespace-nowrap"
-                    title={new Date(event.created_at).toLocaleString()}
-                  >
-                    {timeAgo(event.created_at)}
-                  </span>
+                    {/* When */}
+                    <span
+                      className="text-xs text-im8-burgundy/40 flex-shrink-0 whitespace-nowrap"
+                      title={new Date(event.created_at).toLocaleString()}
+                    >
+                      {timeAgo(event.created_at)}
+                    </span>
 
-                  {/* Undo button */}
-                  <div className="w-16 flex-shrink-0 flex justify-end">
-                    {showUndo && (
-                      <button
-                        type="button"
-                        onClick={() => handleUndo(event)}
-                        disabled={isLoading}
-                        className="text-xs font-bold text-im8-burgundy/50 hover:text-im8-burgundy border border-im8-stone/40 rounded-full px-2.5 py-0.5 transition-colors disabled:opacity-40"
-                      >
-                        {isLoading ? "…" : "Undo"}
-                      </button>
-                    )}
+                    {/* Undo button */}
+                    <div className="w-16 flex-shrink-0 flex justify-end">
+                      {showUndo && (
+                        <button
+                          type="button"
+                          onClick={() => handleUndo(event)}
+                          disabled={isLoading}
+                          className="text-xs font-bold text-im8-burgundy/50 hover:text-im8-burgundy border border-im8-stone/40 rounded-full px-2.5 py-0.5 transition-colors disabled:opacity-40"
+                        >
+                          {isLoading ? "…" : "Undo"}
+                        </button>
+                      )}
+                    </div>
                   </div>
+
+                  {/* Feedback text under revision events */}
+                  {hasFeedback && event.action === "submission_revision_requested" && (
+                    <div className="mt-2 ml-[calc(theme(spacing.10)+theme(spacing.3)+theme(spacing.32)+theme(spacing.3))] space-y-1.5">
+                      {feedbackContent && (
+                        <div className="text-xs bg-orange-50 border border-orange-100 rounded-lg px-3 py-2 text-orange-900">
+                          <span className="font-semibold text-orange-700 block mb-0.5">Content feedback</span>
+                          {feedbackContent}
+                        </div>
+                      )}
+                      {feedbackCaption && (
+                        <div className="text-xs bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 text-amber-900">
+                          <span className="font-semibold text-amber-700 block mb-0.5">Caption feedback</span>
+                          {feedbackCaption}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}

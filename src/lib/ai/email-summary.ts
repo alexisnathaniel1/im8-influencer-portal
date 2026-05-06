@@ -31,9 +31,11 @@ export async function summarizeEmail(email: {
   from_email: string;
   subject: string;
   body_text: string | null;
-}): Promise<EmailSummary | null> {
+}): Promise<EmailSummary> {
   const apiKey = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_AI_API_KEY;
-  if (!apiKey) return null;
+  if (!apiKey) {
+    throw new Error("GEMINI_API_KEY is not set in environment");
+  }
 
   const fromLabel = email.from_name ? `${email.from_name} <${email.from_email}>` : email.from_email;
   const emailText = [
@@ -43,31 +45,52 @@ export async function summarizeEmail(email: {
     email.body_text?.slice(0, 6000) ?? "(no body)",
   ].join("\n");
 
-  try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.0-flash",
-      systemInstruction: SYSTEM_PROMPT,
-    });
+  // Try newest model first, fall back to stable if it fails
+  const modelNames = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-latest"];
 
-    const result = await model.generateContent(
-      `Summarize this email received at partners@im8health.com:\n\n${emailText}`
-    );
+  for (const modelName of modelNames) {
+    try {
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        systemInstruction: SYSTEM_PROMPT,
+      });
 
-    const text = result.response.text();
-    const start = text.indexOf("{");
-    const end = text.lastIndexOf("}");
-    if (start === -1 || end === -1) return null;
+      const result = await model.generateContent(
+        `Summarize this email received at partners@im8health.com:\n\n${emailText}`
+      );
 
-    const parsed = JSON.parse(text.slice(start, end + 1)) as Partial<EmailSummary>;
-    if (typeof parsed.summary !== "string") return null;
+      const text = result.response.text();
+      const start = text.indexOf("{");
+      const end = text.lastIndexOf("}");
+      if (start === -1 || end === -1) {
+        console.warn("[ai/email-summary] Response not valid JSON, raw:", text.slice(0, 300));
+        // Throw so the caller sees the actual problem rather than a silent null
+        throw new Error(`Gemini (${modelName}) returned non-JSON: "${text.slice(0, 120)}"`);
+      }
 
-    return {
-      summary: parsed.summary,
-      next_steps: Array.isArray(parsed.next_steps) ? parsed.next_steps.filter(s => typeof s === "string") : [],
-    };
-  } catch (err) {
-    console.error("[ai/email-summary] Error:", err);
-    return null;
+      const parsed = JSON.parse(text.slice(start, end + 1)) as Partial<EmailSummary>;
+      if (typeof parsed.summary !== "string") {
+        throw new Error(`Gemini (${modelName}) JSON missing 'summary' field`);
+      }
+
+      return {
+        summary: parsed.summary,
+        next_steps: Array.isArray(parsed.next_steps) ? parsed.next_steps.filter(s => typeof s === "string") : [],
+      };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      // Model not found / not available for this key → try next
+      if (msg.includes("not found") || msg.includes("404") || msg.includes("not supported") || msg.includes("MODEL_NOT_FOUND")) {
+        console.warn(`[ai/email-summary] Model ${modelName} unavailable, trying next`);
+        continue;
+      }
+      // Any other error (auth, quota, network, bad JSON) — re-throw so the caller
+      // captures the real message instead of receiving a silent null.
+      console.error(`[ai/email-summary] Error with ${modelName}:`, err);
+      throw err;
+    }
   }
+
+  throw new Error("All Gemini models unavailable for this API key — check that GEMINI_API_KEY has access to the Gemini API (not just Google Cloud)");
 }

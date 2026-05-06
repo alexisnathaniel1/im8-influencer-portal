@@ -28,12 +28,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  // Bail early with a clear error if the API key is missing — no point hitting 50 emails
+  const geminiKey = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_AI_API_KEY;
+  if (!geminiKey) {
+    return NextResponse.json({ error: "GEMINI_API_KEY environment variable is not set" }, { status: 500 });
+  }
+
   if (!pending || pending.length === 0) {
     return NextResponse.json({ ok: true, processed: 0, succeeded: 0, message: "All emails already summarized" });
   }
 
   let succeeded = 0;
   let failed = 0;
+  let firstError: string | null = null;
 
   for (const row of pending) {
     try {
@@ -43,18 +50,20 @@ export async function POST(request: Request) {
         subject: row.subject as string,
         body_text: row.body_text as string | null,
       });
-      if (result) {
-        await admin
-          .from("inbox_emails")
-          .update({ ai_summary: result.summary, ai_next_steps: result.next_steps })
-          .eq("id", row.id);
-        succeeded++;
-      } else {
-        failed++;
-      }
+      await admin
+        .from("inbox_emails")
+        .update({ ai_summary: result.summary, ai_next_steps: result.next_steps })
+        .eq("id", row.id);
+      succeeded++;
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
       console.error(`[inbox/summarize-all] failed ${row.id}:`, err);
+      if (!firstError) firstError = msg;
       failed++;
+      // Auth / quota errors affect every email — bail out of the loop early
+      if (msg.includes("401") || msg.includes("403") || msg.includes("API_KEY") || msg.includes("API key") || msg.includes("quota") || msg.includes("unavailable")) {
+        break;
+      }
     }
   }
 
@@ -63,6 +72,7 @@ export async function POST(request: Request) {
     processed: pending.length,
     succeeded,
     failed,
+    firstError: failed > 0 ? firstError : undefined,
     remaining: pending.length === limit ? "Run again to process more" : 0,
   });
 }
