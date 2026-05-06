@@ -5,6 +5,7 @@ import { findFileInFolder, extractFolderId } from "@/lib/google/drive";
 import { performAIReview } from "@/lib/ai-review/review";
 import { createTransporter, EMAIL_FROM } from "@/lib/email/client";
 import { contentSubmittedTemplate } from "@/lib/email/templates/content-submitted";
+import { notifyContentSubmitted } from "@/lib/slack/notify";
 
 export const maxDuration = 60;
 
@@ -108,12 +109,35 @@ export async function POST(request: Request) {
 
             const pic = deliv?.assigned_pic as unknown as { email: string; full_name: string } | null;
             const toEmail = pic?.email ?? process.env.SMTP_USER;
+
+            // Compute draft number: count previous submissions for same deliverable
+            const { count: prevCount } = await admin
+              .from("submissions")
+              .select("id", { count: "exact", head: true })
+              .eq("deliverable_id", deliverableId);
+            const draftNumber = (prevCount ?? 0); // already inserted, so count includes this one
+
+            const deliverableType = deliv?.deliverable_type ?? "Content";
+            const sequence = (deliv?.sequence as number | null) ?? null;
+            const creatorName = dealRow?.influencer_name ?? "Creator";
+            const deliverableLabel = sequence
+              ? `${deliverableType} #${sequence}`
+              : deliverableType;
+
+            // Slack notification (static import at top of file)
+            notifyContentSubmitted({
+              influencerName: creatorName,
+              deliverableLabel,
+              draftNumber: Math.max(1, draftNumber),
+              dealId: dealId,
+            });
+
             if (!toEmail) return;
 
             const { subject, text, html } = contentSubmittedTemplate({
-              creatorName: dealRow?.influencer_name ?? "Creator",
-              deliverableType: deliv?.deliverable_type ?? "Content",
-              sequence: (deliv?.sequence as number | null) ?? null,
+              creatorName,
+              deliverableType,
+              sequence,
               dealId: dealId,
               submittedAt: new Date().toISOString(),
               portalUrl: process.env.NEXT_PUBLIC_APP_URL,

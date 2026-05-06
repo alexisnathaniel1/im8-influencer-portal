@@ -110,6 +110,36 @@ export async function getRecentInboxEmails(admin: SupabaseClient, limit = 5) {
   return { count: (data ?? []).length, items: data ?? [] };
 }
 
+// Financial summary — total active monthly retainer spend across all active deals.
+// Only shown to admin + management roles (gated in the page component).
+export type FinancialSummary = {
+  totalMonthlyUsd: number;         // sum of monthly_rate_cents / 100
+  activePartners: number;          // number of deals included
+  byPlatform: Record<string, number>; // platform → monthly USD
+};
+
+export async function getFinancialSummary(admin: SupabaseClient): Promise<FinancialSummary> {
+  const { data } = await admin
+    .from("deals")
+    .select("monthly_rate_cents, platform_primary")
+    .in("status", ["approved", "contracted", "live"]);
+
+  const rows = data ?? [];
+  const totalMonthlyUsd = rows.reduce(
+    (sum, d) => sum + ((d.monthly_rate_cents as number | null) ?? 0),
+    0,
+  ) / 100;
+
+  const byPlatform: Record<string, number> = {};
+  for (const d of rows) {
+    const platform = (d.platform_primary as string | null) ?? "Other";
+    const monthly = ((d.monthly_rate_cents as number | null) ?? 0) / 100;
+    byPlatform[platform] = (byPlatform[platform] ?? 0) + monthly;
+  }
+
+  return { totalMonthlyUsd, activePartners: rows.length, byPlatform };
+}
+
 // 7-day outlook: per day, how many briefs are due, how many reviews are due,
 // and how many posts are scheduled to go live.
 export type OutlookDay = {

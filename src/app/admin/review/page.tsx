@@ -201,7 +201,18 @@ export default function AdminReviewPage() {
             <Link href="/admin" className="text-sm text-im8-red hover:underline mb-1 inline-block">&larr; Dashboard</Link>
             <h1 className="text-2xl font-bold text-im8-burgundy">Review Queue</h1>
           </div>
-          <span className="text-sm text-im8-burgundy/60 font-medium">{submissions.length} pending</span>
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-im8-burgundy/60 font-medium">{submissions.length} pending</span>
+            <Link
+              href="/admin/review/log"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-im8-burgundy text-white text-xs font-bold uppercase tracking-[0.08em] hover:bg-im8-dark transition-colors"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+              Log received content
+            </Link>
+          </div>
         </div>
 
         <Card padding="md" className="mb-6">

@@ -9,6 +9,8 @@ import {
   getContractsExpiringSoon,
   getRecentInboxEmails,
   getWeeklyOutlook,
+  getFinancialSummary,
+  type FinancialSummary,
 } from "@/lib/dashboard/queries";
 import { summarizeEmail } from "@/lib/email/summary";
 
@@ -42,6 +44,16 @@ export default async function WorkflowDashboardPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
 
+  const { data: currentProfile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  const canSeeFinancials = ["admin", "management"].includes(
+    (currentProfile as { role?: string } | null)?.role ?? "",
+  );
+
   const admin = createAdminClient();
 
   const [
@@ -51,6 +63,7 @@ export default async function WorkflowDashboardPage() {
     contractsExpiring,
     recentEmails,
     outlook,
+    financials,
   ] = await Promise.all([
     getBriefsPendingToSend(admin),
     getSubmissionsAwaitingReview(admin),
@@ -58,6 +71,7 @@ export default async function WorkflowDashboardPage() {
     getContractsExpiringSoon(admin, 14),
     getRecentInboxEmails(admin, 5),
     getWeeklyOutlook(admin),
+    canSeeFinancials ? getFinancialSummary(admin) : Promise.resolve(null as FinancialSummary | null),
   ]);
 
   const kpiCards = [
@@ -122,6 +136,51 @@ export default async function WorkflowDashboardPage() {
           </Link>
         ))}
       </div>
+
+      {/* Band 1b — Financial summary (admin + management only) */}
+      {canSeeFinancials && financials && (
+        <div className="bg-white rounded-xl border border-im8-stone/30 p-5">
+          <div className="flex flex-wrap items-center gap-6">
+            <div>
+              <div className="text-[11px] font-bold text-im8-muted uppercase tracking-[0.1em] mb-1">
+                💰 Active Monthly Spend
+              </div>
+              <div className="text-[28px] font-bold text-im8-gold leading-none">
+                {financials.totalMonthlyUsd.toLocaleString("en-US", {
+                  style: "currency",
+                  currency: "USD",
+                  maximumFractionDigits: 0,
+                })}
+                <span className="text-[14px] font-normal text-im8-muted ml-1">/month</span>
+              </div>
+              <div className="text-[12px] text-im8-muted mt-1">
+                {financials.activePartners} active partner{financials.activePartners !== 1 ? "s" : ""}
+              </div>
+            </div>
+
+            {Object.keys(financials.byPlatform).length > 0 && (
+              <div className="flex flex-wrap gap-4 ml-auto">
+                {Object.entries(financials.byPlatform)
+                  .sort(([, a], [, b]) => b - a)
+                  .map(([platform, amount]) => (
+                    <div key={platform} className="text-center">
+                      <div className="text-[11px] font-bold text-im8-muted uppercase tracking-[0.08em]">
+                        {platform}
+                      </div>
+                      <div className="text-[15px] font-semibold text-im8-maroon mt-0.5">
+                        {amount.toLocaleString("en-US", {
+                          style: "currency",
+                          currency: "USD",
+                          maximumFractionDigits: 0,
+                        })}
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Band 2 — Action lists + Recent emails */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">

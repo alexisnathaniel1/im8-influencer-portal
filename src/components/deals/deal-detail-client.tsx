@@ -2233,6 +2233,49 @@ function DeliverableBriefRow({
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [sendStatus, setSendStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState("");
+
+  // Local done state — lets us toggle without a full page reload
+  const initialDone = ["approved", "live", "completed"].includes(
+    (trackerRow?.status as string | undefined) ?? "",
+  );
+  const [isDone, setIsDone] = useState(initialDone);
+  const [doneLoading, setDoneLoading] = useState(false);
+
+  async function toggleDone() {
+    if (doneLoading) return;
+    setDoneLoading(true);
+    const next = isDone ? "pending" : "live";
+    try {
+      let id = rowId;
+      // If no tracker row yet, create one first via the deliverable-brief endpoint
+      if (!id) {
+        const res = await fetch(`/api/deals/${dealId}/deliverable-brief`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code: deliverableType, sequence, brief_doc_url: null }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          id = data.id as string;
+          setRowId(id);
+        }
+      }
+      if (id) {
+        await fetch(`/api/deliverables/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            status: next,
+            live_date: next === "live" ? new Date().toISOString().split("T")[0] : null,
+          }),
+        });
+        setIsDone(next === "live");
+      }
+    } catch (e) {
+      console.error("toggleDone failed", e);
+    }
+    setDoneLoading(false);
+  }
   const [sentMeta, setSentMeta] = useState<{
     sentAt: string;
     creatorDeadline: string;
@@ -2335,14 +2378,29 @@ function DeliverableBriefRow({
   // deliverables tracker so admins know exactly which row this brief maps to.
   const label = `${deliverableType} #${sequence}`;
 
-  // If this deliverable was already marked done (status = approved/live/completed),
-  // suppress the brief input — there's nothing left to brief the creator on.
-  const trackerStatus = (trackerRow?.status as string | undefined) ?? "pending";
-  const isAlreadyDone = ["approved", "live", "completed"].includes(trackerStatus);
-
-  if (isAlreadyDone) {
+  // If this deliverable is done, show a compact done row with an undo checkbox.
+  if (isDone) {
     return (
       <div className="px-5 py-3 flex items-center gap-3 flex-wrap">
+        {/* Done checkbox — click to undo */}
+        <button
+          type="button"
+          onClick={toggleDone}
+          disabled={doneLoading}
+          title="Mark as not done"
+          className="w-5 h-5 rounded border-2 bg-emerald-500 border-emerald-500 text-white flex items-center justify-center hover:bg-red-400 hover:border-red-400 transition-colors shrink-0"
+        >
+          {doneLoading ? (
+            <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+            </svg>
+          ) : (
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+            </svg>
+          )}
+        </button>
         <div className="shrink-0 w-24">
           <span className="inline-block px-2 py-0.5 rounded text-xs font-bold font-mono bg-purple-100 text-purple-700">
             {label}
@@ -2353,9 +2411,9 @@ function DeliverableBriefRow({
             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
             </svg>
-            Already completed
+            Completed
           </span>
-          <span className="text-xs text-im8-burgundy/50 italic">no brief needed</span>
+          <span className="text-xs text-im8-burgundy/40 italic">no brief needed · click ✓ to undo</span>
         </div>
       </div>
     );
@@ -2364,6 +2422,21 @@ function DeliverableBriefRow({
   return (
     <div className="px-5 py-3 space-y-2">
       <div className="flex items-center gap-3 flex-wrap">
+        {/* Done checkbox — click to mark as done */}
+        <button
+          type="button"
+          onClick={toggleDone}
+          disabled={doneLoading}
+          title="Mark as done"
+          className="w-5 h-5 rounded border-2 bg-white border-im8-stone hover:border-emerald-500 flex items-center justify-center transition-colors shrink-0"
+        >
+          {doneLoading && (
+            <svg className="w-3 h-3 animate-spin text-emerald-500" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+            </svg>
+          )}
+        </button>
         <div className="shrink-0 w-24">
           <span className="inline-block px-2 py-0.5 rounded text-xs font-bold font-mono bg-purple-100 text-purple-700">
             {label}

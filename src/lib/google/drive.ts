@@ -284,6 +284,44 @@ async function grantServiceAccountWriteAccess(drive: ReturnType<typeof google.dr
   }
 }
 
+/**
+ * Copy a Drive file into a destination folder with a new name.
+ * The file extension from the source is preserved if `newName` has no extension.
+ * Throws if the copy fails (e.g. service account lacks read access on the source).
+ */
+export async function copyDriveFile(
+  sourceFileId: string,
+  destFolderId: string,
+  newName: string,
+): Promise<{ copiedFileId: string; webViewLink: string }> {
+  const auth = getAuth();
+  const drive = google.drive({ version: "v3", auth });
+
+  // Fetch source file name to preserve extension
+  let sourceName = "";
+  try {
+    const meta = await drive.files.get({ fileId: sourceFileId, fields: "name", supportsAllDrives: true });
+    sourceName = meta.data.name || "";
+  } catch { /* ignore — no extension will be appended */ }
+
+  const extMatch = sourceName.match(/\.[^.]+$/);
+  const extension = extMatch ? extMatch[0] : "";
+  const finalName = newName.includes(".") ? newName : `${newName}${extension}`;
+
+  const copied = await drive.files.copy({
+    fileId: sourceFileId,
+    requestBody: { name: finalName, parents: [destFolderId] },
+    fields: "id, webViewLink",
+    supportsAllDrives: true,
+  });
+
+  if (!copied.data.id || !copied.data.webViewLink) {
+    throw new Error("Drive copy did not return file ID or link");
+  }
+
+  return { copiedFileId: copied.data.id, webViewLink: copied.data.webViewLink };
+}
+
 export async function renameDriveFile(fileId: string, newName: string): Promise<{ renamed: boolean; reason?: string }> {
   const auth = getAuth();
   const drive = google.drive({ version: "v3", auth });

@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createTransporter, EMAIL_FROM } from "@/lib/email/client";
 import { contentApprovedTemplate } from "@/lib/email/templates/content-approved";
 import { revisionRequestedTemplate } from "@/lib/email/templates/revision-requested";
+import { notifyContentApproved, notifyRevisionRequested } from "@/lib/slack/notify";
 
 // Called fire-and-forget from the review page after a submission status change.
 // Sends the appropriate email to the creator/agency.
@@ -16,6 +17,13 @@ export async function POST(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { data: adminProfile } = await supabase
+    .from("profiles")
+    .select("full_name")
+    .eq("id", user.id)
+    .single();
+  const adminName = (adminProfile as { full_name?: string } | null)?.full_name ?? user.email ?? "Admin";
 
   const { action, feedback } = await request.json() as {
     action: "approved" | "revision_requested" | "rejected";
@@ -56,6 +64,27 @@ export async function POST(
       .single();
     deliverableType = deliv?.deliverable_type ?? "Content";
     sequence = (deliv?.sequence as number | null) ?? null;
+  }
+
+  const deliverableLabel = sequence ? `${deliverableType} #${sequence}` : deliverableType;
+  const dealId = submission.deal_id as string;
+
+  // ── Slack notification (fire-and-forget) ─────────────────────────────────
+  if (action === "approved") {
+    notifyContentApproved({
+      influencerName: deal.influencer_name ?? "Creator",
+      deliverableLabel,
+      adminName,
+      dealId,
+    });
+  } else if (action === "revision_requested") {
+    notifyRevisionRequested({
+      influencerName: deal.influencer_name ?? "Creator",
+      deliverableLabel,
+      adminName,
+      feedbackPreview: feedback ?? null,
+      dealId,
+    });
   }
 
   try {
