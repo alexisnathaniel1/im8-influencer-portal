@@ -224,6 +224,59 @@ export default function AdminReviewPage() {
     ids.forEach(syncContentLog);
   }
 
+  async function handleDelete(submissionId: string) {
+    const sub = submissions.find((s) => s.id === submissionId);
+    const label = sub
+      ? `${sub.influencer_name} — ${sub.deliverable_type ?? "submission"}${sub.deliverable_sequence ? ` #${sub.deliverable_sequence}` : ""}`
+      : "this submission";
+    if (!confirm(`Delete ${label}?\n\nThe submissions row will be removed from the review queue. The Drive file(s) will be left in place — clean those up manually if needed.`)) {
+      return;
+    }
+    setActionLoading(submissionId);
+    try {
+      const res = await fetch(`/api/submissions/${submissionId}`, { method: "DELETE" });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        alert(`Could not delete: ${json.error ?? res.statusText}`);
+        return;
+      }
+      setSubmissions((prev) => prev.filter((s) => s.id !== submissionId));
+      setSelectedIds((prev) => { const next = new Set(prev); next.delete(submissionId); return next; });
+      if (expandedId === submissionId) setExpandedId(null);
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  async function handleBulkDelete() {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`Delete ${selectedIds.size} submission${selectedIds.size === 1 ? "" : "s"}?\n\nThe submissions rows will be removed from the review queue. Drive files are left in place.`)) {
+      return;
+    }
+    setBulkLoading(true);
+    const ids = Array.from(selectedIds);
+    const results = await Promise.allSettled(
+      ids.map((id) => fetch(`/api/submissions/${id}`, { method: "DELETE" })),
+    );
+    const failed = results.filter((r) => r.status === "rejected" || (r.status === "fulfilled" && !r.value.ok));
+    if (failed.length > 0) {
+      alert(`${failed.length} of ${ids.length} could not be deleted. The rest were removed.`);
+    }
+    const succeeded = new Set(
+      ids.filter((_, i) => {
+        const r = results[i];
+        return r.status === "fulfilled" && r.value.ok;
+      }),
+    );
+    setSubmissions((prev) => prev.filter((s) => !succeeded.has(s.id)));
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      succeeded.forEach((id) => next.delete(id));
+      return next;
+    });
+    setBulkLoading(false);
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-im8-offwhite flex items-center justify-center">
@@ -264,9 +317,22 @@ export default function AdminReviewPage() {
               />
             </div>
             {selectedIds.size > 0 && (
-              <Button onClick={handleBulkApprove} loading={bulkLoading} size="sm">
-                Approve Selected ({selectedIds.size})
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button onClick={handleBulkApprove} loading={bulkLoading} size="sm">
+                  Approve Selected ({selectedIds.size})
+                </Button>
+                <button
+                  type="button"
+                  onClick={handleBulkDelete}
+                  disabled={bulkLoading}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-50 text-red-700 text-xs font-bold uppercase tracking-[0.08em] hover:bg-red-100 border border-red-200 transition-colors disabled:opacity-50"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" />
+                  </svg>
+                  Delete ({selectedIds.size})
+                </button>
+              </div>
             )}
           </div>
         </Card>
@@ -350,6 +416,18 @@ export default function AdminReviewPage() {
                   <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                     <Button size="sm" variant="primary" onClick={() => handleApprove(sub.id)} loading={actionLoading === sub.id}>Approve</Button>
                     <Button size="sm" variant="outline" onClick={() => handleRevisionRequest(sub.id)} loading={actionLoading === sub.id}>Revise</Button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(sub.id)}
+                      disabled={actionLoading === sub.id}
+                      title="Delete submission (duplicates / tests)"
+                      aria-label="Delete submission"
+                      className="p-1.5 rounded-md text-im8-burgundy/40 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-40"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" />
+                      </svg>
+                    </button>
                   </div>
                   <span className="text-im8-burgundy/30 text-lg">{isExpanded ? "▾" : "▸"}</span>
                 </div>
