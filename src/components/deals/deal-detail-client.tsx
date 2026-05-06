@@ -1479,34 +1479,77 @@ function EditableContractSection({
           <div>
             <div className="text-xs font-semibold text-im8-burgundy/60 uppercase tracking-wide mb-2">Deliverables</div>
 
-            {/* Countable deliverables */}
-            <div className="space-y-2.5 mb-4">
-              {Object.entries(DELIVERABLE_LABELS)
-                .filter(([code]) => !BINARY_DELIVERABLE_CODES.has(code))
-                .map(([code, label]) => {
-                  const count = deliverableCounts[code] ?? 0;
-                  return (
-                    <div key={code} className="flex items-center gap-3">
-                      <span className="text-sm text-im8-burgundy flex-1">{label}</span>
-                      <div className="flex items-center gap-1.5">
-                        <button type="button"
-                          onClick={() => setCount(code, Math.max(0, count - 1))}
-                          disabled={count === 0}
-                          className={`w-7 h-7 rounded border text-sm font-medium transition-colors ${count > 0 ? "border-im8-stone/40 hover:bg-im8-sand text-im8-burgundy" : "border-im8-stone/20 text-im8-burgundy/20 cursor-not-allowed"}`}>
-                          −
-                        </button>
-                        <span className={`w-8 text-center text-sm font-semibold tabular-nums ${count > 0 ? "text-im8-burgundy" : "text-im8-burgundy/25"}`}>
-                          {count}
-                        </span>
-                        <button type="button"
-                          onClick={() => setCount(code, count + 1)}
-                          className="w-7 h-7 rounded border border-im8-stone/40 hover:bg-im8-sand text-im8-burgundy text-sm font-medium transition-colors">
-                          +
-                        </button>
+            {/* Countable deliverables — only render those that are actually
+                selected. Unselected codes are accessible via the + Add picker
+                below, keeping the UI focused on what's actually in the deal. */}
+            <div className="space-y-2 mb-3">
+              {(() => {
+                const countableEntries = Object.entries(DELIVERABLE_LABELS)
+                  .filter(([code]) => !BINARY_DELIVERABLE_CODES.has(code));
+                const selected = countableEntries.filter(([code]) => (deliverableCounts[code] ?? 0) > 0);
+                const available = countableEntries.filter(([code]) => (deliverableCounts[code] ?? 0) === 0);
+
+                return (
+                  <>
+                    {selected.length === 0 ? (
+                      <p className="text-xs text-im8-burgundy/40 italic py-2">
+                        No deliverables yet. Use <strong>+ Add deliverable</strong> to add one.
+                      </p>
+                    ) : (
+                      selected.map(([code, label]) => {
+                        const count = deliverableCounts[code] ?? 0;
+                        return (
+                          <div key={code} className="flex items-center gap-3 px-3 py-2 bg-im8-sand/30 border border-im8-stone/15 rounded-lg">
+                            <span className="text-sm text-im8-burgundy font-medium flex-1">{label}</span>
+                            <div className="flex items-center gap-1.5">
+                              <button type="button"
+                                onClick={() => setCount(code, Math.max(0, count - 1))}
+                                className="w-7 h-7 rounded border border-im8-stone/40 hover:bg-white text-im8-burgundy text-sm font-medium transition-colors">
+                                −
+                              </button>
+                              <span className="w-8 text-center text-sm font-semibold tabular-nums text-im8-burgundy">
+                                {count}
+                              </span>
+                              <button type="button"
+                                onClick={() => setCount(code, count + 1)}
+                                className="w-7 h-7 rounded border border-im8-stone/40 hover:bg-white text-im8-burgundy text-sm font-medium transition-colors">
+                                +
+                              </button>
+                              <button type="button"
+                                onClick={() => setCount(code, 0)}
+                                aria-label={`Remove ${label}`}
+                                title="Remove"
+                                className="ml-1 w-7 h-7 rounded text-im8-burgundy/40 hover:text-red-600 hover:bg-red-50 text-base leading-none transition-colors">
+                                ×
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+
+                    {/* Add picker — only show when there are unselected codes. Selecting
+                        an option immediately adds it at count=1; the select then resets. */}
+                    {available.length > 0 && (
+                      <div className="pt-1">
+                        <select
+                          value=""
+                          onChange={e => {
+                            const code = e.target.value;
+                            if (code) setCount(code, 1);
+                          }}
+                          className="text-xs px-3 py-1.5 rounded-lg border border-dashed border-im8-stone/50 bg-white text-im8-burgundy hover:border-im8-red/60 hover:text-im8-red transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-im8-red/30"
+                        >
+                          <option value="" disabled>+ Add deliverable…</option>
+                          {available.map(([code, label]) => (
+                            <option key={code} value={code}>{label}</option>
+                          ))}
+                        </select>
                       </div>
-                    </div>
-                  );
-                })}
+                    )}
+                  </>
+                );
+              })()}
             </div>
 
             {/* Binary rights / extras */}
