@@ -37,6 +37,7 @@ export async function PATCH(
       variant_label?: string | null;
       caption?: string | null;
       drive_url?: string | null;
+      draft_num?: number;
     };
 
     // Only allow the fields we explicitly support editing.
@@ -48,21 +49,41 @@ export async function PATCH(
       }
     }
 
-    if (Object.keys(updates).length === 0) {
-      return NextResponse.json({ error: "No editable fields provided" }, { status: 400 });
-    }
-
     const admin = createAdminClient();
 
     // Snapshot before for audit log.
     const { data: before } = await admin
       .from("submissions")
-      .select("deliverable_id, variant_label, caption, drive_url, file_name")
+      .select("deliverable_id, variant_label, caption, drive_url, file_name, drive_file_id")
       .eq("id", submissionId)
       .single();
 
     if (!before) {
       return NextResponse.json({ error: "Submission not found" }, { status: 404 });
+    }
+
+    // Draft number → rewrite file_name + rename Drive file
+    if (body.draft_num != null && typeof body.draft_num === "number" && body.draft_num > 0) {
+      const currentName = (before.file_name as string | null) ?? "";
+      const isScript = /_SCRIPT_\d+$/.test(currentName);
+      const prefix = isScript ? "SCRIPT" : "DRAFT";
+      const newFileName = currentName.match(/_(DRAFT|SCRIPT)_\d+$/)
+        ? currentName.replace(/_(DRAFT|SCRIPT)_\d+$/, `_${prefix}_${body.draft_num}`)
+        : `${currentName}_${prefix}_${body.draft_num}`;
+
+      if (newFileName !== currentName) {
+        updates["file_name"] = newFileName;
+        // Fire-and-forget Drive rename so the file reflects the corrected number
+        if (before.drive_file_id) {
+          void renameDriveFile(before.drive_file_id as string, newFileName).catch((e) =>
+            console.warn("[submissions/PATCH] Drive rename for draft_num failed", e)
+          );
+        }
+      }
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return NextResponse.json({ error: "No editable fields provided" }, { status: 400 });
     }
 
     const { error: updateError } = await admin

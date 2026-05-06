@@ -57,6 +57,7 @@ interface EditState {
   variant_label: string;
   caption: string;
   drive_url: string;
+  draft_num: number | string;  // string so the input can be empty while typing
 }
 
 export default function AdminReviewPage() {
@@ -70,6 +71,7 @@ export default function AdminReviewPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [bulkLoading, setBulkLoading] = useState(false);
+  const [expandedVideoKey, setExpandedVideoKey] = useState<string | null>(null);
 
   // Edit-in-place state
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -192,6 +194,15 @@ export default function AdminReviewPage() {
       reviewed_by: user?.id ?? null,
       reviewed_at: new Date().toISOString(),
     }).eq("id", submissionId);
+    // Sync deliverable status → approved
+    const approvedSub = submissions.find((s) => s.id === submissionId);
+    if (approvedSub?.deliverable_id) {
+      Promise.resolve(
+        supabase.from("deliverables")
+          .update({ status: "approved" })
+          .eq("id", approvedSub.deliverable_id)
+      ).catch(console.error);
+    }
     setSubmissions((prev) => prev.filter((s) => s.id !== submissionId));
     setSelectedIds((prev) => { const next = new Set(prev); next.delete(submissionId); return next; });
     if (expandedId === submissionId) setExpandedId(null);
@@ -220,6 +231,15 @@ export default function AdminReviewPage() {
       reviewed_by: user?.id ?? null,
       reviewed_at: new Date().toISOString(),
     }).eq("id", submissionId);
+    // Sync deliverable status → in_progress (revision needed)
+    const reviseSub = submissions.find((s) => s.id === submissionId);
+    if (reviseSub?.deliverable_id) {
+      Promise.resolve(
+        supabase.from("deliverables")
+          .update({ status: "in_progress" })
+          .eq("id", reviseSub.deliverable_id)
+      ).catch(console.error);
+    }
     setSubmissions((prev) => prev.filter((s) => s.id !== submissionId));
     setSelectedIds((prev) => { const next = new Set(prev); next.delete(submissionId); return next; });
     if (expandedId === submissionId) setExpandedId(null);
@@ -240,6 +260,18 @@ export default function AdminReviewPage() {
       reviewed_by: user?.id ?? null,
       reviewed_at: new Date().toISOString(),
     }).in("id", ids);
+    // Sync deliverable statuses → approved
+    const deliverableIds = ids
+      .map((id) => submissions.find((s) => s.id === id)?.deliverable_id)
+      .filter((d): d is string => !!d);
+    const uniqueDeliverableIds = [...new Set(deliverableIds)];
+    if (uniqueDeliverableIds.length > 0) {
+      Promise.resolve(
+        supabase.from("deliverables")
+          .update({ status: "approved" })
+          .in("id", uniqueDeliverableIds)
+      ).catch(console.error);
+    }
     setSubmissions((prev) => prev.filter((s) => !selectedIds.has(s.id)));
     setSelectedIds(new Set());
     setBulkLoading(false);
@@ -309,6 +341,7 @@ export default function AdminReviewPage() {
         variant_label: sub.variant_label ?? "",
         caption: sub.caption ?? "",
         drive_url: sub.drive_url ?? "",
+        draft_num: parseDraftNum(sub.file_name) ?? 1,
       },
     }));
     setEditingId(sub.id);
@@ -348,6 +381,7 @@ export default function AdminReviewPage() {
           variant_label: state.variant_label.trim() || null,
           caption: state.caption.trim() || null,
           drive_url: state.drive_url.trim() || null,
+          draft_num: Number(state.draft_num) || 1,
         }),
       });
       if (!res.ok) {
@@ -368,6 +402,7 @@ export default function AdminReviewPage() {
           variant_label: state.variant_label.trim() || null,
           caption: state.caption.trim() || null,
           drive_url: state.drive_url.trim() || s.drive_url,
+          draftNum: Number(state.draft_num) || s.draftNum,
         };
       }));
       cancelEdit(id);
@@ -609,6 +644,22 @@ export default function AdminReviewPage() {
                           />
                         </div>
 
+                        {/* Draft number */}
+                        <div>
+                          <label className="block text-xs font-medium text-im8-burgundy mb-1">
+                            Draft number <span className="text-im8-burgundy/40 font-normal">(use 1 if this was incorrectly logged as Draft 2+)</span>
+                          </label>
+                          <input
+                            type="number"
+                            min={1}
+                            max={20}
+                            value={editState[sub.id].draft_num}
+                            onChange={(e) => setEditState((prev) => ({ ...prev, [sub.id]: { ...prev[sub.id], draft_num: e.target.value } }))}
+                            className="w-24 px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy bg-white focus:outline-none focus:ring-2 focus:ring-im8-red/30"
+                          />
+                          <p className="mt-1 text-[11px] text-im8-burgundy/40">Updating the number also renames the Drive file.</p>
+                        </div>
+
                         <div className="flex items-center gap-2 pt-1">
                           <button
                             type="button"
@@ -629,66 +680,85 @@ export default function AdminReviewPage() {
                       </div>
                     )}
 
-                    {/* Primary asset — the player */}
-                    <div>
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="text-[11px] font-bold text-im8-muted uppercase tracking-[0.08em]">
-                          Primary asset
-                        </span>
-                        <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-purple-50 text-purple-700 font-mono uppercase tracking-wide border border-purple-200">
-                          {sub.variant_label || "Asset"}
-                        </span>
-                      </div>
-                      {fileId && (
-                        <DriveVideo
-                          fileId={fileId}
-                          driveUrl={sub.drive_url ?? undefined}
-                          controls
-                          preload="metadata"
-                          width="100%"
-                          style={{ maxHeight: 360 }}
-                          className="block"
-                          containerClassName="rounded-lg overflow-hidden bg-black"
-                          containerStyle={{ maxWidth: 640, minHeight: 80 }}
-                        />
-                      )}
-                    </div>
-
-                    {/* Additional variants — list with previews */}
-                    {sub.variants.length > 0 && (
-                      <div>
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="text-[11px] font-bold text-im8-muted uppercase tracking-[0.08em]">
-                            Additional assets ({sub.variants.length})
+                    {/* Assets accordion — one video expandable at a time */}
+                    {(() => {
+                      const allAssets = [
+                        {
+                          label: sub.variant_label || "Primary",
+                          fileId,
+                          file_name: sub.file_name,
+                          drive_url: sub.drive_url,
+                          idx: 0,
+                        },
+                        ...sub.variants.map((v, i) => ({
+                          label: v.label || assetLabel(v.asset_type as AssetType),
+                          fileId: v.drive_file_id || (v.drive_url ? extractDriveFileId(v.drive_url) : null),
+                          file_name: v.file_name,
+                          drive_url: v.drive_url,
+                          idx: i + 1,
+                        })),
+                      ];
+                      return (
+                        <div>
+                          <span className="text-[11px] font-bold text-im8-muted uppercase tracking-[0.08em] mb-2 block">
+                            Assets ({allAssets.length})
                           </span>
+                          <ul className="space-y-1.5">
+                            {allAssets.map((asset) => {
+                              const vKey = `${sub.id}__${asset.idx}`;
+                              const isOpen = expandedVideoKey === vKey;
+                              return (
+                                <li key={vKey} className="border border-im8-stone/30 rounded-lg overflow-hidden">
+                                  <div className="flex items-center gap-3 px-3 py-2.5 bg-im8-offwhite/60">
+                                    <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-purple-50 text-purple-700 font-mono uppercase tracking-wide border border-purple-200 flex-shrink-0">
+                                      {asset.label}
+                                    </span>
+                                    <span className="text-xs font-mono text-im8-burgundy/50 truncate flex-1 min-w-0">
+                                      {asset.file_name ?? ""}
+                                    </span>
+                                    <div className="flex items-center gap-2 flex-shrink-0">
+                                      {asset.fileId && (
+                                        <button
+                                          type="button"
+                                          onClick={() => setExpandedVideoKey(isOpen ? null : vKey)}
+                                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-[0.06em] border transition-colors border-im8-stone/40 bg-white hover:border-im8-burgundy/40 text-im8-burgundy"
+                                        >
+                                          {isOpen ? "▾ Hide" : "▶ Play"}
+                                        </button>
+                                      )}
+                                      {asset.drive_url && (
+                                        <a
+                                          href={asset.drive_url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="text-xs text-im8-red hover:underline"
+                                        >
+                                          Open →
+                                        </a>
+                                      )}
+                                    </div>
+                                  </div>
+                                  {isOpen && asset.fileId && (
+                                    <DriveVideo
+                                      fileId={asset.fileId}
+                                      driveUrl={asset.drive_url ?? undefined}
+                                      controls
+                                      autoPlay
+                                      preload="auto"
+                                      width="100%"
+                                      style={{ maxHeight: 420 }}
+                                      className="block"
+                                      containerClassName="rounded-b-lg overflow-hidden bg-black"
+                                      containerStyle={{ maxWidth: "100%", minHeight: 80 }}
+                                    />
+                                  )}
+                                </li>
+                              );
+                            })}
+                          </ul>
                         </div>
-                        <ul className="space-y-2">
-                          {sub.variants.map((v, vIdx) => (
-                            <li
-                              key={`${sub.id}-v${vIdx}`}
-                              className="flex items-center gap-3 bg-im8-offwhite/60 border border-im8-stone/30 rounded-lg p-2.5"
-                            >
-                              <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-purple-50 text-purple-700 font-mono uppercase tracking-wide border border-purple-200 flex-shrink-0">
-                                {v.label || assetLabel(v.asset_type as AssetType)}
-                              </span>
-                              <span className="text-xs font-mono text-im8-burgundy/60 truncate flex-1 min-w-0">
-                                {v.file_name}
-                              </span>
-                              {v.drive_url && (
-                                <a
-                                  href={v.drive_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-xs text-im8-red hover:underline flex-shrink-0"
-                                >
-                                  Open →
-                                </a>
-                              )}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
+                      );
+                    })()}
 
                     {/* Caption */}
                     {sub.caption ? (
