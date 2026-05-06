@@ -104,9 +104,11 @@ type SortKey =
 export default function RosterTable({
   rows,
   initialExpiringOnly = false,
+  canViewRates = false,
 }: {
   rows: RosterRow[];
   initialExpiringOnly?: boolean;
+  canViewRates?: boolean;
 }) {
   const [search, setSearch] = useState("");
   const [statuses, setStatuses] = useState<string[]>([]);
@@ -239,8 +241,8 @@ export default function RosterTable({
 
   function downloadCsv() {
     const headers = [
-      "Influencer", "Email", "Agency", "Platform", "Handle", "Followers",
-      "Niche", "Monthly Rate ($)", "Total ($)", "Months",
+      "Influencer", "Email", "Agency", "Platform", "Handle", "Followers", "Niche",
+      ...(canViewRates ? ["Monthly Rate ($)", "Total ($)", "Months"] : []),
       "Start", "End", "Days Until Expiry", "Contract", "Status", "PIC", "Drive Folder URL",
     ];
     const lines = [headers.join(",")];
@@ -254,9 +256,11 @@ export default function RosterTable({
         handleFor(r) ?? "",
         r.followerCount?.toString() ?? "",
         r.nicheTags.join("; "),
-        r.monthlyRateCents != null ? (r.monthlyRateCents / 100).toString() : "",
-        r.totalRateCents != null ? (r.totalRateCents / 100).toString() : "",
-        r.totalMonths?.toString() ?? "",
+        ...(canViewRates ? [
+          r.monthlyRateCents != null ? (r.monthlyRateCents / 100).toString() : "",
+          r.totalRateCents != null ? (r.totalRateCents / 100).toString() : "",
+          r.totalMonths?.toString() ?? "",
+        ] : []),
         r.campaignStart ?? "",
         r.campaignEnd ?? "",
         days != null ? days.toString() : "",
@@ -312,26 +316,28 @@ export default function RosterTable({
             <option value="">All agencies</option>
             {allAgencies.map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
-          <div className="flex items-center gap-2">
-            <span className="text-[12px] text-im8-muted whitespace-nowrap">Rate $</span>
-            <input
-              type="number"
-              inputMode="numeric"
-              placeholder="min"
-              value={minRate}
-              onChange={(e) => setMinRate(e.target.value)}
-              className="w-24 px-2 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy bg-white focus:outline-none focus:ring-2 focus:ring-im8-red/30"
-            />
-            <span className="text-[12px] text-im8-muted">to</span>
-            <input
-              type="number"
-              inputMode="numeric"
-              placeholder="max"
-              value={maxRate}
-              onChange={(e) => setMaxRate(e.target.value)}
-              className="w-24 px-2 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy bg-white focus:outline-none focus:ring-2 focus:ring-im8-red/30"
-            />
-          </div>
+          {canViewRates && (
+            <div className="flex items-center gap-2">
+              <span className="text-[12px] text-im8-muted whitespace-nowrap">Rate $</span>
+              <input
+                type="number"
+                inputMode="numeric"
+                placeholder="min"
+                value={minRate}
+                onChange={(e) => setMinRate(e.target.value)}
+                className="w-24 px-2 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy bg-white focus:outline-none focus:ring-2 focus:ring-im8-red/30"
+              />
+              <span className="text-[12px] text-im8-muted">to</span>
+              <input
+                type="number"
+                inputMode="numeric"
+                placeholder="max"
+                value={maxRate}
+                onChange={(e) => setMaxRate(e.target.value)}
+                className="w-24 px-2 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy bg-white focus:outline-none focus:ring-2 focus:ring-im8-red/30"
+              />
+            </div>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
@@ -433,8 +439,8 @@ export default function RosterTable({
                 <Th onClick={() => toggleSort("platform")} sortKey="platform" current={sortKey} dir={sortDir}>Platform</Th>
                 <Th onClick={() => toggleSort("followerCount")} sortKey="followerCount" current={sortKey} dir={sortDir} align="right">Followers</Th>
                 <th className="px-4 py-3 font-semibold">Niche</th>
-                <Th onClick={() => toggleSort("monthlyRateCents")} sortKey="monthlyRateCents" current={sortKey} dir={sortDir} align="right">Monthly</Th>
-                <Th onClick={() => toggleSort("totalRateCents")} sortKey="totalRateCents" current={sortKey} dir={sortDir} align="right">Total</Th>
+                {canViewRates && <Th onClick={() => toggleSort("monthlyRateCents")} sortKey="monthlyRateCents" current={sortKey} dir={sortDir} align="right">Monthly</Th>}
+                {canViewRates && <Th onClick={() => toggleSort("totalRateCents")} sortKey="totalRateCents" current={sortKey} dir={sortDir} align="right">Total</Th>}
                 <Th onClick={() => toggleSort("campaignStart")} sortKey="campaignStart" current={sortKey} dir={sortDir}>Start</Th>
                 <Th onClick={() => toggleSort("campaignEnd")} sortKey="campaignEnd" current={sortKey} dir={sortDir}>End</Th>
                 <Th onClick={() => toggleSort("contractSequence")} sortKey="contractSequence" current={sortKey} dir={sortDir}>#</Th>
@@ -487,13 +493,15 @@ export default function RosterTable({
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-right tabular-nums text-im8-burgundy">{formatMoney(r.monthlyRateCents)}</td>
-                      <td className="px-4 py-3 text-right tabular-nums text-im8-burgundy">
-                        {formatMoney(r.totalRateCents)}
-                        {r.totalMonths && (
-                          <div className="text-[10px] text-im8-muted">{r.totalMonths}mo</div>
-                        )}
-                      </td>
+                      {canViewRates && <td className="px-4 py-3 text-right tabular-nums text-im8-burgundy">{formatMoney(r.monthlyRateCents)}</td>}
+                      {canViewRates && (
+                        <td className="px-4 py-3 text-right tabular-nums text-im8-burgundy">
+                          {formatMoney(r.totalRateCents)}
+                          {r.totalMonths && (
+                            <div className="text-[10px] text-im8-muted">{r.totalMonths}mo</div>
+                          )}
+                        </td>
+                      )}
                       <td className="px-3 py-3 whitespace-nowrap">
                         <DateCell
                           value={getStart(r)}

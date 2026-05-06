@@ -3,7 +3,7 @@ export type AdminRole = "admin" | "management" | "support";
 // Nav sections each role can access
 const ROLE_NAV: Record<AdminRole, string[]> = {
   admin:      ["/admin", "/admin/workflow", "/admin/discovery", "/admin/approvals", "/admin/deals", "/admin/roster", "/admin/deliverables", "/admin/calendar", "/admin/review", "/admin/review/history", "/admin/inbox", "/admin/settings"],
-  management: ["/admin", "/admin/workflow", "/admin/approvals", "/admin/deals", "/admin/roster", "/admin/calendar", "/admin/inbox"],
+  management: ["/admin", "/admin/workflow", "/admin/discovery", "/admin/approvals", "/admin/deals", "/admin/roster", "/admin/deliverables", "/admin/calendar", "/admin/review", "/admin/review/history", "/admin/inbox", "/admin/settings"],
   support:    ["/admin", "/admin/workflow", "/admin/deals", "/admin/roster", "/admin/deliverables", "/admin/calendar", "/admin/review", "/admin/review/history", "/admin/inbox"],
 };
 
@@ -18,9 +18,9 @@ export function canAccess(role: string, href: string): boolean {
   return allowed.some(a => a !== "/admin" && href.startsWith(a));
 }
 
-/** Whether this role can see financial rates and fees */
+/** Whether this role can see financial rates and fees — management only */
 export function canViewRates(role: string): boolean {
-  return role !== "support";
+  return role === "management";
 }
 
 // Roles that can enter the /admin section

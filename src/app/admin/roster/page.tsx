@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
+import { canViewRates } from "@/lib/permissions";
 import RosterTable, { type RosterRow } from "./roster-table";
 
 export default async function RosterPage({
@@ -16,6 +17,9 @@ export default async function RosterPage({
   if (!user) redirect("/auth/login");
 
   const admin = createAdminClient();
+
+  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+  const showRates = canViewRates((profile as { role?: string } | null)?.role ?? "");
 
   const { data: deals } = await admin
     .from("deals")
@@ -91,7 +95,7 @@ export default async function RosterPage({
         </p>
       </div>
 
-      <RosterTable rows={rows} initialExpiringOnly={expiringOnly} />
+      <RosterTable rows={rows} initialExpiringOnly={expiringOnly} canViewRates={showRates} />
     </div>
   );
 }

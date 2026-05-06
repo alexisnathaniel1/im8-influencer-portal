@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { canViewRates } from "@/lib/permissions";
 
 export default async function ApprovalDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -17,6 +18,9 @@ export default async function ApprovalDetailPage({ params }: { params: Promise<{
   ]);
 
   if (!packet) redirect("/admin/approvals");
+
+  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+  const showRates = canViewRates((profile as { role?: string } | null)?.role ?? "");
 
   const dealIds: string[] = packet.deal_ids ?? [];
   const { data: deals } = await admin.from("deals").select("id, influencer_name, monthly_rate_cents, total_months, total_rate_cents, status, rationale").in("id", dealIds);
@@ -56,10 +60,12 @@ export default async function ApprovalDetailPage({ params }: { params: Promise<{
                     <Link href={`/admin/deals/${deal.id}`} className="text-lg font-semibold text-im8-burgundy hover:underline">
                       {deal.influencer_name}
                     </Link>
-                    <p className="text-sm text-im8-burgundy/60 mt-0.5">
-                      ${deal.monthly_rate_cents ? (deal.monthly_rate_cents / 100).toFixed(0) : "??"}/mo × {deal.total_months ?? "??"} months
-                      {deal.total_rate_cents ? ` = $${(deal.total_rate_cents / 100).toFixed(0)} total` : ""}
-                    </p>
+                    {showRates && (
+                      <p className="text-sm text-im8-burgundy/60 mt-0.5">
+                        ${deal.monthly_rate_cents ? (deal.monthly_rate_cents / 100).toFixed(0) : "??"}/mo × {deal.total_months ?? "??"} months
+                        {deal.total_rate_cents ? ` = $${(deal.total_rate_cents / 100).toFixed(0)} total` : ""}
+                      </p>
+                    )}
                     {deal.rationale && (
                       <p className="text-sm text-im8-burgundy/70 mt-2 italic">&ldquo;{deal.rationale}&rdquo;</p>
                     )}

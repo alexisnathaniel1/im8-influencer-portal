@@ -81,7 +81,7 @@ export type ManagementFeedbackEntry = {
 };
 
 export default function DealDetailClient({
-  deal, briefs, submissions, giftingRequests, deliverables = [], partnerShippingAddress, canViewRates = true, role = "", managementFeedback = [], completedDeliverables = 0, totalDeliverables = 0,
+  deal, briefs, submissions, giftingRequests, deliverables = [], partnerShippingAddress, canViewRates = false, role = "", managementFeedback = [], completedDeliverables = 0, totalDeliverables = 0,
 }: {
   deal: Deal;
   briefs: Brief[];
@@ -502,17 +502,19 @@ export default function DealDetailClient({
             const agreedRateCents = deal.monthly_rate_cents as number | null;
             const agreedTotalCents = deal.total_rate_cents as number | null;
             const currency = (deal.currency_code as string) || "USD";
-            if (!agreedMonths && !agreedRateCents) return null;
+            // Always show duration; only show financial figures to management
+            const showFinancials = canViewRates && (agreedRateCents != null || agreedTotalCents != null);
+            if (!agreedMonths && !showFinancials) return null;
             return (
               <div className="bg-im8-offwhite border border-im8-stone/30 rounded-lg px-4 py-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
                 <span className="text-[11px] font-bold text-im8-muted uppercase tracking-[0.08em]">Agreed terms</span>
                 {agreedMonths ? <span className="font-semibold text-im8-burgundy">{agreedMonths} months</span> : null}
-                {agreedRateCents ? (
+                {canViewRates && agreedRateCents ? (
                   <span className="text-im8-burgundy/70">
                     {currencySymbol(currency)}{(agreedRateCents / 100).toLocaleString()}/mo
                   </span>
                 ) : null}
-                {agreedTotalCents ? (
+                {canViewRates && agreedTotalCents ? (
                   <span className="text-im8-burgundy font-medium">
                     = {currencySymbol(currency)}{(agreedTotalCents / 100).toLocaleString()} total
                   </span>

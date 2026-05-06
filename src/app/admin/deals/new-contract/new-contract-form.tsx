@@ -14,12 +14,14 @@ export default function NewContractForm({
   initialRateUsd,
   initialMonths,
   initialDeliverables,
+  canViewRates = false,
 }: {
   sourceDealId: string;
   nextSequence: number;
   initialRateUsd: number | null;
   initialMonths: number;
   initialDeliverables: Deliverable[];
+  canViewRates?: boolean;
 }) {
   const router = useRouter();
   const [rate, setRate] = useState(initialRateUsd ? String(initialRateUsd) : "");
@@ -109,7 +111,7 @@ export default function NewContractForm({
             </div>
           </div>
         </div>
-        {parsedRate > 0 && (
+        {canViewRates && parsedRate > 0 && (
           <p className="text-xs text-im8-burgundy/60 mt-2">
             Total fee: <span className="font-semibold text-im8-burgundy">${totalFee.toLocaleString()}</span> over {parsedMonths} month{parsedMonths === 1 ? "" : "s"}
           </p>

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import NewContractForm from "./new-contract-form";
+import { canViewRates } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,9 @@ export default async function NewContractPage({
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
+
+  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+  const showRates = canViewRates((profile as { role?: string } | null)?.role ?? "");
 
   const admin = createAdminClient();
 
@@ -67,7 +71,9 @@ export default async function NewContractPage({
   }
 
   const sourceDeliverables = (source.deliverables as Deliverable[] | null) ?? [];
-  const sourceRateUsd = source.monthly_rate_cents ? source.monthly_rate_cents / 100 : null;
+  // Only pass the previous rate to the form if the viewer is management — others
+  // shouldn't see what the historical rate was, even when renewing.
+  const sourceRateUsd = showRates && source.monthly_rate_cents ? source.monthly_rate_cents / 100 : null;
 
   return (
     <div className="max-w-2xl animate-fade-in space-y-6">
@@ -108,6 +114,7 @@ export default async function NewContractPage({
         initialRateUsd={sourceRateUsd}
         initialMonths={source.total_months ?? 3}
         initialDeliverables={sourceDeliverables.filter(d => d.code !== "WHITELIST")}
+        canViewRates={showRates}
       />
     </div>
   );

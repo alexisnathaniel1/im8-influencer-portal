@@ -58,9 +58,8 @@ export default async function WorkflowDashboardPage() {
     .eq("id", user.id)
     .single();
 
-  const canSeeFinancials = ["admin", "management"].includes(
-    (currentProfile as { role?: string } | null)?.role ?? "",
-  );
+  const canSeeFinancials =
+    ((currentProfile as { role?: string } | null)?.role ?? "") === "management";
 
   const admin = createAdminClient();
 
@@ -339,7 +338,7 @@ export default async function WorkflowDashboardPage() {
                           </span>
                         </p>
                         <p className="text-[11px] text-im8-muted">
-                          {formatMoney(d.monthly_rate_cents as number | null, d.total_months as number | null)}
+                          {canSeeFinancials && formatMoney(d.monthly_rate_cents as number | null, d.total_months as number | null)}
                           {days !== null && (
                             <span className={`ml-2 px-1.5 py-0.5 rounded text-[10px] font-semibold ${
                               days <= 7 ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-800"

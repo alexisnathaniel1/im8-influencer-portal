@@ -18,11 +18,10 @@ export default function SummarizeAllButton({ pendingCount }: { pendingCount: num
       if (!res.ok) {
         setMessage(`Failed: ${data.error ?? "unknown error"}`);
       } else {
-        setMessage(
-          data.processed === 0
-            ? "Already up to date"
-            : `Summarized ${data.succeeded}/${data.processed}${data.failed ? ` (${data.failed} failed)` : ""}${data.remaining ? " — click again for more" : ""}`
-        );
+        const baseMsg = data.processed === 0
+          ? "Already up to date"
+          : `Summarized ${data.succeeded}/${data.processed}${data.failed ? ` (${data.failed} failed)` : ""}${data.remaining ? " — click again for more" : ""}`;
+        setMessage(data.firstError ? `${baseMsg} — ${data.firstError}` : baseMsg);
         router.refresh();
       }
     } catch (e) {
