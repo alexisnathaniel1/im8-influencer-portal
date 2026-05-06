@@ -161,7 +161,7 @@ export default function LogClient({ deals, preselectedDealId, preselectedDeliver
               </svg>
             </div>
             <div className="flex-1">
-              <p className="font-semibold text-im8-burgundy">Added — Rob/Dennis can review now</p>
+              <p className="font-semibold text-im8-burgundy">Added to review queue</p>
               <p className="text-sm text-im8-burgundy/60 mt-1">
                 File: <span className="font-mono text-xs bg-im8-sand/60 px-1.5 py-0.5 rounded">{result.canonicalName}</span>
               </p>
