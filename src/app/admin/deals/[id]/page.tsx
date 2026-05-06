@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
+import { Suspense } from "react";
 import DealDetailClient from "@/components/deals/deal-detail-client";
 import { canViewRates } from "@/lib/permissions";
 
@@ -124,19 +125,21 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
         )}
       </div>
 
-      <DealDetailClient
-        deal={deal}
-        briefs={briefs ?? []}
-        submissions={submissions ?? []}
-        giftingRequests={giftingRequests ?? []}
-        deliverables={allDeliverables as unknown as Parameters<typeof DealDetailClient>[0]["deliverables"]}
-        partnerShippingAddress={partnerShippingAddress}
-        canViewRates={showRates}
-        role={profile?.role ?? ""}
-        managementFeedback={managementFeedback}
-        completedDeliverables={completedCount}
-        totalDeliverables={allDeliverables.length}
-      />
+      <Suspense fallback={<div className="text-im8-burgundy/40 text-sm">Loading…</div>}>
+        <DealDetailClient
+          deal={deal}
+          briefs={briefs ?? []}
+          submissions={submissions ?? []}
+          giftingRequests={giftingRequests ?? []}
+          deliverables={allDeliverables as unknown as Parameters<typeof DealDetailClient>[0]["deliverables"]}
+          partnerShippingAddress={partnerShippingAddress}
+          canViewRates={showRates}
+          role={profile?.role ?? ""}
+          managementFeedback={managementFeedback}
+          completedDeliverables={completedCount}
+          totalDeliverables={allDeliverables.length}
+        />
+      </Suspense>
     </div>
   );
 }

@@ -579,7 +579,7 @@ export default function AdminReviewPage() {
                       </p>
                     )}
                     <div className="flex items-center gap-4 mt-1 flex-wrap">
-                      {sub.brief_id && (
+                      {sub.brief_id ? (
                         <Link
                           href={`/admin/briefs/${sub.brief_id}`}
                           onClick={(e) => e.stopPropagation()}
@@ -590,6 +590,18 @@ export default function AdminReviewPage() {
                             <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                           </svg>
                           View Brief
+                        </Link>
+                      ) : (
+                        <Link
+                          href={sub.deal_id ? `/admin/deals/${sub.deal_id}?tab=briefs` : "#"}
+                          onClick={(e) => e.stopPropagation()}
+                          className="inline-flex items-center gap-1 text-xs text-im8-burgundy/40 hover:text-im8-burgundy hover:underline italic"
+                          title="No brief linked to this submission yet"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          No brief linked
                         </Link>
                       )}
                       {sub.post_url && (

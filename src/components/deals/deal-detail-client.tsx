@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import NicheMultiSelect from "@/components/shared/niche-multi-select";
 import DeliverableComments from "@/components/deliverables/deliverable-comments";
@@ -96,7 +96,14 @@ export default function DealDetailClient({
   totalDeliverables?: number;
 }) {
   const router = useRouter();
-  const [tab, setTab] = useState<"overview" | "contract" | "briefs" | "submissions" | "gifting" | "edited-videos">("overview");
+  const searchParams = useSearchParams();
+  // Honour `?tab=briefs` etc. on first render so deep-links land on the right tab.
+  const initialTab = (() => {
+    const t = searchParams.get("tab");
+    if (t === "overview" || t === "contract" || t === "briefs" || t === "submissions" || t === "gifting" || t === "edited-videos") return t;
+    return "overview";
+  })();
+  const [tab, setTab] = useState<"overview" | "contract" | "briefs" | "submissions" | "gifting" | "edited-videos">(initialTab);
 
   // Auto-sync missing tracker rows whenever the Briefs tab is opened.
   // Handles the case where deliverables were added to the contract AFTER the
