@@ -31,6 +31,7 @@ interface SubmitResult {
   driveUrl: string;
   canonicalName: string;
   copied: boolean;
+  isScript?: boolean;
 }
 
 export default function LogClient({ deals, preselectedDealId, preselectedDeliverableId }: Props) {
@@ -45,6 +46,8 @@ export default function LogClient({ deals, preselectedDealId, preselectedDeliver
   const [driveUrl, setDriveUrl] = useState("");
   const [caption, setCaption] = useState("");
   const [postUrl, setPostUrl] = useState("");
+  const [variantLabel, setVariantLabel] = useState("");
+  const [isScript, setIsScript] = useState(false);
 
   // UI state
   const [submitting, setSubmitting] = useState(false);
@@ -121,6 +124,8 @@ export default function LogClient({ deals, preselectedDealId, preselectedDeliver
           driveUrl: driveUrl.trim(),
           caption: caption.trim() || undefined,
           postUrl: postUrl.trim() || undefined,
+          variantLabel: variantLabel.trim() || undefined,
+          isScript: isScript || undefined,
         }),
       });
       const json = await res.json();
@@ -140,6 +145,8 @@ export default function LogClient({ deals, preselectedDealId, preselectedDeliver
     setDriveUrl("");
     setCaption("");
     setPostUrl("");
+    setVariantLabel("");
+    setIsScript(false);
   }
 
   const deliverables = selectedDeal?.deliverables ?? [];
@@ -161,14 +168,19 @@ export default function LogClient({ deals, preselectedDealId, preselectedDeliver
               </svg>
             </div>
             <div className="flex-1">
-              <p className="font-semibold text-im8-burgundy">Added to review queue</p>
+              <p className="font-semibold text-im8-burgundy">
+                {result.isScript ? "Script saved to deliverable folder" : "Added to review queue"}
+              </p>
               <p className="text-sm text-im8-burgundy/60 mt-1">
                 File: <span className="font-mono text-xs bg-im8-sand/60 px-1.5 py-0.5 rounded">{result.canonicalName}</span>
               </p>
               {result.copied ? (
-                <p className="text-xs text-emerald-700 mt-1">✓ Copied to partner's Drive folder and renamed</p>
+                <p className="text-xs text-emerald-700 mt-1">✓ Copied to partner&apos;s Drive folder and renamed</p>
               ) : (
                 <p className="text-xs text-amber-600 mt-1">⚠ Could not copy to partner folder — original Drive link saved</p>
+              )}
+              {result.isScript && (
+                <p className="text-xs text-im8-burgundy/50 mt-1 italic">Scripts skip review — this won&apos;t appear in the queue.</p>
               )}
             </div>
           </div>
@@ -284,6 +296,23 @@ export default function LogClient({ deals, preselectedDealId, preselectedDeliver
             </div>
           )}
 
+          {/* Variant label */}
+          <div>
+            <label className="block text-sm font-medium text-im8-burgundy mb-1.5">
+              Variant / asset label <span className="text-im8-burgundy/40 font-normal">(optional)</span>
+            </label>
+            <input
+              type="text"
+              value={variantLabel}
+              onChange={(e) => setVariantLabel(e.target.value)}
+              placeholder='e.g. "Hook 1", "Body", "Full Reel 2"'
+              className="w-full px-3 py-2 border border-im8-stone/50 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/30"
+            />
+            <p className="text-xs text-im8-burgundy/40 mt-1">
+              Use when one deliverable has multiple assets — different hooks, body shots, or alternates.
+            </p>
+          </div>
+
           {/* Drive URL */}
           <div>
             <label className="block text-sm font-medium text-im8-burgundy mb-1.5">
@@ -297,9 +326,25 @@ export default function LogClient({ deals, preselectedDealId, preselectedDeliver
               className="w-full px-3 py-2 border border-im8-stone/50 rounded-lg text-sm text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/30 font-mono"
             />
             <p className="text-xs text-im8-burgundy/40 mt-1">
-              The file will be copied to the partner's Drive folder and renamed automatically.
+              The file will be copied to the partner&apos;s Drive folder and renamed automatically.
             </p>
           </div>
+
+          {/* Script flag */}
+          <label className="flex items-start gap-2 text-sm text-im8-burgundy cursor-pointer">
+            <input
+              type="checkbox"
+              checked={isScript}
+              onChange={(e) => setIsScript(e.target.checked)}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="font-medium">This is a script / reference doc</span>
+              <span className="block text-xs text-im8-burgundy/50 font-normal">
+                Scripts skip the review queue and live in the deliverable&apos;s Drive subfolder for the team&apos;s reference.
+              </span>
+            </span>
+          </label>
 
           {/* Caption */}
           <div>
@@ -344,7 +389,7 @@ export default function LogClient({ deals, preselectedDealId, preselectedDeliver
               loading={submitting}
               disabled={!selectedDeal || !driveUrl.trim()}
             >
-              Add to review queue
+              {isScript ? "Save script to deliverable folder" : "Add to review queue"}
             </Button>
             <Link href="/admin/review" className="text-sm text-im8-burgundy/50 hover:text-im8-burgundy">
               Cancel

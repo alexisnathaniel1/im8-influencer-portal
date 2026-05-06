@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import NicheMultiSelect from "@/components/shared/niche-multi-select";
+import DeliverableComments from "@/components/deliverables/deliverable-comments";
 import { CURRENCIES, currencySymbol } from "@/lib/currencies";
 import { DELIVERABLE_LABELS, BINARY_DELIVERABLE_CODES } from "@/lib/deliverables";
 
@@ -2254,8 +2255,10 @@ function DeliverableBriefRow({
   const [attachDriveUrl, setAttachDriveUrl] = useState("");
   const [attachCaption, setAttachCaption] = useState("");
   const [attachFile, setAttachFile] = useState<File | null>(null);
+  const [attachVariantLabel, setAttachVariantLabel] = useState("");
+  const [attachIsScript, setAttachIsScript] = useState(false);
   const [attachStatus, setAttachStatus] = useState<"idle" | "submitting" | "done" | "error">("idle");
-  const [attachResult, setAttachResult] = useState<{ driveUrl: string | null; canonicalName: string; copied: boolean; uploaded: boolean } | null>(null);
+  const [attachResult, setAttachResult] = useState<{ driveUrl: string | null; canonicalName: string; copied: boolean; uploaded: boolean; isScript?: boolean } | null>(null);
   const [attachError, setAttachError] = useState("");
 
   async function handleAttach() {
@@ -2289,6 +2292,8 @@ function DeliverableBriefRow({
         const fd = new FormData();
         fd.append("file", attachFile);
         if (attachCaption) fd.append("caption", attachCaption);
+        if (attachVariantLabel) fd.append("variantLabel", attachVariantLabel);
+        if (attachIsScript) fd.append("isScript", "true");
         res = await fetch(`/api/deliverables/${id}/attach-content`, { method: "POST", body: fd });
       } else {
         if (!attachDriveUrl.includes("drive.google.com") && !attachDriveUrl.startsWith("http")) {
@@ -2299,15 +2304,21 @@ function DeliverableBriefRow({
         res = await fetch(`/api/deliverables/${id}/attach-content`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ driveUrl: attachDriveUrl, caption: attachCaption || undefined }),
+          body: JSON.stringify({
+            driveUrl: attachDriveUrl,
+            caption: attachCaption || undefined,
+            variantLabel: attachVariantLabel || undefined,
+            isScript: attachIsScript || undefined,
+          }),
         });
       }
 
       const data = await res.json();
       if (!res.ok) { setAttachError(data.error || "Failed"); setAttachStatus("error"); return; }
-      setAttachResult(data as { driveUrl: string | null; canonicalName: string; copied: boolean; uploaded: boolean });
+      setAttachResult(data as { driveUrl: string | null; canonicalName: string; copied: boolean; uploaded: boolean; isScript?: boolean });
       setAttachStatus("done");
-      setIsDone(true); // deliverable is now marked completed server-side
+      // Scripts don't mark the deliverable as done — they're reference docs.
+      if (!attachIsScript) setIsDone(true);
     } catch (e) {
       setAttachError(e instanceof Error ? e.message : "Network error");
       setAttachStatus("error");
@@ -2317,9 +2328,12 @@ function DeliverableBriefRow({
   function AttachPanel() {
     if (!attachOpen) return null;
     if (attachStatus === "done" && attachResult) {
+      const wasScript = !!attachResult.isScript;
       return (
         <div className="mt-2 p-3 bg-emerald-50 border border-emerald-200 rounded-lg space-y-1.5">
-          <p className="text-xs font-semibold text-emerald-700">✓ Content attached and marked as completed</p>
+          <p className="text-xs font-semibold text-emerald-700">
+            {wasScript ? "✓ Script saved to deliverable folder" : "✓ Content attached and marked as completed"}
+          </p>
           <p className="text-[11px] text-emerald-600 font-mono">{attachResult.canonicalName}</p>
           {attachResult.copied && <p className="text-[11px] text-emerald-600">Copied to partner&apos;s Drive folder ✓</p>}
           {attachResult.uploaded && <p className="text-[11px] text-emerald-600">Uploaded to partner&apos;s Drive folder ✓</p>}
@@ -2329,15 +2343,18 @@ function DeliverableBriefRow({
           {attachResult.driveUrl && (
             <a href={attachResult.driveUrl} target="_blank" rel="noopener noreferrer" className="text-[11px] text-im8-red hover:underline">Open in Drive ↗</a>
           )}
-          <button onClick={() => { setAttachOpen(false); setAttachStatus("idle"); setAttachResult(null); setAttachDriveUrl(""); setAttachCaption(""); setAttachFile(null); }}
-            className="text-[11px] text-im8-burgundy/50 hover:text-im8-burgundy underline">Attach another</button>
+          <button onClick={() => {
+            setAttachOpen(false); setAttachStatus("idle"); setAttachResult(null);
+            setAttachDriveUrl(""); setAttachCaption(""); setAttachFile(null);
+            setAttachVariantLabel(""); setAttachIsScript(false);
+          }} className="text-[11px] text-im8-burgundy/50 hover:text-im8-burgundy underline">Attach another</button>
         </div>
       );
     }
     return (
       <div className="mt-2 p-3 bg-im8-sand/40 border border-im8-stone/30 rounded-lg space-y-2.5">
         <div className="flex items-center justify-between">
-          <p className="text-xs font-semibold text-im8-burgundy">Attach approved content</p>
+          <p className="text-xs font-semibold text-im8-burgundy">{attachIsScript ? "Attach script / reference doc" : "Attach approved content"}</p>
           <button onClick={() => setAttachOpen(false)} className="text-im8-burgundy/40 hover:text-im8-burgundy text-xs">✕</button>
         </div>
         {/* Mode toggle */}
@@ -2350,6 +2367,20 @@ function DeliverableBriefRow({
             className={`px-2.5 py-1 text-xs rounded-md transition-colors ${attachMode === "file" ? "bg-im8-burgundy text-white" : "bg-white border border-im8-stone/40 text-im8-burgundy/70 hover:text-im8-burgundy"}`}>
             Upload file
           </button>
+        </div>
+
+        {/* Variant label */}
+        <div>
+          <input
+            type="text"
+            value={attachVariantLabel}
+            onChange={e => setAttachVariantLabel(e.target.value)}
+            placeholder='Variant label (optional) — e.g. "Hook 1", "Body", "Full Reel 2"'
+            className="w-full px-3 py-1.5 text-xs border border-im8-stone/40 rounded-lg text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/30"
+          />
+          <p className="text-[10px] text-im8-burgundy/40 mt-0.5">
+            Use when one deliverable has multiple assets — different hooks, body shots, or alternates.
+          </p>
         </div>
 
         {attachMode === "link" ? (
@@ -2377,18 +2408,40 @@ function DeliverableBriefRow({
           className="w-full px-3 py-1.5 text-sm border border-im8-stone/40 rounded-lg text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/30 resize-none"
         />
 
+        {/* Script flag */}
+        <label className="flex items-start gap-2 text-xs text-im8-burgundy cursor-pointer">
+          <input
+            type="checkbox"
+            checked={attachIsScript}
+            onChange={e => setAttachIsScript(e.target.checked)}
+            className="mt-0.5"
+          />
+          <span>
+            <span className="font-medium">This is a script / reference doc</span>
+            <span className="block text-[10px] text-im8-burgundy/50 font-normal">
+              Scripts skip the review queue and live in the deliverable&apos;s Drive subfolder for the team&apos;s reference.
+            </span>
+          </span>
+        </label>
+
         <div className="flex items-center gap-2">
           <button
             onClick={handleAttach}
             disabled={attachStatus === "submitting" || (attachMode === "link" ? !attachDriveUrl : !attachFile)}
             className="px-3 py-1.5 text-xs font-medium bg-im8-red text-white rounded-lg hover:bg-im8-burgundy disabled:opacity-40 transition-colors"
           >
-            {attachStatus === "submitting" ? "Saving…" : "Mark as done + save to Drive"}
+            {attachStatus === "submitting"
+              ? "Saving…"
+              : attachIsScript
+              ? "Save script to Drive"
+              : "Mark as done + save to Drive"}
           </button>
           {attachError && <span className="text-xs text-red-600">{attachError}</span>}
         </div>
         <p className="text-[11px] text-im8-burgundy/40">
-          The file will be copied to the partner&apos;s Drive contract folder and the deliverable marked as completed — no review needed.
+          {attachIsScript
+            ? "The doc will be copied to the deliverable's Drive folder. No review queue, no approval needed."
+            : "The file will be copied to the deliverable's Drive folder and the deliverable marked as completed — no review needed."}
         </p>
       </div>
     );
@@ -2588,6 +2641,11 @@ function DeliverableBriefRow({
           <AttachPanel />
         </div>
       )}
+      {rowId && (
+        <div className="px-5 pb-3 pl-[6.5rem]">
+          <DeliverableComments deliverableId={rowId} isAdminView />
+        </div>
+      )}
       </>
     );
   }
@@ -2664,6 +2722,13 @@ function DeliverableBriefRow({
               Review by: {new Date(sentMeta.reviewDeadline + "T00:00:00").toLocaleDateString("en-AU", { day: "numeric", month: "short" })}
             </span>
           )}
+        </div>
+      )}
+
+      {/* Comments thread (visible whenever we have a tracker row) */}
+      {rowId && (
+        <div className="pl-[6.5rem]">
+          <DeliverableComments deliverableId={rowId} isAdminView />
         </div>
       )}
 

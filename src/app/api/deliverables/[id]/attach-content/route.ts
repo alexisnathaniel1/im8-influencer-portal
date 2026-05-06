@@ -19,6 +19,7 @@ import {
   copyDriveFile,
   uploadFileToDrive,
 } from "@/lib/google/drive";
+import { getOrCreateDeliverableFolder } from "@/lib/drive/deal-folders";
 import { ADMIN_ROLES } from "@/lib/permissions";
 import { logAuditEvent } from "@/lib/audit/log";
 import { notifyContentApproved } from "@/lib/slack/notify";
@@ -71,12 +72,52 @@ export async function POST(
       return NextResponse.json({ error: "Deal not found for deliverable" }, { status: 404 });
     }
 
-    // Count existing submissions → draft number
-    const { count: existingCount } = await admin
+    // ── Parse input first so variant/isScript inform the filename ──────────
+    const contentType = request.headers.get("content-type") ?? "";
+    let driveUrl: string | null = null;
+    let uploadFile: File | null = null;
+    let caption: string | null = null;
+    let postUrl: string | null = null;
+    let variantLabel: string | null = null;
+    let isScript = false;
+
+    if (contentType.includes("multipart/form-data")) {
+      const formData = await request.formData();
+      uploadFile = formData.get("file") as File | null;
+      caption = (formData.get("caption") as string | null) || null;
+      postUrl = (formData.get("postUrl") as string | null) || null;
+      variantLabel = (formData.get("variantLabel") as string | null) || null;
+      isScript = formData.get("isScript") === "true";
+      if (!uploadFile) {
+        return NextResponse.json({ error: "No file provided" }, { status: 400 });
+      }
+    } else {
+      const body = (await request.json()) as {
+        driveUrl?: string;
+        caption?: string;
+        postUrl?: string;
+        variantLabel?: string;
+        isScript?: boolean;
+      };
+      caption = body.caption || null;
+      postUrl = body.postUrl || null;
+      variantLabel = body.variantLabel || null;
+      isScript = !!body.isScript;
+      driveUrl = body.driveUrl ?? null;
+      if (!driveUrl) {
+        return NextResponse.json({ error: "driveUrl is required" }, { status: 400 });
+      }
+    }
+
+    // Count existing submissions for this (deliverable, variant, kind) for sequence number.
+    let countQ = admin
       .from("submissions")
       .select("id", { count: "exact", head: true })
-      .eq("deliverable_id", deliverableId);
-    const draftNumber = (existingCount ?? 0) + 1;
+      .eq("deliverable_id", deliverableId)
+      .eq("is_script", isScript);
+    countQ = variantLabel ? countQ.eq("variant_label", variantLabel) : countQ.is("variant_label", null);
+    const { count: existingCount } = await countQ;
+    const sequenceNumber = (existingCount ?? 0) + 1;
 
     // Build canonical filename
     const safeName = (deal.influencer_name ?? "creator")
@@ -88,79 +129,54 @@ export async function POST(
     const delivType = (deliverable.deliverable_type as string | null) ?? "content";
     const delivSeq = (deliverable.sequence as number | null) ?? 1;
     const delivLabel = `${delivType.replace(/[^a-zA-Z0-9_]/g, "")}${delivSeq}`;
-    const canonicalName = `${safeName}_Contract${contractSeq}_${delivLabel}_DRAFT_${draftNumber}`;
+    const variantSlug = variantLabel
+      ? variantLabel.replace(/[^a-zA-Z0-9]/g, "")
+      : null;
+    const suffix = isScript ? `SCRIPT_${sequenceNumber}` : `DRAFT_${sequenceNumber}`;
+    const canonicalName = [
+      safeName,
+      `Contract${contractSeq}`,
+      delivLabel,
+      variantSlug,
+      suffix,
+    ].filter(Boolean).join("_");
 
-    const destFolderId = (deal.drive_folder_id as string | null) ?? null;
+    // ── Resolve destination folder (deliverable subfolder preferred) ────────
+    let destFolderId = await getOrCreateDeliverableFolder(admin, deliverableId);
+    if (!destFolderId) {
+      destFolderId = (deal.drive_folder_id as string | null) ?? null;
+    }
 
-    // ── Parse input (Drive URL or file upload) ─────────────────────────────
-    const contentType = request.headers.get("content-type") ?? "";
+    // ── Copy / upload to Drive ─────────────────────────────────────────────
     let finalDriveUrl: string | null = null;
     let finalFileId: string | null = null;
-    let caption: string | null = null;
-    let postUrl: string | null = null;
     let copied = false;
     let uploaded = false;
 
-    if (contentType.includes("multipart/form-data")) {
-      // ── File upload path ───────────────────────────────────────────────
-      const formData = await request.formData();
-      const file = formData.get("file") as File | null;
-      caption = (formData.get("caption") as string | null) || null;
-      postUrl = (formData.get("postUrl") as string | null) || null;
-
-      if (!file) {
-        return NextResponse.json({ error: "No file provided" }, { status: 400 });
-      }
-
-      const mimeType = file.type || "application/octet-stream";
-      const originalExt = file.name.match(/\.[^.]+$/)?.[0] ?? "";
+    if (uploadFile) {
+      const mimeType = uploadFile.type || "application/octet-stream";
+      const originalExt = uploadFile.name.match(/\.[^.]+$/)?.[0] ?? "";
       const finalFileName = `${canonicalName}${originalExt}`;
-
       if (destFolderId) {
         try {
-          const fileBuffer = Buffer.from(await file.arrayBuffer());
-          const result = await uploadFileToDrive(
-            fileBuffer,
-            mimeType,
-            finalFileName,
-            destFolderId,
-          );
+          const fileBuffer = Buffer.from(await uploadFile.arrayBuffer());
+          const result = await uploadFileToDrive(fileBuffer, mimeType, finalFileName, destFolderId);
           finalFileId = result.fileId;
           finalDriveUrl = result.webViewLink;
           uploaded = true;
         } catch (uploadErr) {
           console.warn("[attach-content] Drive upload failed:", uploadErr);
-          // Continue without Drive — submission still gets created (no URL)
         }
       } else {
-        console.warn("[attach-content] No Drive folder on deal — file uploaded but not stored in Drive");
+        console.warn("[attach-content] No Drive folder — file uploaded but not stored in Drive");
       }
-    } else {
-      // ── Drive URL path ─────────────────────────────────────────────────
-      const body = (await request.json()) as {
-        driveUrl?: string;
-        caption?: string;
-        postUrl?: string;
-      };
-      caption = body.caption || null;
-      postUrl = body.postUrl || null;
-
-      const driveUrl = body.driveUrl;
-      if (!driveUrl) {
-        return NextResponse.json({ error: "driveUrl is required" }, { status: 400 });
-      }
-
+    } else if (driveUrl) {
       finalDriveUrl = driveUrl;
       const sourceFileId = extractDriveFileId(driveUrl);
       finalFileId = sourceFileId;
-
       if (sourceFileId && destFolderId) {
         try {
-          const { copiedFileId, webViewLink } = await copyDriveFile(
-            sourceFileId,
-            destFolderId,
-            canonicalName,
-          );
+          const { copiedFileId, webViewLink } = await copyDriveFile(sourceFileId, destFolderId, canonicalName);
           finalFileId = copiedFileId;
           finalDriveUrl = webViewLink;
           copied = true;
@@ -170,7 +186,7 @@ export async function POST(
       }
     }
 
-    // ── Insert submission as already-approved ──────────────────────────────
+    // ── Insert submission as already-approved (scripts are also auto-approved) ──
     const { data: insertData, error: insertError } = await admin
       .from("submissions")
       .insert({
@@ -186,6 +202,8 @@ export async function POST(
         status: "approved",
         reviewed_at: new Date().toISOString(),
         reviewed_by: user.id,
+        variant_label: variantLabel,
+        is_script: isScript,
       })
       .select("id")
       .single();
@@ -195,21 +213,30 @@ export async function POST(
     }
     const submissionId = insertData?.id as string;
 
-    // ── Mark deliverable as completed ─────────────────────────────────────
-    await admin.from("deliverables").update({
-      status: "completed",
-      live_date: new Date().toISOString().split("T")[0],
-    }).eq("id", deliverableId);
+    // ── Mark deliverable as completed (only for content, not scripts) ──────
+    if (!isScript) {
+      await admin.from("deliverables").update({
+        status: "completed",
+        live_date: new Date().toISOString().split("T")[0],
+      }).eq("id", deliverableId);
+    }
 
     // ── Slack + audit (fire-and-forget) ────────────────────────────────────
     const influencerName = deal.influencer_name ?? "Creator";
     const deliverableLabel = `${delivType} #${delivSeq}`;
-    void notifyContentApproved({ influencerName, deliverableLabel, adminName: "Admin (manual attach)", dealId: deliverable.deal_id as string });
+    if (!isScript) {
+      void notifyContentApproved({
+        influencerName,
+        deliverableLabel,
+        adminName: "Admin (manual attach)",
+        dealId: deliverable.deal_id as string,
+      });
+    }
     void logAuditEvent({
       actorId: user.id,
       entityType: "submission",
       entityId: submissionId,
-      action: "content_attached_approved",
+      action: isScript ? "script_attached" : "content_attached_approved",
       after: {
         deliverableId,
         dealId: deliverable.deal_id,
@@ -217,6 +244,8 @@ export async function POST(
         canonicalName,
         copied,
         uploaded,
+        variantLabel,
+        isScript,
       },
     });
 
@@ -226,6 +255,7 @@ export async function POST(
       canonicalName,
       copied,
       uploaded,
+      isScript,
     });
   } catch (error) {
     console.error("[attach-content] Error:", error);

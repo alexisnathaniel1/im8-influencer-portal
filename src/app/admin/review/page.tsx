@@ -24,11 +24,13 @@ interface PendingSubmission {
   submitted_at: string;
   influencer_name: string;
   deal_id: string;
+  deliverable_id: string | null;
   deal_drive_folder_id: string | null;
   brief_title: string | null;
   deliverable_type: string | null;
   deliverable_sequence: number | null;
   caption: string | null;
+  variant_label: string | null;
   /** Draft number parsed from file_name (_DRAFT_N suffix) — null if not determinable */
   draftNum: number | null;
 }
@@ -58,12 +60,14 @@ export default function AdminReviewPage() {
       .from("submissions")
       .select(`
         id, file_name, drive_url, drive_file_id, content_type, platform, post_url, submitted_at, caption,
+        deliverable_id, variant_label, is_script,
         influencer:influencer_id(full_name),
         deal:deal_id(influencer_name, drive_folder_id),
         brief:brief_id(title),
         deliverable:deliverable_id(deliverable_type, sequence)
       `)
       .eq("status", "pending")
+      .eq("is_script", false)
       .order("submitted_at", { ascending: false });
 
     if (error) { setLoading(false); return; }
@@ -85,11 +89,13 @@ export default function AdminReviewPage() {
         submitted_at: s.submitted_at,
         influencer_name: inf?.full_name || deal?.influencer_name || "Unknown",
         deal_id: (s as Record<string, unknown>).deal_id as string,
+        deliverable_id: (s as Record<string, unknown>).deliverable_id as string | null,
         deal_drive_folder_id: deal?.drive_folder_id ?? null,
         brief_title: brief?.title ?? null,
         deliverable_type: deliv?.deliverable_type ?? null,
         deliverable_sequence: deliv?.sequence ?? null,
         caption: (s as Record<string, unknown>).caption as string | null,
+        variant_label: (s as Record<string, unknown>).variant_label as string | null,
         draftNum: parseDraftNum(s.file_name),
       });
     }
@@ -100,11 +106,35 @@ export default function AdminReviewPage() {
 
   useEffect(() => { fetchPending(); }, []);
 
-  const sorted = [...submissions].sort((a, b) =>
-    sortBy === "newest"
+  // Primary sort by user choice; secondary keeps same-deliverable submissions
+  // visually adjacent so the group stripe reads correctly.
+  const sorted = [...submissions].sort((a, b) => {
+    const primary = sortBy === "newest"
       ? new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime()
-      : a.influencer_name.localeCompare(b.influencer_name)
-  );
+      : a.influencer_name.localeCompare(b.influencer_name);
+    if (primary !== 0) return primary;
+    if (a.deal_id !== b.deal_id) return a.deal_id.localeCompare(b.deal_id);
+    return (a.deliverable_id ?? "").localeCompare(b.deliverable_id ?? "");
+  });
+
+  // Stripe colour rotates per consecutive deliverable group.
+  const STRIPE_COLOURS = ["#a78bfa", "#34d399", "#f59e0b", "#60a5fa", "#f472b6", "#22d3ee"];
+  const stripeByKey = new Map<string, string>();
+  let stripeCursor = 0;
+  let prevKey: string | null = null;
+  for (const s of sorted) {
+    const key = `${s.deal_id}|${s.deliverable_id ?? ""}`;
+    if (key !== prevKey) {
+      stripeByKey.set(key, STRIPE_COLOURS[stripeCursor % STRIPE_COLOURS.length]);
+      stripeCursor++;
+    }
+    // Same key gets the same colour the second time around
+    if (!stripeByKey.has(key)) stripeByKey.set(key, STRIPE_COLOURS[(stripeCursor - 1) % STRIPE_COLOURS.length]);
+    prevKey = key;
+  }
+  function stripeFor(s: PendingSubmission) {
+    return stripeByKey.get(`${s.deal_id}|${s.deliverable_id ?? ""}`) ?? "transparent";
+  }
 
   function toggleSelect(id: string) {
     setSelectedIds((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
@@ -238,8 +268,10 @@ export default function AdminReviewPage() {
           {sorted.map((sub) => {
             const isExpanded = expandedId === sub.id;
             const fileId = sub.drive_file_id || (sub.drive_url ? extractDriveFileId(sub.drive_url) : null);
+            const stripe = stripeFor(sub);
             return (
-              <Card key={sub.id} padding="sm">
+              <div key={sub.id} className="relative" style={{ borderLeft: `3px solid ${stripe}`, borderRadius: 6 }}>
+              <Card padding="sm">
                 <div className="flex items-center gap-3 cursor-pointer" onClick={() => setExpandedId(isExpanded ? null : sub.id)}>
                   <input
                     type="checkbox"
@@ -273,6 +305,11 @@ export default function AdminReviewPage() {
                         </span>
                       )}
                       {sub.brief_title && !sub.deliverable_type && <span className="text-xs text-im8-burgundy/50">{sub.brief_title}</span>}
+                      {sub.variant_label && (
+                        <span className="inline-block px-2 py-0.5 rounded text-xs font-bold bg-purple-50 text-purple-700 font-mono uppercase tracking-wide border border-purple-200">
+                          {sub.variant_label}
+                        </span>
+                      )}
                       {sub.draftNum !== null && (
                         <span className="inline-block px-2 py-0.5 rounded text-xs font-bold bg-slate-100 text-slate-600 font-mono">
                           DRAFT {sub.draftNum}
@@ -366,6 +403,7 @@ export default function AdminReviewPage() {
                   </div>
                 )}
               </Card>
+              </div>
             );
           })}
           {sorted.length === 0 && (

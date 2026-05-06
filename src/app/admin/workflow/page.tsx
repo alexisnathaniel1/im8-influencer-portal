@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import BulkFoldersButton from "./bulk-folders-button";
 import {
   getBriefsPendingToSend,
   getSubmissionsAwaitingReview,
@@ -129,19 +130,22 @@ export default async function WorkflowDashboardPage() {
             Today&apos;s briefs to send, content in review, contract renewals, and recent partner emails.
           </p>
         </div>
-        {masterFolderUrl && (
-          <a
-            href={masterFolderUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-im8-stone/40 bg-white hover:bg-im8-offwhite hover:border-im8-stone/60 transition-colors text-sm text-im8-burgundy font-medium"
-          >
-            <svg className="w-4 h-4 text-[#4285F4]" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M4.5 19.5L9 12l4.5 7.5H4.5zM19.5 19.5l-3-7.5H12l3 7.5h4.5zM12 4.5L8.25 12h7.5L12 4.5z"/>
-            </svg>
-            Master Drive folder
-          </a>
-        )}
+        <div className="shrink-0 flex flex-col items-end gap-2">
+          {masterFolderUrl && (
+            <a
+              href={masterFolderUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-im8-stone/40 bg-white hover:bg-im8-offwhite hover:border-im8-stone/60 transition-colors text-sm text-im8-burgundy font-medium"
+            >
+              <svg className="w-4 h-4 text-[#4285F4]" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M4.5 19.5L9 12l4.5 7.5H4.5zM19.5 19.5l-3-7.5H12l3 7.5h4.5zM12 4.5L8.25 12h7.5L12 4.5z"/>
+              </svg>
+              Master Drive folder
+            </a>
+          )}
+          <BulkFoldersButton />
+        </div>
       </div>
 
       {/* Band 1 — KPI cards */}

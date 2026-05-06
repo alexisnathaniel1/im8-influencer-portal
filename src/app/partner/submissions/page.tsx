@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
+import DeliverableComments from "@/components/deliverables/deliverable-comments";
 
 const STATUS_COLORS: Record<string, string> = {
   pending: "bg-yellow-100 text-yellow-700",
@@ -175,6 +176,13 @@ export default async function PartnerSubmissionsPage() {
                     </div>
                   ))}
                 </div>
+
+                {/* Comment thread for this deliverable (partner can talk to the team here) */}
+                {g.deliverableId && (
+                  <div className="mt-4 pt-3 border-t border-im8-stone/20">
+                    <DeliverableComments deliverableId={g.deliverableId} />
+                  </div>
+                )}
               </div>
             );
           })}
