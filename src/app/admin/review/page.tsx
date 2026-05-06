@@ -189,28 +189,18 @@ export default function AdminReviewPage() {
     setActionLoading(submissionId);
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
-    await supabase.from("submissions").update({
-      status: "approved",
-      reviewed_by: user?.id ?? null,
-      reviewed_at: new Date().toISOString(),
-    }).eq("id", submissionId);
-    // Sync deliverable status → approved
-    const approvedSub = submissions.find((s) => s.id === submissionId);
-    if (approvedSub?.deliverable_id) {
-      Promise.resolve(
-        supabase.from("deliverables")
-          .update({ status: "approved" })
-          .eq("id", approvedSub.deliverable_id)
-      ).catch(console.error);
-    }
+    const res = await fetch(`/api/submissions/${submissionId}/approve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reviewedBy: user?.id }),
+    });
+    if (!res.ok) { setActionLoading(null); return; }
     setSubmissions((prev) => prev.filter((s) => s.id !== submissionId));
     setSelectedIds((prev) => { const next = new Set(prev); next.delete(submissionId); return next; });
     if (expandedId === submissionId) setExpandedId(null);
     setActionLoading(null);
     syncContentLog(submissionId);
     notifyCreator(submissionId, "approved");
-    // Rename the Drive file to …_APPROVED (fire-and-forget — non-blocking)
-    fetch(`/api/submissions/${submissionId}/rename-approved`, { method: "POST" }).catch(console.error);
   }
 
   function combinedFeedback(submissionId: string): string {
@@ -224,29 +214,21 @@ export default function AdminReviewPage() {
     setActionLoading(submissionId);
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
-    await supabase.from("submissions").update({
-      status: "revision_requested",
-      feedback: feedback[submissionId] || null,
-      feedback_caption: feedbackCaption[submissionId] || null,
-      reviewed_by: user?.id ?? null,
-      reviewed_at: new Date().toISOString(),
-    }).eq("id", submissionId);
-    // Sync deliverable status → in_progress (revision needed)
-    const reviseSub = submissions.find((s) => s.id === submissionId);
-    if (reviseSub?.deliverable_id) {
-      Promise.resolve(
-        supabase.from("deliverables")
-          .update({ status: "in_progress" })
-          .eq("id", reviseSub.deliverable_id)
-      ).catch(console.error);
-    }
+    const res = await fetch(`/api/submissions/${submissionId}/revise`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        feedback: feedback[submissionId] || null,
+        feedback_caption: feedbackCaption[submissionId] || null,
+        reviewedBy: user?.id,
+      }),
+    });
+    if (!res.ok) { setActionLoading(null); return; }
     setSubmissions((prev) => prev.filter((s) => s.id !== submissionId));
     setSelectedIds((prev) => { const next = new Set(prev); next.delete(submissionId); return next; });
     if (expandedId === submissionId) setExpandedId(null);
     setActionLoading(null);
     notifyCreator(submissionId, "revision_requested", combinedFeedback(submissionId));
-    // Rename the Drive file(s) to …_NEED_REVISION so the team can see status in Drive (fire-and-forget)
-    fetch(`/api/submissions/${submissionId}/rename-revision`, { method: "POST" }).catch(console.error);
   }
 
   async function handleBulkApprove() {
@@ -429,6 +411,12 @@ export default function AdminReviewPage() {
           </div>
           <div className="flex items-center gap-3">
             <span className="text-sm text-im8-burgundy/60 font-medium">{submissions.length} pending</span>
+            <Link
+              href="/admin/review/history"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-im8-stone/40 bg-white text-xs font-bold uppercase tracking-[0.08em] text-im8-burgundy hover:bg-im8-offwhite transition-colors"
+            >
+              Activity log
+            </Link>
             <Link
               href="/admin/review/log"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-im8-burgundy text-white text-xs font-bold uppercase tracking-[0.08em] hover:bg-im8-dark transition-colors"
