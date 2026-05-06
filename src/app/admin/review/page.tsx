@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { DriveVideo } from "@/components/drive-video";
+import { assetLabel, type AssetType, type VariantAsset } from "@/lib/submissions/asset-types";
 import Link from "next/link";
 
 function extractDriveFileId(url: string): string | null {
@@ -32,6 +33,8 @@ interface PendingSubmission {
   caption: string | null;
   variant_label: string | null;
   is_script: boolean;
+  /** Additional assets bundled with this submission. Empty for legacy single-asset rows. */
+  variants: VariantAsset[];
   /** Draft number parsed from file_name (_DRAFT_N or _SCRIPT_N suffix) — null if not determinable */
   draftNum: number | null;
 }
@@ -61,7 +64,7 @@ export default function AdminReviewPage() {
       .from("submissions")
       .select(`
         id, file_name, drive_url, drive_file_id, content_type, platform, post_url, submitted_at, caption,
-        deliverable_id, variant_label, is_script,
+        deliverable_id, variant_label, is_script, variants,
         influencer:influencer_id(full_name),
         deal:deal_id(influencer_name, drive_folder_id),
         brief:brief_id(title),
@@ -97,6 +100,9 @@ export default function AdminReviewPage() {
         caption: (s as Record<string, unknown>).caption as string | null,
         variant_label: (s as Record<string, unknown>).variant_label as string | null,
         is_script: !!((s as Record<string, unknown>).is_script),
+        variants: Array.isArray((s as Record<string, unknown>).variants)
+          ? ((s as Record<string, unknown>).variants as VariantAsset[])
+          : [],
         draftNum: parseDraftNum(s.file_name),
       });
     }
@@ -321,6 +327,14 @@ export default function AdminReviewPage() {
                           DRAFT {sub.draftNum}
                         </span>
                       )}
+                      {sub.variants.length > 0 && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+                          </svg>
+                          {1 + sub.variants.length} assets
+                        </span>
+                      )}
                       {sub.platform && <span className="text-xs text-im8-burgundy/50 capitalize">{sub.platform}</span>}
                     </div>
                     <div className="flex items-center gap-4 mt-1">
@@ -342,18 +356,65 @@ export default function AdminReviewPage() {
 
                 {isExpanded && (
                   <div className="mt-4 pt-4 border-t border-im8-sand space-y-4">
-                    {fileId && (
-                      <DriveVideo
-                        fileId={fileId}
-                        driveUrl={sub.drive_url ?? undefined}
-                        controls
-                        preload="metadata"
-                        width="100%"
-                        style={{ maxHeight: 360 }}
-                        className="block"
-                        containerClassName="rounded-lg overflow-hidden bg-black"
-                        containerStyle={{ maxWidth: 640, minHeight: 80 }}
-                      />
+                    {/* Primary asset — the player */}
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-[11px] font-bold text-im8-muted uppercase tracking-[0.08em]">
+                          Primary asset
+                        </span>
+                        <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-purple-50 text-purple-700 font-mono uppercase tracking-wide border border-purple-200">
+                          {sub.variant_label || "Asset"}
+                        </span>
+                      </div>
+                      {fileId && (
+                        <DriveVideo
+                          fileId={fileId}
+                          driveUrl={sub.drive_url ?? undefined}
+                          controls
+                          preload="metadata"
+                          width="100%"
+                          style={{ maxHeight: 360 }}
+                          className="block"
+                          containerClassName="rounded-lg overflow-hidden bg-black"
+                          containerStyle={{ maxWidth: 640, minHeight: 80 }}
+                        />
+                      )}
+                    </div>
+
+                    {/* Additional variants — list with previews */}
+                    {sub.variants.length > 0 && (
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-[11px] font-bold text-im8-muted uppercase tracking-[0.08em]">
+                            Additional assets ({sub.variants.length})
+                          </span>
+                        </div>
+                        <ul className="space-y-2">
+                          {sub.variants.map((v, vIdx) => (
+                            <li
+                              key={`${sub.id}-v${vIdx}`}
+                              className="flex items-center gap-3 bg-im8-offwhite/60 border border-im8-stone/30 rounded-lg p-2.5"
+                            >
+                              <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-purple-50 text-purple-700 font-mono uppercase tracking-wide border border-purple-200 flex-shrink-0">
+                                {v.label || assetLabel(v.asset_type as AssetType)}
+                              </span>
+                              <span className="text-xs font-mono text-im8-burgundy/60 truncate flex-1 min-w-0">
+                                {v.file_name}
+                              </span>
+                              {v.drive_url && (
+                                <a
+                                  href={v.drive_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs text-im8-red hover:underline flex-shrink-0"
+                                >
+                                  Open →
+                                </a>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
                     )}
 
                     {/* Caption */}
