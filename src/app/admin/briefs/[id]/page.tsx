@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import Link from "next/link";
-import { DELIVERABLE_LABELS } from "@/lib/deliverables";
+import { DELIVERABLE_LABELS, BINARY_DELIVERABLE_CODES } from "@/lib/deliverables";
 
 interface Brief {
   id: string;
@@ -164,7 +164,7 @@ export default function BriefEditorPage({ params }: { params: Promise<{ id: stri
               <h3 className="text-sm font-semibold text-im8-burgundy">Contract & deliverables</h3>
               <span className="text-xs text-im8-burgundy/40">Auto-filled from the deal — edit on the Partner Tracker.</span>
             </div>
-            <div className="grid grid-cols-3 gap-4 mb-4 text-sm">
+            <div className={`grid gap-4 mb-4 text-sm ${(rateUsd || deal.is_gifted) ? "grid-cols-3" : "grid-cols-2"}`}>
               <div>
                 <div className="text-xs text-im8-burgundy/50 uppercase tracking-wide">Contract</div>
                 <div className="text-im8-burgundy font-medium">Contract {deal.contract_sequence ?? 1}</div>
@@ -173,12 +173,15 @@ export default function BriefEditorPage({ params }: { params: Promise<{ id: stri
                 <div className="text-xs text-im8-burgundy/50 uppercase tracking-wide">Duration</div>
                 <div className="text-im8-burgundy font-medium">{deal.total_months ?? 3} months</div>
               </div>
-              <div>
-                <div className="text-xs text-im8-burgundy/50 uppercase tracking-wide">Rate</div>
-                <div className="text-im8-burgundy font-medium">
-                  {deal.is_gifted ? "Gifted" : rateUsd ? `$${rateUsd.toLocaleString()}/mo` : "—"}
+              {/* Rate — only shown when visible to this user (management) or when gifted */}
+              {(rateUsd || deal.is_gifted) && (
+                <div>
+                  <div className="text-xs text-im8-burgundy/50 uppercase tracking-wide">Rate</div>
+                  <div className="text-im8-burgundy font-medium">
+                    {deal.is_gifted ? "Gifted" : `$${rateUsd!.toLocaleString()}/mo`}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
             <div>
               <div className="text-xs text-im8-burgundy/50 uppercase tracking-wide mb-2">Confirmed deliverables</div>
@@ -189,22 +192,19 @@ export default function BriefEditorPage({ params }: { params: Promise<{ id: stri
               ) : (
                 <ul className="space-y-1">
                   {deliverables.map((d, i) => {
-                    if (d.code === "WHITELIST") {
-                      if (!d.count) return null;
-                      return (
-                        <li key={i} className="text-sm text-im8-burgundy flex items-center gap-2">
+                    if (!d.count) return null; // skip anything with count 0
+                    const isBinary = BINARY_DELIVERABLE_CODES.has(d.code);
+                    return (
+                      <li key={i} className="text-sm text-im8-burgundy flex items-center gap-2">
+                        {isBinary ? (
                           <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-semibold w-10 text-center">
                             Yes
                           </span>
-                          Whitelisting
-                        </li>
-                      );
-                    }
-                    return (
-                      <li key={i} className="text-sm text-im8-burgundy flex items-center gap-2">
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-im8-red/10 text-im8-red font-semibold w-10 text-center">
-                          {d.count}×
-                        </span>
+                        ) : (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-im8-red/10 text-im8-red font-semibold w-10 text-center">
+                            {d.count}×
+                          </span>
+                        )}
                         {DELIVERABLE_LABELS[d.code] ?? d.code}
                       </li>
                     );

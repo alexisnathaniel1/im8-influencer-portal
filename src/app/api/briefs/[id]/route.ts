@@ -2,12 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logAuditEvent } from "@/lib/audit/log";
+import { canViewRates } from "@/lib/permissions";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+  const showRates = canViewRates((profile as { role?: string } | null)?.role ?? "");
 
   // Use admin client to bypass RLS and guarantee schema cache has all deal columns.
   const admin = createAdminClient();
@@ -17,6 +21,16 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     .eq("id", id)
     .single();
   if (error || !data) return NextResponse.json({ error: "Brief not found" }, { status: 404 });
+
+  // Strip financial rate from the response unless the viewer is management.
+  // Supabase can return the join as either an object or a single-element array
+  // depending on the relationship definition — handle both.
+  if (!showRates) {
+    const dealObj = Array.isArray(data.deal) ? data.deal[0] : data.deal;
+    if (dealObj && typeof dealObj === "object") {
+      (dealObj as Record<string, unknown>).monthly_rate_cents = null;
+    }
+  }
 
   return NextResponse.json({ brief: data });
 }
