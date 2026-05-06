@@ -62,6 +62,7 @@ interface EditState {
 
 export default function AdminReviewPage() {
   const [submissions, setSubmissions] = useState<PendingSubmission[]>([]);
+  const [revisions, setRevisions] = useState<PendingSubmission[]>([]);
   const [loading, setLoading] = useState(true);
   const [sortBy, setSortBy] = useState<"newest" | "influencer">("newest");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -80,56 +81,58 @@ export default function AdminReviewPage() {
   // deliverable options per deal_id, fetched on demand
   const [deliverableOptions, setDeliverableOptions] = useState<Record<string, DeliverableOption[]>>({});
 
-  async function fetchPending() {
-    const supabase = createClient();
-    const { data, error } = await supabase
-      .from("submissions")
-      .select(`
-        id, file_name, drive_url, drive_file_id, content_type, platform, post_url, submitted_at, caption,
-        deliverable_id, variant_label, is_script, variants,
-        influencer:influencer_id(full_name),
-        deal:deal_id(influencer_name, drive_folder_id),
-        brief:brief_id(title),
-        deliverable:deliverable_id(deliverable_type, sequence)
-      `)
-      .eq("status", "pending")
-      .order("submitted_at", { ascending: false });
-
-    if (error) { setLoading(false); return; }
-
+  function mapSubmissionRows(data: unknown[]): PendingSubmission[] {
     const rows: PendingSubmission[] = [];
-    for (const s of data || []) {
-      const inf = s.influencer as unknown as { full_name: string } | null;
-      const deal = s.deal as unknown as { influencer_name: string; drive_folder_id?: string | null } | null;
-      const brief = s.brief as unknown as { title: string } | null;
-      const deliv = s.deliverable as unknown as { deliverable_type: string; sequence: number | null } | null;
+    for (const raw of data) {
+      const s = raw as Record<string, unknown>;
+      const inf = s.influencer as { full_name: string } | null;
+      const deal = s.deal as { influencer_name: string; drive_folder_id?: string | null } | null;
+      const brief = s.brief as { title: string } | null;
+      const deliv = s.deliverable as { deliverable_type: string; sequence: number | null } | null;
       rows.push({
-        id: s.id,
-        file_name: s.file_name,
-        drive_url: s.drive_url,
-        drive_file_id: s.drive_file_id,
-        content_type: s.content_type,
-        platform: s.platform,
-        post_url: s.post_url,
-        submitted_at: s.submitted_at,
+        id: s.id as string,
+        file_name: s.file_name as string | null,
+        drive_url: s.drive_url as string | null,
+        drive_file_id: s.drive_file_id as string | null,
+        content_type: s.content_type as string,
+        platform: s.platform as string | null,
+        post_url: s.post_url as string | null,
+        submitted_at: s.submitted_at as string,
         influencer_name: inf?.full_name || deal?.influencer_name || "Unknown",
-        deal_id: (s as Record<string, unknown>).deal_id as string,
-        deliverable_id: (s as Record<string, unknown>).deliverable_id as string | null,
+        deal_id: s.deal_id as string,
+        deliverable_id: s.deliverable_id as string | null,
         deal_drive_folder_id: deal?.drive_folder_id ?? null,
         brief_title: brief?.title ?? null,
         deliverable_type: deliv?.deliverable_type ?? null,
         deliverable_sequence: deliv?.sequence ?? null,
-        caption: (s as Record<string, unknown>).caption as string | null,
-        variant_label: (s as Record<string, unknown>).variant_label as string | null,
-        is_script: !!((s as Record<string, unknown>).is_script),
-        variants: Array.isArray((s as Record<string, unknown>).variants)
-          ? ((s as Record<string, unknown>).variants as VariantAsset[])
-          : [],
-        draftNum: parseDraftNum(s.file_name),
+        caption: s.caption as string | null,
+        variant_label: s.variant_label as string | null,
+        is_script: !!(s.is_script),
+        variants: Array.isArray(s.variants) ? (s.variants as VariantAsset[]) : [],
+        draftNum: parseDraftNum(s.file_name as string | null),
       });
     }
+    return rows;
+  }
 
-    setSubmissions(rows);
+  async function fetchPending() {
+    const supabase = createClient();
+    const SELECT_FIELDS = `
+      id, file_name, drive_url, drive_file_id, content_type, platform, post_url, submitted_at, caption,
+      deliverable_id, variant_label, is_script, variants,
+      influencer:influencer_id(full_name),
+      deal:deal_id(influencer_name, drive_folder_id),
+      brief:brief_id(title),
+      deliverable:deliverable_id(deliverable_type, sequence)
+    `;
+
+    const [pendingRes, revisionRes] = await Promise.all([
+      supabase.from("submissions").select(SELECT_FIELDS).eq("status", "pending").order("submitted_at", { ascending: false }),
+      supabase.from("submissions").select(SELECT_FIELDS).eq("status", "revision_requested").order("submitted_at", { ascending: false }),
+    ]);
+
+    if (!pendingRes.error) setSubmissions(mapSubmissionRows(pendingRes.data ?? []));
+    if (!revisionRes.error) setRevisions(mapSubmissionRows(revisionRes.data ?? []));
     setLoading(false);
   }
 
@@ -311,6 +314,26 @@ export default function AdminReviewPage() {
       return next;
     });
     setBulkLoading(false);
+  }
+
+  const [undoLoadingId, setUndoLoadingId] = useState<string | null>(null);
+
+  /** Reset a revision_requested submission back to pending so it reappears in the queue. */
+  async function handleUndo(sub: PendingSubmission) {
+    setUndoLoadingId(sub.id);
+    try {
+      const res = await fetch(`/api/submissions/${sub.id}/undo`, { method: "POST" });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        alert(`Undo failed: ${(json as Record<string, unknown>).error ?? res.statusText}`);
+        return;
+      }
+      // Move from revisions list back into pending queue
+      setRevisions((prev) => prev.filter((s) => s.id !== sub.id));
+      setSubmissions((prev) => [{ ...sub }, ...prev]);
+    } finally {
+      setUndoLoadingId(null);
+    }
   }
 
   /** Open the edit panel for a submission, pre-filling its current values. */
@@ -810,6 +833,72 @@ export default function AdminReviewPage() {
             </Card>
           )}
         </div>
+
+        {/* ── Revision requested section ─────────────────────────────────────── */}
+        {revisions.length > 0 && (
+          <div className="mt-10">
+            <div className="flex items-center gap-3 mb-3">
+              <h2 className="text-base font-semibold text-im8-burgundy">Revision requested</h2>
+              <span className="text-xs font-bold text-orange-700 bg-orange-100 px-2 py-0.5 rounded-full">
+                {revisions.length}
+              </span>
+              <span className="text-xs text-im8-burgundy/40">
+                Waiting for creator to resubmit — click ↩ Undo to put back in the review queue if sent by mistake.
+              </span>
+            </div>
+            <div className="space-y-2">
+              {revisions.map((sub) => (
+                <Card key={sub.id} padding="sm">
+                  <div className="flex items-center gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-medium text-im8-burgundy text-sm">{sub.influencer_name}</span>
+                        {sub.deliverable_type && (
+                          <span className="font-mono text-xs bg-im8-sand/60 px-1.5 py-0.5 rounded text-im8-burgundy">
+                            {sub.deliverable_type}{sub.deliverable_sequence ? ` #${sub.deliverable_sequence}` : ""}
+                          </span>
+                        )}
+                        {sub.variant_label && (
+                          <span className="text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full font-medium">
+                            {sub.variant_label}
+                          </span>
+                        )}
+                        {sub.draftNum && (
+                          <span className="text-xs text-im8-burgundy/50">Draft {sub.draftNum}</span>
+                        )}
+                      </div>
+                      {sub.drive_url && (
+                        <a
+                          href={sub.drive_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="text-xs text-im8-red hover:underline truncate max-w-[300px] block mt-0.5"
+                        >
+                          {sub.file_name ?? "Open in Drive ↗"}
+                        </a>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-xs text-im8-burgundy/40">
+                        {new Date(sub.submitted_at).toLocaleDateString("en-AU", { day: "numeric", month: "short" })}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleUndo(sub)}
+                        disabled={undoLoadingId === sub.id}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold uppercase tracking-[0.08em] rounded-full border border-im8-stone/40 text-im8-burgundy hover:bg-im8-offwhite transition-colors disabled:opacity-50"
+                      >
+                        {undoLoadingId === sub.id ? "…" : "↩ Undo"}
+                      </button>
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
   );

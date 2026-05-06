@@ -4,6 +4,9 @@ import { redirect } from "next/navigation";
 import { ADMIN_ROLES } from "@/lib/permissions";
 import HistoryClient from "./history-client";
 
+// Always fetch fresh — audit events must never be stale.
+export const dynamic = "force-dynamic";
+
 export default async function ReviewHistoryPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
