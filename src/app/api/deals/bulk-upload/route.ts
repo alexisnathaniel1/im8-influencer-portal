@@ -26,15 +26,24 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "No rows to import" }, { status: 400 });
   }
 
-  // Pre-load existing emails so we skip duplicates instead of erroring
+  // Pre-load existing (name, email) pairs so we skip true duplicates without
+  // blocking legitimate agency-managed creators who share a contact email.
+  // E.g. Stuart Duguid manages Aryna Sabalenka AND Eva Lys with the same email
+  // — those are different creators, not duplicates.
   const incomingEmails = body.rows.map(r => r.influencer_email.toLowerCase());
   const { data: existing } = await admin
     .from("deals")
-    .select("influencer_email")
+    .select("influencer_name, influencer_email")
     .in("influencer_email", incomingEmails);
+  const dedupKey = (name: string, email: string) =>
+    `${name.trim().toLowerCase()}|${email.trim().toLowerCase()}`;
   const existingSet = new Set(
     (existing ?? [])
-      .map(e => (e.influencer_email as string | null)?.toLowerCase())
+      .map(e => {
+        const name = (e.influencer_name as string | null) ?? "";
+        const email = (e.influencer_email as string | null) ?? "";
+        return name && email ? dedupKey(name, email) : null;
+      })
       .filter(Boolean) as string[]
   );
 
@@ -42,12 +51,13 @@ export async function POST(request: NextRequest) {
   const skipped: { email: string; reason: string }[] = [];
   // Keep the original row alongside the insert payload so we can use the
   // completed_deliverables list once we know the new deal IDs.
-  const rowByEmail = new Map<string, PartnerPayload>();
+  // Keyed on (name, email) since multiple creators can share an agency email.
+  const rowByKey = new Map<string, PartnerPayload>();
 
   for (const r of body.rows) {
-    const email = r.influencer_email.toLowerCase();
-    if (existingSet.has(email)) {
-      skipped.push({ email, reason: "Already exists" });
+    const key = dedupKey(r.influencer_name, r.influencer_email);
+    if (existingSet.has(key)) {
+      skipped.push({ email: r.influencer_email.toLowerCase(), reason: `${r.influencer_name} already exists` });
       continue;
     }
     inserts.push({
@@ -76,8 +86,8 @@ export async function POST(request: NextRequest) {
       contract_sequence: 1,
       assigned_to: user.id,
     });
-    rowByEmail.set(email, r);
-    existingSet.add(email); // dedupe within the same upload
+    rowByKey.set(key, r);
+    existingSet.add(key); // dedupe within the same upload
   }
 
   if (inserts.length === 0) {
@@ -103,8 +113,9 @@ export async function POST(request: NextRequest) {
   let markedLive = 0;
 
   for (const deal of data ?? []) {
-    const email = ((deal.influencer_email as string | null) ?? "").toLowerCase();
-    const r = rowByEmail.get(email);
+    const name = (deal.influencer_name as string | null) ?? "";
+    const email = (deal.influencer_email as string | null) ?? "";
+    const r = rowByKey.get(dedupKey(name, email));
     if (!r) continue;
 
     const platformPrimary = (deal.platform_primary as string | null) ?? "instagram";
