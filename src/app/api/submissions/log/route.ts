@@ -284,7 +284,23 @@ export async function POST(request: Request) {
     }
     const submissionId = insertData?.id as string;
 
-    // 8. Optional admin note → deliverable_comments (internal-only by default).
+    // 8. Update the deliverable: flip status → submitted and auto-assign PIC.
+    // Scripts don't enter the review queue so only do this for real content.
+    if (deliverableId && !primaryIsScript) {
+      void admin
+        .from("deliverables")
+        .update({
+          status: "submitted",
+          // Set PIC to whoever logged the content (only fill if currently blank)
+          assigned_pic: user.id,
+        })
+        .eq("id", deliverableId)
+        .then(({ error }) => {
+          if (error) console.warn("[submissions/log] deliverable update failed", error);
+        });
+    }
+
+    // 8b. Optional admin note → deliverable_comments (internal-only by default).
     if (comment && comment.trim() && deliverableId) {
       await admin.from("deliverable_comments").insert({
         deliverable_id: deliverableId,

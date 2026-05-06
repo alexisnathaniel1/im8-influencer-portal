@@ -258,15 +258,13 @@ export default function DeliverablesTable({
                   </th>
 
                   <th className="px-5 py-2.5 text-left text-[11px] font-semibold text-im8-muted uppercase tracking-[0.07em] whitespace-nowrap">Content</th>
-                  <th className="px-5 py-2.5 text-left text-[11px] font-semibold text-im8-muted uppercase tracking-[0.07em] whitespace-nowrap">QA</th>
                   <th className="px-5 py-2.5 text-left text-[11px] font-semibold text-im8-muted uppercase tracking-[0.07em] whitespace-nowrap">Post URL</th>
-                  <th className="px-5 py-2.5 text-left text-[11px] font-semibold text-im8-muted uppercase tracking-[0.07em] whitespace-nowrap">Views</th>
                   <th className="px-5 py-2.5 text-left text-[11px] font-semibold text-im8-muted uppercase tracking-[0.07em] whitespace-nowrap">PIC</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-im8-stone/10">
                 {sortedDeliverables.length === 0 && (
-                  <tr><td colSpan={10} className="px-4 py-12 text-center text-im8-burgundy/40">No deliverables yet. They&rsquo;ll appear here automatically once a deal is approved and deliverables are saved on the contract.</td></tr>
+                  <tr><td colSpan={8} className="px-4 py-12 text-center text-im8-burgundy/40">No deliverables yet. They&rsquo;ll appear here automatically once a deal is approved and deliverables are saved on the contract.</td></tr>
                 )}
                 {sortedDeliverables.map(d => (
                   <tr
@@ -333,14 +331,8 @@ export default function DeliverablesTable({
                       )}
                     </td>
 
-                    <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                      <QaStatusCell deliverableId={d.id} current={d.qa_status ?? "pending"} />
-                    </td>
                     <td className="px-4 py-3">
                       <PostUrlCell deliverableId={d.id} current={d.post_url} isStory={d.is_story} />
-                    </td>
-                    <td className="px-4 py-3">
-                      <MetricsCell deliverable={d} />
                     </td>
                     <td className="px-4 py-3">
                       <PicSelect deliverableId={d.id} current={d.pic?.id ?? ""} pics={pics} />
@@ -717,21 +709,6 @@ function DeliverablePanel({ deliverable, editors, onClose }: { deliverable: Deli
         </Link>
       )}
 
-      {/* Metrics summary */}
-      {(deliverable.views !== null || deliverable.likes !== null) && (
-        <div className="bg-im8-sand/50 rounded-lg p-3 grid grid-cols-3 gap-2 text-center">
-          {[
-            { label: "Views", val: deliverable.views },
-            { label: "Likes", val: deliverable.likes },
-            { label: "Comments", val: deliverable.comments_count },
-          ].map(m => (
-            <div key={m.label}>
-              <div className="text-xs text-im8-burgundy/50">{m.label}</div>
-              <div className="font-semibold text-im8-burgundy text-sm">{m.val?.toLocaleString() ?? "—"}</div>
-            </div>
-          ))}
-        </div>
-      )}
 
       {/* Brief link */}
       {deliverable.brief && (
@@ -757,21 +734,6 @@ function DeliverablePanel({ deliverable, editors, onClose }: { deliverable: Deli
             No editors on the team yet — add one in Settings.
           </p>
         )}
-      </div>
-
-      {/* QA */}
-      <div className="space-y-3 border-t border-im8-stone/20 pt-3">
-        <div className="text-xs font-semibold text-im8-burgundy/50 uppercase tracking-wide">QA</div>
-
-        <div>
-          <label className="block text-xs text-im8-burgundy/60 mb-1">QA status</label>
-          <QaStatusCell deliverableId={deliverable.id} current={deliverable.qa_status ?? "pending"} />
-        </div>
-
-        <div>
-          <label className="block text-xs text-im8-burgundy/60 mb-1">QA comments</label>
-          <QaCommentsField deliverableId={deliverable.id} current={deliverable.qa_comments ?? ""} />
-        </div>
       </div>
 
       {/* Comments */}
