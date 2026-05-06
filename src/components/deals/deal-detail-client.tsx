@@ -1935,10 +1935,10 @@ function LinkProfileSection({ dealId, currentProfileId, driveFolderId }: {
             <span className="text-xs text-im8-burgundy/50">No Drive folder yet</span>
             <button
               onClick={createSubFolder}
-              disabled={subFolderStatus === "creating" || subFolderStatus === "created"}
+              disabled={subFolderStatus === "creating"}
               className="text-xs px-2.5 py-1 border border-im8-stone/40 rounded-lg text-im8-burgundy/60 hover:text-im8-burgundy hover:border-im8-stone/70 disabled:opacity-50 transition-colors"
             >
-              {subFolderStatus === "creating" ? "Creating…" : subFolderStatus === "created" ? "Created ✓" : "Create Drive folder"}
+              {subFolderStatus === "creating" ? "Creating…" : "Create Drive folder"}
             </button>
           </>
         )}
@@ -2248,6 +2248,152 @@ function DeliverableBriefRow({
   const [sendStatus, setSendStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState("");
 
+  // Attach content state
+  const [attachOpen, setAttachOpen] = useState(false);
+  const [attachMode, setAttachMode] = useState<"link" | "file">("link");
+  const [attachDriveUrl, setAttachDriveUrl] = useState("");
+  const [attachCaption, setAttachCaption] = useState("");
+  const [attachFile, setAttachFile] = useState<File | null>(null);
+  const [attachStatus, setAttachStatus] = useState<"idle" | "submitting" | "done" | "error">("idle");
+  const [attachResult, setAttachResult] = useState<{ driveUrl: string | null; canonicalName: string; copied: boolean; uploaded: boolean } | null>(null);
+  const [attachError, setAttachError] = useState("");
+
+  async function handleAttach() {
+    if (attachStatus === "submitting") return;
+    setAttachStatus("submitting");
+    setAttachError("");
+
+    // Need a tracker row ID first — create one if missing
+    let id = rowId;
+    if (!id) {
+      const res = await fetch(`/api/deals/${dealId}/deliverable-brief`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: deliverableType, sequence, brief_doc_url: null }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        id = data.id as string;
+        setRowId(id);
+      }
+    }
+    if (!id) {
+      setAttachError("Could not resolve deliverable — try refreshing.");
+      setAttachStatus("error");
+      return;
+    }
+
+    try {
+      let res: Response;
+      if (attachMode === "file" && attachFile) {
+        const fd = new FormData();
+        fd.append("file", attachFile);
+        if (attachCaption) fd.append("caption", attachCaption);
+        res = await fetch(`/api/deliverables/${id}/attach-content`, { method: "POST", body: fd });
+      } else {
+        if (!attachDriveUrl.includes("drive.google.com") && !attachDriveUrl.startsWith("http")) {
+          setAttachError("Please enter a valid Drive or web URL.");
+          setAttachStatus("error");
+          return;
+        }
+        res = await fetch(`/api/deliverables/${id}/attach-content`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ driveUrl: attachDriveUrl, caption: attachCaption || undefined }),
+        });
+      }
+
+      const data = await res.json();
+      if (!res.ok) { setAttachError(data.error || "Failed"); setAttachStatus("error"); return; }
+      setAttachResult(data as { driveUrl: string | null; canonicalName: string; copied: boolean; uploaded: boolean });
+      setAttachStatus("done");
+      setIsDone(true); // deliverable is now marked completed server-side
+    } catch (e) {
+      setAttachError(e instanceof Error ? e.message : "Network error");
+      setAttachStatus("error");
+    }
+  }
+
+  function AttachPanel() {
+    if (!attachOpen) return null;
+    if (attachStatus === "done" && attachResult) {
+      return (
+        <div className="mt-2 p-3 bg-emerald-50 border border-emerald-200 rounded-lg space-y-1.5">
+          <p className="text-xs font-semibold text-emerald-700">✓ Content attached and marked as completed</p>
+          <p className="text-[11px] text-emerald-600 font-mono">{attachResult.canonicalName}</p>
+          {attachResult.copied && <p className="text-[11px] text-emerald-600">Copied to partner&apos;s Drive folder ✓</p>}
+          {attachResult.uploaded && <p className="text-[11px] text-emerald-600">Uploaded to partner&apos;s Drive folder ✓</p>}
+          {!attachResult.copied && !attachResult.uploaded && attachResult.driveUrl && (
+            <p className="text-[11px] text-amber-600">Saved with original URL (no Drive folder configured)</p>
+          )}
+          {attachResult.driveUrl && (
+            <a href={attachResult.driveUrl} target="_blank" rel="noopener noreferrer" className="text-[11px] text-im8-red hover:underline">Open in Drive ↗</a>
+          )}
+          <button onClick={() => { setAttachOpen(false); setAttachStatus("idle"); setAttachResult(null); setAttachDriveUrl(""); setAttachCaption(""); setAttachFile(null); }}
+            className="text-[11px] text-im8-burgundy/50 hover:text-im8-burgundy underline">Attach another</button>
+        </div>
+      );
+    }
+    return (
+      <div className="mt-2 p-3 bg-im8-sand/40 border border-im8-stone/30 rounded-lg space-y-2.5">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-semibold text-im8-burgundy">Attach approved content</p>
+          <button onClick={() => setAttachOpen(false)} className="text-im8-burgundy/40 hover:text-im8-burgundy text-xs">✕</button>
+        </div>
+        {/* Mode toggle */}
+        <div className="flex gap-1">
+          <button onClick={() => setAttachMode("link")}
+            className={`px-2.5 py-1 text-xs rounded-md transition-colors ${attachMode === "link" ? "bg-im8-burgundy text-white" : "bg-white border border-im8-stone/40 text-im8-burgundy/70 hover:text-im8-burgundy"}`}>
+            Drive / web link
+          </button>
+          <button onClick={() => setAttachMode("file")}
+            className={`px-2.5 py-1 text-xs rounded-md transition-colors ${attachMode === "file" ? "bg-im8-burgundy text-white" : "bg-white border border-im8-stone/40 text-im8-burgundy/70 hover:text-im8-burgundy"}`}>
+            Upload file
+          </button>
+        </div>
+
+        {attachMode === "link" ? (
+          <input
+            type="url" value={attachDriveUrl}
+            onChange={e => { setAttachDriveUrl(e.target.value); setAttachError(""); }}
+            placeholder="https://drive.google.com/file/d/…"
+            className="w-full px-3 py-1.5 text-sm border border-im8-stone/40 rounded-lg text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/30"
+          />
+        ) : (
+          <label className="block w-full border-2 border-dashed border-im8-stone/50 rounded-lg p-3 text-center cursor-pointer hover:border-im8-red/40 transition-colors">
+            <input type="file" className="hidden" onChange={e => setAttachFile(e.target.files?.[0] ?? null)} />
+            {attachFile ? (
+              <span className="text-xs text-im8-burgundy font-medium">{attachFile.name}</span>
+            ) : (
+              <span className="text-xs text-im8-burgundy/50">Click to choose file</span>
+            )}
+          </label>
+        )}
+
+        <textarea
+          value={attachCaption} onChange={e => setAttachCaption(e.target.value)}
+          placeholder="Caption (optional)"
+          rows={2}
+          className="w-full px-3 py-1.5 text-sm border border-im8-stone/40 rounded-lg text-im8-burgundy focus:outline-none focus:ring-2 focus:ring-im8-red/30 resize-none"
+        />
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleAttach}
+            disabled={attachStatus === "submitting" || (attachMode === "link" ? !attachDriveUrl : !attachFile)}
+            className="px-3 py-1.5 text-xs font-medium bg-im8-red text-white rounded-lg hover:bg-im8-burgundy disabled:opacity-40 transition-colors"
+          >
+            {attachStatus === "submitting" ? "Saving…" : "Mark as done + save to Drive"}
+          </button>
+          {attachError && <span className="text-xs text-red-600">{attachError}</span>}
+        </div>
+        <p className="text-[11px] text-im8-burgundy/40">
+          The file will be copied to the partner&apos;s Drive contract folder and the deliverable marked as completed — no review needed.
+        </p>
+      </div>
+    );
+  }
+
   // Local done state — lets us toggle without a full page reload
   const initialDone = ["approved", "live", "completed"].includes(
     (trackerRow?.status as string | undefined) ?? "",
@@ -2395,6 +2541,7 @@ function DeliverableBriefRow({
   // If this deliverable is done, show a compact done row with an undo checkbox.
   if (isDone) {
     return (
+      <>
       <div className="px-5 py-3 flex items-center gap-3 flex-wrap">
         {/* Done checkbox — click to undo */}
         <button
@@ -2420,16 +2567,28 @@ function DeliverableBriefRow({
             {label}
           </span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
             </svg>
             Completed
           </span>
-          <span className="text-xs text-im8-burgundy/40 italic">no brief needed · click ✓ to undo</span>
+          <span className="text-xs text-im8-burgundy/40 italic">click ✓ to undo</span>
+          <button
+            onClick={() => setAttachOpen(o => !o)}
+            className="text-xs text-im8-burgundy/50 hover:text-im8-red underline transition-colors"
+          >
+            {attachOpen ? "Hide" : "Attach content"}
+          </button>
         </div>
       </div>
+      {attachOpen && (
+        <div className="px-5 pb-3">
+          <AttachPanel />
+        </div>
+      )}
+      </>
     );
   }
 
@@ -2507,6 +2666,17 @@ function DeliverableBriefRow({
           )}
         </div>
       )}
+
+      {/* Attach already-approved content */}
+      <div className="pl-[6.5rem]">
+        <button
+          onClick={() => setAttachOpen(o => !o)}
+          className="text-xs text-im8-burgundy/50 hover:text-im8-red underline transition-colors"
+        >
+          {attachOpen ? "Hide" : "Already have approved content? Attach it here →"}
+        </button>
+        {attachOpen && <div className="mt-1.5"><AttachPanel /></div>}
+      </div>
     </div>
   );
 }

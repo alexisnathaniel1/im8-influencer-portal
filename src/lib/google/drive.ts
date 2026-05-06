@@ -349,3 +349,34 @@ export async function renameDriveFile(fileId: string, newName: string): Promise<
   await drive.files.update({ fileId, requestBody: { name: finalName }, supportsAllDrives: true });
   return { renamed: true };
 }
+
+/**
+ * Upload a file buffer directly to a Drive folder.
+ * Uses the multipart upload endpoint — suitable for files up to ~5 MB (images, short clips, docs).
+ * For large video files, prefer the resumable upload flow via initiateResumableUpload().
+ */
+export async function uploadFileToDrive(
+  fileBuffer: Buffer,
+  mimeType: string,
+  fileName: string,
+  destFolderId: string,
+): Promise<{ fileId: string; webViewLink: string }> {
+  const auth = getAuth();
+  const drive = google.drive({ version: "v3", auth });
+
+  const { Readable } = await import("stream");
+  const stream = Readable.from(fileBuffer);
+
+  const res = await drive.files.create({
+    requestBody: { name: fileName, parents: [destFolderId] },
+    media: { mimeType, body: stream },
+    fields: "id, webViewLink",
+    supportsAllDrives: true,
+  });
+
+  if (!res.data.id || !res.data.webViewLink) {
+    throw new Error("Drive upload did not return file ID or link");
+  }
+
+  return { fileId: res.data.id, webViewLink: res.data.webViewLink };
+}
