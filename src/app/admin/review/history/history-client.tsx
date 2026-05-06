@@ -62,6 +62,15 @@ function getActionPill(action: string): ActionPillConfig {
   }
 }
 
+function humanizeFileName(fileName: string): string {
+  return fileName
+    .replace(/_/g, " ")
+    .replace(/\s+(DRAFT|SCRIPT)\s+(\d+)$/i, " · Draft $2")
+    .replace(/\s*Contract\s*\d+\s*/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function describeEvent(event: AuditEvent): { main: string; sub?: string } {
   const b = event.before ?? {};
   const a = event.after ?? {};
@@ -86,31 +95,32 @@ function describeEvent(event: AuditEvent): { main: string; sub?: string } {
     parts.push(variantLabel);
   }
 
-  // For manually logged events: try to parse from file_name in after
-  if (parts.length === 0 && (event.action === "submission_logged_manually" || event.action === "script_logged_manually")) {
-    const primary = a.primary as Record<string, unknown> | undefined;
-    const fileName = (primary?.file_name as string | undefined)
-      ?? (Array.isArray(a.assets) && a.assets.length > 0
-        ? ((a.assets[0] as Record<string, unknown>)?.file_name as string | undefined)
-        : undefined);
-    if (fileName) {
-      // Humanize: rose_harvey_Contract1_IGR05_Hook1_DRAFT_1 → "rose harvey · IGR05 · Hook1 · Draft 1"
-      const cleaned = fileName
-        .replace(/_/g, " ")
-        .replace(/\s+(DRAFT|SCRIPT)\s+(\d+)$/i, " · Draft $2")
-        .replace(/Contract\s*\d+\s*/i, "")
-        .trim();
-      return { main: cleaned };
-    }
-    // Last resort: show asset count if available
-    const assetCount = a.assetCount as number | undefined;
-    if (assetCount && assetCount > 1) {
-      return { main: `${assetCount} assets logged`, sub: `Deal: ${(a.dealId as string | undefined)?.slice(0, 8) ?? "?"}` };
-    }
-  }
-
   if (parts.length > 0) {
     return { main: parts.join(" — ") };
+  }
+
+  // No structured context — try to parse a human-readable description from the
+  // canonical file_name stored on any field. Works for old events (pre-enrichment)
+  // and for deleted submissions where the submission row no longer exists.
+  const primary = a.primary as Record<string, unknown> | undefined;
+  const fileNameCandidate =
+    (b.file_name as string | null)
+    ?? (primary?.file_name as string | undefined)
+    ?? (Array.isArray(a.assets) && a.assets.length > 0
+        ? ((a.assets[0] as Record<string, unknown>)?.file_name as string | undefined)
+        : undefined)
+    ?? null;
+
+  if (fileNameCandidate) {
+    return { main: humanizeFileName(fileNameCandidate) };
+  }
+
+  // For logged events: show asset count if we at least have that
+  if (event.action === "submission_logged_manually" || event.action === "script_logged_manually") {
+    const assetCount = a.assetCount as number | undefined;
+    if (assetCount && assetCount > 1) {
+      return { main: `${assetCount} assets logged` };
+    }
   }
 
   // Absolute fallback: truncated entity ID

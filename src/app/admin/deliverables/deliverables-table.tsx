@@ -63,6 +63,15 @@ const STATUS_COLORS: Record<string, string> = {
   completed: "bg-im8-burgundy/10 text-im8-burgundy",
 };
 
+const STATUS_LEGEND: Array<{ value: string; label: string; desc: string }> = [
+  { value: "pending",     label: "Pending",     desc: "Not started — brief not yet sent" },
+  { value: "in_progress", label: "In progress",  desc: "Brief sent, waiting for creator to submit" },
+  { value: "submitted",   label: "Submitted",    desc: "Content received, awaiting your review" },
+  { value: "approved",    label: "Approved",     desc: "Content approved ✓" },
+  { value: "live",        label: "Live",         desc: "Content posted and live on platform" },
+  { value: "completed",   label: "Completed",    desc: "All done — deliverable closed" },
+];
+
 type SortKey = "influencer" | "type" | "status" | "due" | null;
 
 export default function DeliverablesTable({
@@ -192,6 +201,20 @@ export default function DeliverablesTable({
             </select>
           )}
           <div className="ml-auto text-xs text-im8-burgundy/50 self-center">{sortedDeliverables.length} rows</div>
+        </div>
+
+        {/* Status legend */}
+        <div className="flex flex-wrap items-center gap-2 px-1">
+          <span className="text-[10px] font-semibold text-im8-burgundy/40 uppercase tracking-widest shrink-0">Status:</span>
+          {STATUS_LEGEND.map(({ value, label, desc }) => (
+            <span
+              key={value}
+              title={desc}
+              className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium cursor-default ${STATUS_COLORS[value]}`}
+            >
+              {label}
+            </span>
+          ))}
         </div>
 
         {/* Table */}

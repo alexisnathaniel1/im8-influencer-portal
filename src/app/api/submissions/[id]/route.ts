@@ -136,10 +136,16 @@ export async function DELETE(
 
     const admin = createAdminClient();
 
-    // Snapshot the row before delete so the audit log captures what was lost.
+    // Snapshot the row before delete, with deal + deliverable names so the
+    // audit log remains readable after the submission is gone.
     const { data: before } = await admin
       .from("submissions")
-      .select("id, deal_id, deliverable_id, status, file_name, drive_url, drive_file_id, variants, is_script, variant_label, submitted_at")
+      .select(`
+        id, deal_id, deliverable_id, status, file_name, drive_url, drive_file_id,
+        variants, is_script, variant_label, submitted_at,
+        deal:deal_id(influencer_name),
+        deliverable:deliverable_id(deliverable_type, sequence)
+      `)
       .eq("id", submissionId)
       .single();
 
@@ -156,12 +162,24 @@ export async function DELETE(
       return NextResponse.json({ error: deleteError.message }, { status: 500 });
     }
 
+    // Build a flat enriched snapshot — the joined deal/deliverable rows are
+    // removed after extraction so the stored JSON stays clean.
+    const dealSnap = Array.isArray(before.deal) ? before.deal[0] : before.deal;
+    const delivSnap = Array.isArray(before.deliverable) ? before.deliverable[0] : before.deliverable;
+    const { deal: _d, deliverable: _dv, ...rest } = before as typeof before & { deal?: unknown; deliverable?: unknown };
+    const enrichedBefore = {
+      ...rest,
+      influencer_name: (dealSnap as { influencer_name?: string } | null)?.influencer_name ?? null,
+      deliverable_type: (delivSnap as { deliverable_type?: string } | null)?.deliverable_type ?? null,
+      deliverable_sequence: (delivSnap as { sequence?: number } | null)?.sequence ?? null,
+    };
+
     void logAuditEvent({
       actorId: user.id,
       entityType: "submission",
       entityId: submissionId,
       action: "submission_deleted",
-      before,
+      before: enrichedBefore,
     });
 
     // Rename Drive files to prefix with DELETED_ so the team can see the
