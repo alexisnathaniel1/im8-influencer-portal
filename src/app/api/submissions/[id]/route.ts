@@ -1,14 +1,6 @@
 /**
- * DELETE /api/submissions/[id]
- *
- * Removes a submission row (e.g. duplicates, test uploads). Admin-only.
- *
- * What we delete vs. keep:
- *  - The submissions row is hard-deleted.
- *  - The Drive file(s) are renamed with a "DELETED_" prefix so reviewers
- *    can see the status at a glance in Drive without losing the actual file.
- *  - Cascade: deliverable_comments link to deliverable, not submission, so
- *    they're untouched. submissions has no FK children we own.
+ * PATCH /api/submissions/[id]  — edit submission metadata (admin-only)
+ * DELETE /api/submissions/[id] — hard-delete + rename Drive files (admin-only)
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -18,6 +10,88 @@ import { ADMIN_ROLES } from "@/lib/permissions";
 import { logAuditEvent } from "@/lib/audit/log";
 import { renameDriveFile } from "@/lib/google/drive";
 import type { VariantAsset } from "@/lib/submissions/asset-types";
+
+/** ------------------------------------------------------------------ PATCH */
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id: submissionId } = await params;
+
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single();
+    if (!profile || !ADMIN_ROLES.includes(profile.role)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const body = await request.json() as {
+      deliverable_id?: string | null;
+      variant_label?: string | null;
+      caption?: string | null;
+      drive_url?: string | null;
+    };
+
+    // Only allow the fields we explicitly support editing.
+    const allowed = ["deliverable_id", "variant_label", "caption", "drive_url"] as const;
+    const updates: Record<string, unknown> = {};
+    for (const key of allowed) {
+      if (Object.prototype.hasOwnProperty.call(body, key)) {
+        updates[key] = body[key] ?? null;
+      }
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return NextResponse.json({ error: "No editable fields provided" }, { status: 400 });
+    }
+
+    const admin = createAdminClient();
+
+    // Snapshot before for audit log.
+    const { data: before } = await admin
+      .from("submissions")
+      .select("deliverable_id, variant_label, caption, drive_url, file_name")
+      .eq("id", submissionId)
+      .single();
+
+    if (!before) {
+      return NextResponse.json({ error: "Submission not found" }, { status: 404 });
+    }
+
+    const { error: updateError } = await admin
+      .from("submissions")
+      .update(updates)
+      .eq("id", submissionId);
+
+    if (updateError) {
+      return NextResponse.json({ error: updateError.message }, { status: 500 });
+    }
+
+    void logAuditEvent({
+      actorId: user.id,
+      entityType: "submission",
+      entityId: submissionId,
+      action: "submission_edited",
+      before,
+      after: updates,
+    });
+
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    console.error("[submissions/PATCH] Error:", error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Failed to update submission" },
+      { status: 500 },
+    );
+  }
+}
 
 export async function DELETE(
   _request: NextRequest,

@@ -46,6 +46,19 @@ function parseDraftNum(fileName: string | null): number | null {
   return m ? parseInt(m[2], 10) : null;
 }
 
+interface DeliverableOption {
+  id: string;
+  deliverable_type: string;
+  sequence: number | null;
+}
+
+interface EditState {
+  deliverable_id: string | null;
+  variant_label: string;
+  caption: string;
+  drive_url: string;
+}
+
 export default function AdminReviewPage() {
   const [submissions, setSubmissions] = useState<PendingSubmission[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,6 +70,13 @@ export default function AdminReviewPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [bulkLoading, setBulkLoading] = useState(false);
+
+  // Edit-in-place state
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editState, setEditState] = useState<Record<string, EditState>>({});
+  const [editSaving, setEditSaving] = useState(false);
+  // deliverable options per deal_id, fetched on demand
+  const [deliverableOptions, setDeliverableOptions] = useState<Record<string, DeliverableOption[]>>({});
 
   async function fetchPending() {
     const supabase = createClient();
@@ -279,6 +299,83 @@ export default function AdminReviewPage() {
     setBulkLoading(false);
   }
 
+  /** Open the edit panel for a submission, pre-filling its current values. */
+  async function openEdit(sub: PendingSubmission) {
+    // Pre-fill from current values
+    setEditState((prev) => ({
+      ...prev,
+      [sub.id]: {
+        deliverable_id: sub.deliverable_id,
+        variant_label: sub.variant_label ?? "",
+        caption: sub.caption ?? "",
+        drive_url: sub.drive_url ?? "",
+      },
+    }));
+    setEditingId(sub.id);
+    // Make sure the card is expanded
+    setExpandedId(sub.id);
+
+    // Fetch deliverables for this deal if we haven't yet
+    if (!deliverableOptions[sub.deal_id]) {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("deliverables")
+        .select("id, deliverable_type, sequence")
+        .eq("deal_id", sub.deal_id)
+        .order("sequence", { ascending: true });
+      setDeliverableOptions((prev) => ({
+        ...prev,
+        [sub.deal_id]: (data ?? []) as DeliverableOption[],
+      }));
+    }
+  }
+
+  function cancelEdit(id: string) {
+    setEditingId(null);
+    setEditState((prev) => { const next = { ...prev }; delete next[id]; return next; });
+  }
+
+  async function saveEdit(id: string) {
+    const state = editState[id];
+    if (!state) return;
+    setEditSaving(true);
+    try {
+      const res = await fetch(`/api/submissions/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          deliverable_id: state.deliverable_id || null,
+          variant_label: state.variant_label.trim() || null,
+          caption: state.caption.trim() || null,
+          drive_url: state.drive_url.trim() || null,
+        }),
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        alert(`Save failed: ${json.error ?? res.statusText}`);
+        return;
+      }
+      // Update local state
+      setSubmissions((prev) => prev.map((s) => {
+        if (s.id !== id) return s;
+        const opts = deliverableOptions[s.deal_id] ?? [];
+        const deliv = opts.find((d) => d.id === state.deliverable_id);
+        return {
+          ...s,
+          deliverable_id: state.deliverable_id,
+          deliverable_type: deliv?.deliverable_type ?? s.deliverable_type,
+          deliverable_sequence: deliv?.sequence ?? s.deliverable_sequence,
+          variant_label: state.variant_label.trim() || null,
+          caption: state.caption.trim() || null,
+          drive_url: state.drive_url.trim() || s.drive_url,
+        };
+      }));
+      cancelEdit(id);
+    } finally {
+      setEditSaving(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-im8-offwhite flex items-center justify-center">
@@ -418,6 +515,20 @@ export default function AdminReviewPage() {
                   <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                     <Button size="sm" variant="primary" onClick={() => handleApprove(sub.id)} loading={actionLoading === sub.id}>Approve</Button>
                     <Button size="sm" variant="outline" onClick={() => handleRevisionRequest(sub.id)} loading={actionLoading === sub.id}>Revise</Button>
+                    {/* Edit */}
+                    <button
+                      type="button"
+                      onClick={() => editingId === sub.id ? cancelEdit(sub.id) : openEdit(sub)}
+                      disabled={actionLoading === sub.id}
+                      title="Edit submission details"
+                      aria-label="Edit submission"
+                      className={`p-1.5 rounded-md transition-colors disabled:opacity-40 ${editingId === sub.id ? "text-im8-burgundy bg-im8-sand/40 hover:bg-im8-sand/60" : "text-im8-burgundy/40 hover:text-im8-burgundy hover:bg-im8-sand/40"}`}
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                    </button>
+                    {/* Delete */}
                     <button
                       type="button"
                       onClick={() => handleDelete(sub.id)}
@@ -436,6 +547,88 @@ export default function AdminReviewPage() {
 
                 {isExpanded && (
                   <div className="mt-4 pt-4 border-t border-im8-sand space-y-4">
+
+                    {/* ── Edit panel ── */}
+                    {editingId === sub.id && editState[sub.id] && (
+                      <div className="bg-im8-sand/30 border border-im8-stone/40 rounded-xl p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-bold text-im8-muted uppercase tracking-[0.08em]">Edit details</span>
+                          <span className="text-[11px] text-im8-burgundy/40">Changes are saved to the database only — Drive filenames are not updated.</span>
+                        </div>
+
+                        {/* Deliverable picker */}
+                        <div>
+                          <label className="block text-xs font-medium text-im8-burgundy mb-1">Deliverable</label>
+                          <select
+                            value={editState[sub.id].deliverable_id ?? ""}
+                            onChange={(e) => setEditState((prev) => ({ ...prev, [sub.id]: { ...prev[sub.id], deliverable_id: e.target.value || null } }))}
+                            className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy bg-white focus:outline-none focus:ring-2 focus:ring-im8-red/30"
+                          >
+                            <option value="">— No deliverable —</option>
+                            {(deliverableOptions[sub.deal_id] ?? []).map((d) => (
+                              <option key={d.id} value={d.id}>
+                                {d.deliverable_type}{d.sequence != null ? ` #${d.sequence}` : ""}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Variant label */}
+                        <div>
+                          <label className="block text-xs font-medium text-im8-burgundy mb-1">Asset label <span className="text-im8-burgundy/40 font-normal">(e.g. Hook 1, Full Reel)</span></label>
+                          <input
+                            type="text"
+                            value={editState[sub.id].variant_label}
+                            onChange={(e) => setEditState((prev) => ({ ...prev, [sub.id]: { ...prev[sub.id], variant_label: e.target.value } }))}
+                            placeholder="Hook 1, Full Reel, Body…"
+                            className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy bg-white focus:outline-none focus:ring-2 focus:ring-im8-red/30"
+                          />
+                        </div>
+
+                        {/* Caption */}
+                        <div>
+                          <label className="block text-xs font-medium text-im8-burgundy mb-1">Caption</label>
+                          <textarea
+                            value={editState[sub.id].caption}
+                            onChange={(e) => setEditState((prev) => ({ ...prev, [sub.id]: { ...prev[sub.id], caption: e.target.value } }))}
+                            rows={3}
+                            placeholder="Instagram / TikTok caption text…"
+                            className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy bg-white focus:outline-none focus:ring-2 focus:ring-im8-red/30 resize-none"
+                          />
+                        </div>
+
+                        {/* Drive URL */}
+                        <div>
+                          <label className="block text-xs font-medium text-im8-burgundy mb-1">Drive URL <span className="text-im8-burgundy/40 font-normal">(correct if logged incorrectly)</span></label>
+                          <input
+                            type="text"
+                            value={editState[sub.id].drive_url}
+                            onChange={(e) => setEditState((prev) => ({ ...prev, [sub.id]: { ...prev[sub.id], drive_url: e.target.value } }))}
+                            placeholder="https://drive.google.com/…"
+                            className="w-full px-3 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy bg-white focus:outline-none focus:ring-2 focus:ring-im8-red/30 font-mono text-xs"
+                          />
+                        </div>
+
+                        <div className="flex items-center gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => saveEdit(sub.id)}
+                            disabled={editSaving}
+                            className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-im8-burgundy text-white text-xs font-bold uppercase tracking-[0.08em] hover:bg-im8-dark transition-colors disabled:opacity-50"
+                          >
+                            {editSaving ? "Saving…" : "Save changes"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => cancelEdit(sub.id)}
+                            className="px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-[0.08em] text-im8-burgundy/60 hover:text-im8-burgundy hover:bg-im8-sand/40 transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Primary asset — the player */}
                     <div>
                       <div className="flex items-center gap-2 mb-2">
