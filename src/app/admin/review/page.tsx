@@ -28,6 +28,7 @@ interface PendingSubmission {
   deliverable_id: string | null;
   deal_drive_folder_id: string | null;
   brief_title: string | null;
+  brief_id: string | null;
   deliverable_type: string | null;
   deliverable_sequence: number | null;
   caption: string | null;
@@ -92,7 +93,7 @@ export default function AdminReviewPage() {
       const inf = s.influencer as { full_name: string } | null;
       const deal = s.deal as { influencer_name: string; drive_folder_id?: string | null; creator_bio?: string | null; niche_tags?: string[] | null } | null;
       const brief = s.brief as { title: string } | null;
-      const deliv = s.deliverable as { deliverable_type: string; sequence: number | null } | null;
+      const deliv = s.deliverable as { deliverable_type: string; sequence: number | null; brief_id: string | null } | null;
       rows.push({
         id: s.id as string,
         file_name: s.file_name as string | null,
@@ -107,6 +108,7 @@ export default function AdminReviewPage() {
         deliverable_id: s.deliverable_id as string | null,
         deal_drive_folder_id: deal?.drive_folder_id ?? null,
         brief_title: brief?.title ?? null,
+        brief_id: (s.brief_id as string | null) ?? deliv?.brief_id ?? null,
         deliverable_type: deliv?.deliverable_type ?? null,
         deliverable_sequence: deliv?.sequence ?? null,
         caption: s.caption as string | null,
@@ -125,11 +127,11 @@ export default function AdminReviewPage() {
     const supabase = createClient();
     const SELECT_FIELDS = `
       id, file_name, drive_url, drive_file_id, content_type, platform, post_url, submitted_at, caption,
-      deliverable_id, variant_label, is_script, variants,
+      deal_id, deliverable_id, brief_id, variant_label, is_script, variants,
       influencer:influencer_id(full_name),
       deal:deal_id(influencer_name, drive_folder_id, creator_bio, niche_tags),
       brief:brief_id(title),
-      deliverable:deliverable_id(deliverable_type, sequence)
+      deliverable:deliverable_id(deliverable_type, sequence, brief_id)
     `;
 
     const [pendingRes, revisionRes] = await Promise.all([
@@ -576,7 +578,20 @@ export default function AdminReviewPage() {
                         {sub.creator_bio}
                       </p>
                     )}
-                    <div className="flex items-center gap-4 mt-1">
+                    <div className="flex items-center gap-4 mt-1 flex-wrap">
+                      {sub.brief_id && (
+                        <Link
+                          href={`/admin/briefs/${sub.brief_id}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="inline-flex items-center gap-1 text-xs text-im8-red hover:underline"
+                          title={sub.brief_title ? `Brief: ${sub.brief_title}` : "View brief"}
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          View Brief
+                        </Link>
+                      )}
                       {sub.post_url && (
                         <a href={sub.post_url} target="_blank" rel="noopener noreferrer" className="text-xs text-im8-red hover:underline" onClick={(e) => e.stopPropagation()}>View Post</a>
                       )}
@@ -584,7 +599,7 @@ export default function AdminReviewPage() {
                         <a href={sub.drive_url} target="_blank" rel="noopener noreferrer" className="text-xs text-im8-red hover:underline" onClick={(e) => e.stopPropagation()}>View File</a>
                       )}
                       <span className="text-xs text-im8-burgundy/40">{new Date(sub.submitted_at).toLocaleDateString()}</span>
-                      {!sub.creator_bio && (
+                      {!sub.creator_bio && sub.deal_id && (
                         <Link
                           href={`/admin/deals/${sub.deal_id}`}
                           onClick={(e) => e.stopPropagation()}
