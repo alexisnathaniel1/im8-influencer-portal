@@ -31,15 +31,16 @@ interface PendingSubmission {
   deliverable_sequence: number | null;
   caption: string | null;
   variant_label: string | null;
-  /** Draft number parsed from file_name (_DRAFT_N suffix) — null if not determinable */
+  is_script: boolean;
+  /** Draft number parsed from file_name (_DRAFT_N or _SCRIPT_N suffix) — null if not determinable */
   draftNum: number | null;
 }
 
-/** Parse the DRAFT N number from a filename like "…_DRAFT_2" */
+/** Parse the DRAFT N or SCRIPT N number from a filename like "…_DRAFT_2" or "…_SCRIPT_1" */
 function parseDraftNum(fileName: string | null): number | null {
   if (!fileName) return null;
-  const m = fileName.match(/_DRAFT_(\d+)$/);
-  return m ? parseInt(m[1], 10) : null;
+  const m = fileName.match(/_(DRAFT|SCRIPT)_(\d+)$/);
+  return m ? parseInt(m[2], 10) : null;
 }
 
 export default function AdminReviewPage() {
@@ -67,7 +68,6 @@ export default function AdminReviewPage() {
         deliverable:deliverable_id(deliverable_type, sequence)
       `)
       .eq("status", "pending")
-      .eq("is_script", false)
       .order("submitted_at", { ascending: false });
 
     if (error) { setLoading(false); return; }
@@ -96,6 +96,7 @@ export default function AdminReviewPage() {
         deliverable_sequence: deliv?.sequence ?? null,
         caption: (s as Record<string, unknown>).caption as string | null,
         variant_label: (s as Record<string, unknown>).variant_label as string | null,
+        is_script: !!((s as Record<string, unknown>).is_script),
         draftNum: parseDraftNum(s.file_name),
       });
     }
@@ -310,7 +311,12 @@ export default function AdminReviewPage() {
                           {sub.variant_label}
                         </span>
                       )}
-                      {sub.draftNum !== null && (
+                      {sub.is_script && (
+                        <span className="inline-block px-2 py-0.5 rounded text-xs font-bold bg-amber-100 text-amber-700 font-mono uppercase tracking-wide">
+                          SCRIPT{sub.draftNum !== null ? ` ${sub.draftNum}` : ""}
+                        </span>
+                      )}
+                      {!sub.is_script && sub.draftNum !== null && (
                         <span className="inline-block px-2 py-0.5 rounded text-xs font-bold bg-slate-100 text-slate-600 font-mono">
                           DRAFT {sub.draftNum}
                         </span>

@@ -161,7 +161,8 @@ export async function POST(request: Request) {
 
     const fileName = rawFileName || canonicalName;
 
-    // 7. Insert submission. Scripts auto-approve (they're reference docs, not review-worthy).
+    // 7. Insert submission. Scripts go into the review queue just like regular content —
+    // the is_script flag only affects UI labelling (SCRIPT vs DRAFT pill), not the workflow.
     const insertPayload: Record<string, unknown> = {
       deal_id: dealId,
       deliverable_id: deliverableId ?? null,
@@ -172,14 +173,10 @@ export async function POST(request: Request) {
       caption: typeof caption === "string" ? caption : null,
       post_url: typeof postUrl === "string" && postUrl ? postUrl : null,
       content_type: "draft",
-      status: isScript ? "approved" : "pending",
+      status: "pending",
       variant_label: variantLabel || null,
       is_script: !!isScript,
     };
-    if (isScript) {
-      insertPayload.reviewed_at = new Date().toISOString();
-      insertPayload.reviewed_by = user.id;
-    }
 
     const { data: insertData, error: insertError } = await admin
       .from("submissions")
@@ -193,19 +190,17 @@ export async function POST(request: Request) {
 
     const submissionId = insertData?.id;
 
-    // 8. Slack notification (fire-and-forget). Skip for scripts — they're reference docs.
+    // 8. Slack notification (fire-and-forget). Scripts notify just like regular content.
     const influencerName = deal.influencer_name ?? "Creator";
     const deliverableLabel = deliverableType
       ? deliverableSeq ? `${deliverableType} #${deliverableSeq}` : deliverableType
       : "Content";
-    if (!isScript) {
-      notifyContentSubmitted({
-        influencerName,
-        deliverableLabel,
-        draftNumber: sequenceNumber,
-        dealId,
-      });
-    }
+    notifyContentSubmitted({
+      influencerName,
+      deliverableLabel,
+      draftNumber: sequenceNumber,
+      dealId,
+    });
 
     // 9. Audit log
     if (submissionId) {
