@@ -44,7 +44,9 @@ export async function getBriefsPendingToSend(admin: SupabaseClient) {
   return { count: items.length, items };
 }
 
-// Submissions waiting for an admin to review them.
+// Submissions waiting for an admin to review them. Matches the filter used
+// on /admin/review (status = 'pending'). Scripts are filtered out — they auto-
+// approve on insert and never enter the review queue.
 export async function getSubmissionsAwaitingReview(admin: SupabaseClient) {
   const { data } = await admin
     .from("submissions")
@@ -52,7 +54,8 @@ export async function getSubmissionsAwaitingReview(admin: SupabaseClient) {
       id, submitted_at, content_type, deliverable_id,
       deal:deal_id(id, influencer_name)
     `)
-    .eq("status", "submitted")
+    .eq("status", "pending")
+    .eq("is_script", false)
     .order("submitted_at", { ascending: true });
 
   return { count: (data ?? []).length, items: data ?? [] };
