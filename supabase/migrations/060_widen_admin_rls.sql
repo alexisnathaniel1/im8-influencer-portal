@@ -168,15 +168,21 @@ CREATE POLICY "Admin staff can manage deliverables"
   ));
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- edited videos pipeline (migration 022)
+-- edited videos pipeline (migration 022) — deal_editors table never deployed,
+-- so it's wrapped in a guard.
 -- ─────────────────────────────────────────────────────────────────────────────
-DROP POLICY IF EXISTS "Admin/ops can manage deal editors" ON deal_editors;
-CREATE POLICY "Admin staff can manage deal editors"
-  ON deal_editors FOR ALL
-  USING (EXISTS (
-    SELECT 1 FROM profiles p
-    WHERE p.id = auth.uid() AND p.role IN ('admin', 'management', 'support')
-  ));
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'deal_editors') THEN
+    DROP POLICY IF EXISTS "Admin/ops can manage deal editors" ON deal_editors;
+    CREATE POLICY "Admin staff can manage deal editors"
+      ON deal_editors FOR ALL
+      USING (EXISTS (
+        SELECT 1 FROM profiles p
+        WHERE p.id = auth.uid() AND p.role IN ('admin', 'management', 'support')
+      ));
+  END IF;
+END$$;
 
 DROP POLICY IF EXISTS "Admin/ops can manage edited videos" ON edited_videos;
 CREATE POLICY "Admin staff can manage edited videos"
