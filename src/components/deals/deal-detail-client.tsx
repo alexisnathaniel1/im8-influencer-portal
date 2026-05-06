@@ -277,13 +277,15 @@ export default function DealDetailClient({
                   const total = ((deal.deliverables as Array<{ code: string; count: number }> | null) ?? [])
                     .filter(d => d && d.code && d.count > 0 && !BINARY_DELIVERABLE_CODES.has(d.code))
                     .reduce((s, d) => s + d.count, 0);
-                  // Outstanding = total minus tracker rows already approved/live/completed,
-                  // since "already done" deliverables don't need a brief sent.
-                  const alreadyDone = (deliverables ?? []).filter(d =>
-                    ["approved", "live", "completed"].includes((d as Record<string, unknown>).status as string)
-                  ).length;
-                  const outstanding = Math.max(0, total - alreadyDone);
-                  return total > 0 ? <span className="ml-1 text-xs">({outstanding}/{total})</span> : null;
+                  // "Sent" = deliverables that already have a brief sent to the creator.
+                  // Tracker rows in approved/live/completed statuses are also counted as
+                  // sent (a brief must have been sent for them to ever reach those states).
+                  const sent = (deliverables ?? []).filter(d => {
+                    const r = d as Record<string, unknown>;
+                    if (r.brief_sent_at) return true;
+                    return ["approved", "live", "completed"].includes(r.status as string);
+                  }).length;
+                  return total > 0 ? <span className="ml-1 text-xs">({sent}/{total})</span> : null;
                 })()}
                 {t === "submissions" && submissions.length > 0 && <span className="ml-1 text-xs">({submissions.length})</span>}
               </button>
