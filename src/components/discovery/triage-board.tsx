@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { humaniseDeliverableCodes } from "@/lib/deliverables";
+import { humaniseDeliverableCodes, DELIVERABLE_LABELS, BINARY_DELIVERABLE_CODES } from "@/lib/deliverables";
 
 type DiscoveryProfile = {
   id: string;
@@ -97,33 +97,13 @@ const STANDARD_USAGE_RIGHTS = ["Whitelisting", "Paid ad usage rights", "Link in 
 // Mirrors the canonical catalogue used in the Partner Tracker
 // (src/components/deals/deal-detail-client.tsx) so counter-proposals,
 // approved deals, and partner-facing summaries all reference the same codes.
-const DELIVERABLE_LABELS: Record<string, string> = {
-  // Instagram
-  IGR: "Instagram Reels",
-  IGS: "Instagram Stories",
-  // TikTok
-  TIKTOK: "TikTok Videos",
-  // YouTube — broken down by format
-  YT_DEDICATED: "YouTube Dedicated Review",
-  YT_INTEGRATED: "YouTube Integrated Review",
-  YT_PODCAST: "YouTube Podcast Ad Read",
-  // UGC + other formats
-  UGC: "UGC Videos",
-  NEWSLETTER: "Newsletter",
-  APP_PARTNERSHIP: "App Partnership",
-  BLOG: "Blog Post",
-  // Rights / extras — Yes/No grants, no count needed
-  WHITELIST: "Whitelisting",
-  PAID_AD: "Paid Ad Usage Rights",
-  RAW_FOOTAGE: "Raw Footage",
-  LINK_BIO: "Link in Bio",
-};
-const BINARY_DELIVERABLE_CODES = new Set(["WHITELIST", "PAID_AD", "RAW_FOOTAGE", "LINK_BIO"]);
+// DELIVERABLE_LABELS + BINARY_DELIVERABLE_CODES sourced from @/lib/deliverables.
 // Order shown in the dropdown — content deliverables first, rights/extras last.
 const COUNTER_DELIVERABLE_CODES = [
-  "IGR", "IGS", "TIKTOK",
-  "YT_DEDICATED", "YT_INTEGRATED", "YT_PODCAST",
-  "UGC", "NEWSLETTER", "APP_PARTNERSHIP", "BLOG",
+  "IGR", "IGS", "IG_POST", "TIKTOK",
+  "YT_DEDICATED", "YT_INTEGRATED", "YT_PODCAST", "YT_SHORTS",
+  "UGC", "PODCAST_AD", "NEWSLETTER", "APP_PARTNERSHIP", "BLOG",
+  "EVENT", "PRODUCTION_DAY", "MEDIA_INTERVIEW",
   "WHITELIST", "PAID_AD", "RAW_FOOTAGE", "LINK_BIO",
 ];
 

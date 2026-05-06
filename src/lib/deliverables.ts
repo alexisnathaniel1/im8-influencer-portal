@@ -9,17 +9,24 @@ export const DELIVERABLE_LABELS: Record<string, string> = {
   // Instagram
   IGR: "Instagram Reels",
   IGS: "Instagram Stories",
+  IG_POST: "Instagram Feed Post",
   // TikTok
   TIKTOK: "TikTok Videos",
   // YouTube
   YT_DEDICATED: "YouTube Dedicated Review",
   YT_INTEGRATED: "YouTube Integrated Review",
   YT_PODCAST: "YouTube Podcast Ad Read",
+  YT_SHORTS: "YouTube Shorts",
   // Other content
   UGC: "UGC Videos",
   NEWSLETTER: "Newsletter",
   APP_PARTNERSHIP: "App Partnership",
   BLOG: "Blog Post",
+  PODCAST_AD: "Podcast Ad Read",
+  // Off-platform / appearances (counted, not posts)
+  EVENT: "In-person Event / Appearance",
+  PRODUCTION_DAY: "Production / Capture Day",
+  MEDIA_INTERVIEW: "Media / Press Interview",
   // Rights / extras (binary grants — no count)
   WHITELIST: "Whitelisting",
   PAID_AD: "Paid Ad Usage Rights",
@@ -33,6 +40,30 @@ export const BINARY_DELIVERABLE_CODES = new Set([
   "RAW_FOOTAGE",
   "LINK_BIO",
 ]);
+
+/**
+ * Map a deliverable code to its primary platform — used by auto-populate
+ * routines (bulk-upload, sync-deliverables, deals PATCH) when seeding
+ * tracker rows. Codes that don't fit a single platform fall back to "other".
+ */
+export const DELIVERABLE_PLATFORM_MAP: Record<string, string> = {
+  IGR: "instagram",
+  IGS: "instagram",
+  IG_POST: "instagram",
+  TIKTOK: "tiktok",
+  YT_DEDICATED: "youtube",
+  YT_INTEGRATED: "youtube",
+  YT_PODCAST: "youtube",
+  YT_SHORTS: "youtube",
+  UGC: "other",
+  NEWSLETTER: "other",
+  APP_PARTNERSHIP: "other",
+  BLOG: "other",
+  PODCAST_AD: "other",
+  EVENT: "other",
+  PRODUCTION_DAY: "other",
+  MEDIA_INTERVIEW: "other",
+};
 
 /** Format a single deliverable as a human-readable phrase. */
 export function formatDeliverable(item: { code: string; count: number }): string | null {

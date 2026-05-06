@@ -5,15 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import Link from "next/link";
-
-const DELIVERABLE_LABELS: Record<string, string> = {
-  IGR: "Instagram Reels",
-  IGS: "Instagram Stories",
-  UGC: "UGC Videos",
-  TIKTOK: "TikTok Videos",
-  YT: "YouTube Videos",
-  WHITELIST: "Whitelisting",
-};
+import { DELIVERABLE_LABELS } from "@/lib/deliverables";
 
 interface Brief {
   id: string;

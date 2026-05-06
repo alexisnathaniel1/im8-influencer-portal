@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { PartnerPayload } from "@/lib/csv/partners-template";
+import { DELIVERABLE_PLATFORM_MAP, BINARY_DELIVERABLE_CODES } from "@/lib/deliverables";
 
 export const maxDuration = 60;
 
@@ -95,13 +96,8 @@ export async function POST(request: NextRequest) {
   // For each newly-inserted deal: build its tracker rows from the deliverables
   // list, then flip the first N of each completed type to status='live' so
   // mid-contract partners come in with the right progress on day one.
-  const PLATFORM_MAP: Record<string, string> = {
-    IGR: "instagram", IGS: "instagram",
-    TIKTOK: "tiktok",
-    YT_DEDICATED: "youtube", YT_INTEGRATED: "youtube", YT_PODCAST: "youtube",
-    UGC: "other", NEWSLETTER: "other", APP_PARTNERSHIP: "other", BLOG: "other",
-  };
-  const RIGHTS_CODES = new Set(["WHITELIST", "PAID_AD", "RAW_FOOTAGE", "LINK_BIO"]);
+  // PLATFORM_MAP + RIGHTS_CODES sourced from canonical registry so adding a
+  // new deliverable code only requires editing @/lib/deliverables.
 
   let deliverablesCreated = 0;
   let markedLive = 0;
@@ -113,7 +109,7 @@ export async function POST(request: NextRequest) {
 
     const platformPrimary = (deal.platform_primary as string | null) ?? "instagram";
     const contentItems = r.deliverables.filter(
-      (item) => item && item.code && item.count > 0 && !RIGHTS_CODES.has(item.code)
+      (item) => item && item.code && item.count > 0 && !BINARY_DELIVERABLE_CODES.has(item.code)
     );
     if (contentItems.length === 0) continue;
 
@@ -126,7 +122,7 @@ export async function POST(request: NextRequest) {
         return {
           deal_id: deal.id as string,
           deliverable_type: item.code,
-          platform: PLATFORM_MAP[item.code] ?? platformPrimary,
+          platform: DELIVERABLE_PLATFORM_MAP[item.code] ?? platformPrimary,
           is_story: item.code === "IGS",
           sequence: seq,
           title: `${(deal.influencer_name as string) ?? ""} — ${item.code} #${seq}`,

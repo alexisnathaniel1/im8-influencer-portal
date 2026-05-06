@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logAuditEvent } from "@/lib/audit/log";
+import { DELIVERABLE_PLATFORM_MAP, BINARY_DELIVERABLE_CODES } from "@/lib/deliverables";
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -67,16 +68,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
        (before?.deliverables as Array<{ code: string; count: number }> | undefined) ?? [])
         // Exclude rights/extras — not schedulable content deliverables
         .filter(item => item && item.code && item.count > 0
-          && !["WHITELIST", "PAID_AD", "RAW_FOOTAGE", "LINK_BIO"].includes(item.code));
+          && !BINARY_DELIVERABLE_CODES.has(item.code));
 
     if (effectiveDeliverables.length > 0) {
-      const PLATFORM_MAP: Record<string, string> = {
-        IGR: "instagram", IGS: "instagram",
-        TIKTOK: "tiktok",
-        YT_DEDICATED: "youtube", YT_INTEGRATED: "youtube", YT_PODCAST: "youtube",
-        UGC: "other",
-        NEWSLETTER: "other", APP_PARTNERSHIP: "other", BLOG: "other",
-      };
+      const PLATFORM_MAP = DELIVERABLE_PLATFORM_MAP;
 
       // Fetch existing deliverable rows so we can insert only MISSING ones.
       // This handles the case where deliverables are added to the contract after

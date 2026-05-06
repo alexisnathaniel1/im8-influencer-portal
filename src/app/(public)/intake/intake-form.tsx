@@ -4,6 +4,7 @@ import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { DELIVERABLE_LABELS } from "@/lib/deliverables";
 
 const NICHES = [
   "Doctor/Physician", "Dietitian/Nutritionist", "Athlete", "Biohacker",
@@ -13,10 +14,7 @@ const NICHES = [
 const PLATFORMS = ["instagram", "tiktok", "youtube", "other"] as const;
 const POSITIONING_LIMIT = 100;
 
-const DELIVERABLE_LABELS: Record<string, string> = {
-  IGR: "IG Reels", IGS: "IG Stories", UGC: "UGC Videos",
-  TIKTOK: "TikTok Videos", YT: "YouTube Videos",
-};
+// DELIVERABLE_LABELS imported from @/lib/deliverables
 const STANDARD_USAGE_RIGHTS = ["Whitelisting", "Paid ad usage rights", "Link in bio"];
 
 type Platform = typeof PLATFORMS[number];
@@ -449,7 +447,7 @@ export default function IntakeForm({
                             })}
                             className="flex-1 px-2 py-2 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none bg-white"
                           >
-                            {["IGR","IGS","UGC","TIKTOK","YT"].map(c => (
+                            {["IGR","IGS","IG_POST","TIKTOK","YT_DEDICATED","YT_INTEGRATED","YT_PODCAST","YT_SHORTS","UGC","PODCAST_AD","NEWSLETTER","BLOG","EVENT","PRODUCTION_DAY","MEDIA_INTERVIEW"].map(c => (
                               <option key={c} value={c}>{DELIVERABLE_LABELS[c] ?? c}</option>
                             ))}
                           </select>

@@ -36,18 +36,24 @@ function NewPartnershipForm() {
   const [nicheTags, setNicheTags] = useState<string[]>([]);
   const [deliverableCounts, setDeliverableCounts] = useState<Record<string, number>>({});
 
-  // Countable deliverables (episode / post counts)
+  // Countable deliverables (episode / post / appearance counts)
   const COUNTABLE_OPTIONS = [
     { code: "IGR", label: "Instagram Reels" },
     { code: "IGS", label: "Instagram Stories" },
+    { code: "IG_POST", label: "Instagram Feed Post" },
     { code: "TIKTOK", label: "TikTok Videos" },
     { code: "YT_DEDICATED", label: "YouTube Dedicated Review" },
     { code: "YT_INTEGRATED", label: "YouTube Integrated Review" },
     { code: "YT_PODCAST", label: "YouTube Podcast Ad Read" },
+    { code: "YT_SHORTS", label: "YouTube Shorts" },
     { code: "UGC", label: "UGC Videos" },
+    { code: "PODCAST_AD", label: "Podcast Ad Read" },
     { code: "NEWSLETTER", label: "Newsletter" },
     { code: "APP_PARTNERSHIP", label: "App Partnership" },
     { code: "BLOG", label: "Blog Post" },
+    { code: "EVENT", label: "In-person Event / Appearance" },
+    { code: "PRODUCTION_DAY", label: "Production / Capture Day" },
+    { code: "MEDIA_INTERVIEW", label: "Media / Press Interview" },
   ];
   // Binary Yes/No rights / extras
   const BINARY_OPTIONS = [

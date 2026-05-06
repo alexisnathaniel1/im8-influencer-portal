@@ -1,15 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { DELIVERABLE_PLATFORM_MAP, BINARY_DELIVERABLE_CODES } from "@/lib/deliverables";
 
-const SKIP_CODES = new Set(["WHITELIST", "PAID_AD", "RAW_FOOTAGE", "LINK_BIO"]);
-const PLATFORM_MAP: Record<string, string> = {
-  IGR: "instagram", IGS: "instagram",
-  TIKTOK: "tiktok",
-  YT_DEDICATED: "youtube", YT_INTEGRATED: "youtube", YT_PODCAST: "youtube",
-  UGC: "other",
-  NEWSLETTER: "other", APP_PARTNERSHIP: "other", BLOG: "other",
-};
+// Skip rights/extras when seeding tracker rows — they're grants, not posts.
+const SKIP_CODES = BINARY_DELIVERABLE_CODES;
+const PLATFORM_MAP = DELIVERABLE_PLATFORM_MAP;
 
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

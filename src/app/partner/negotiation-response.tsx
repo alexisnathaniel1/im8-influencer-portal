@@ -2,30 +2,15 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { DELIVERABLE_LABELS, BINARY_DELIVERABLE_CODES } from "@/lib/deliverables";
 
-// Mirror of the canonical catalogue used in the admin Partner Tracker so
-// creator counters use the same codes admins do.
-const DELIVERABLE_LABELS: Record<string, string> = {
-  IGR: "Instagram Reels",
-  IGS: "Instagram Stories",
-  TIKTOK: "TikTok Videos",
-  YT_DEDICATED: "YouTube Dedicated Review",
-  YT_INTEGRATED: "YouTube Integrated Review",
-  YT_PODCAST: "YouTube Podcast Ad Read",
-  UGC: "UGC Videos",
-  NEWSLETTER: "Newsletter",
-  APP_PARTNERSHIP: "App Partnership",
-  BLOG: "Blog Post",
-  WHITELIST: "Whitelisting",
-  PAID_AD: "Paid Ad Usage Rights",
-  RAW_FOOTAGE: "Raw Footage",
-  LINK_BIO: "Link in Bio",
-};
-const BINARY_DELIVERABLE_CODES = new Set(["WHITELIST", "PAID_AD", "RAW_FOOTAGE", "LINK_BIO"]);
+// Codes selectable in the creator counter-offer flow — content + rights.
+// Sourced from the canonical registry so admin and creator UIs stay in sync.
 const COUNTER_CODES = [
-  "IGR", "IGS", "TIKTOK",
-  "YT_DEDICATED", "YT_INTEGRATED", "YT_PODCAST",
-  "UGC", "NEWSLETTER", "APP_PARTNERSHIP", "BLOG",
+  "IGR", "IGS", "IG_POST", "TIKTOK",
+  "YT_DEDICATED", "YT_INTEGRATED", "YT_PODCAST", "YT_SHORTS",
+  "UGC", "PODCAST_AD", "NEWSLETTER", "APP_PARTNERSHIP", "BLOG",
+  "EVENT", "PRODUCTION_DAY", "MEDIA_INTERVIEW",
   "WHITELIST", "PAID_AD", "RAW_FOOTAGE", "LINK_BIO",
 ];
 

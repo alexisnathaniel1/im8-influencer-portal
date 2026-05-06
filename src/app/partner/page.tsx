@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
 import NegotiationResponse from "./negotiation-response";
 import ShippingPrompt, { type MissingCreator } from "@/components/partner/shipping-prompt";
+import { DELIVERABLE_LABELS, BINARY_DELIVERABLE_CODES } from "@/lib/deliverables";
 
 // Partner-facing status labels — we deliberately don't expose internal triage
 // states (reviewing, negotiation_needed, converted) to creators. Until a
@@ -21,17 +22,8 @@ function publicStatusColor(realStatus: string): string {
   return "bg-blue-100 text-blue-700";
 }
 
-// Mirrors the catalogue used in the admin Partner Tracker so the deliverables
-// shown to creators match exactly what's stored on the deal.
-const DELIVERABLE_LABELS: Record<string, string> = {
-  IGR: "Instagram Reels", IGS: "Instagram Stories", TIKTOK: "TikTok Videos",
-  YT_DEDICATED: "YouTube Dedicated Review", YT_INTEGRATED: "YouTube Integrated Review",
-  YT_PODCAST: "YouTube Podcast Ad Read", UGC: "UGC Videos",
-  NEWSLETTER: "Newsletter", APP_PARTNERSHIP: "App Partnership", BLOG: "Blog Post",
-  WHITELIST: "Whitelisting", PAID_AD: "Paid Ad Usage Rights",
-  RAW_FOOTAGE: "Raw Footage", LINK_BIO: "Link in Bio",
-};
-const BINARY_DELIVERABLE_CODES = new Set(["WHITELIST", "PAID_AD", "RAW_FOOTAGE", "LINK_BIO"]);
+// DELIVERABLE_LABELS + BINARY_DELIVERABLE_CODES sourced from
+// @/lib/deliverables — single canonical registry shared with admin UI.
 
 type DeliverableItem = { code: string; count: number };
 function splitDeliverables(items: DeliverableItem[] | null | undefined): {

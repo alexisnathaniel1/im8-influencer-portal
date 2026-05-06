@@ -2,13 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { DELIVERABLE_LABELS } from "@/lib/deliverables";
 
 type Deliverable = { code: string; count: number };
-
-const DELIVERABLE_LABELS: Record<string, string> = {
-  IGR: "IG Reels", IGS: "IG Stories", UGC: "UGC Videos",
-  TIKTOK: "TikTok Videos", YT: "YouTube Videos",
-};
 
 const STANDARD_USAGE_RIGHTS = ["Whitelisting", "Paid ad usage rights", "Link in bio"];
 
@@ -131,7 +127,7 @@ export default function NewContractForm({
                 onChange={e => setDeliverables(prev => prev.map((x, i) => i === idx ? { ...x, code: e.target.value } : x))}
                 className="flex-1 px-2 py-1.5 border border-im8-stone/40 rounded-lg text-sm text-im8-burgundy focus:outline-none bg-white"
               >
-                {["IGR","IGS","UGC","TIKTOK","YT"].map(c => (
+                {["IGR","IGS","IG_POST","TIKTOK","YT_DEDICATED","YT_INTEGRATED","YT_PODCAST","YT_SHORTS","UGC","PODCAST_AD","NEWSLETTER","BLOG","EVENT","PRODUCTION_DAY","MEDIA_INTERVIEW"].map(c => (
                   <option key={c} value={c}>{DELIVERABLE_LABELS[c] ?? c}</option>
                 ))}
               </select>

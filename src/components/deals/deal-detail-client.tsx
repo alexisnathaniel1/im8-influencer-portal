@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import NicheMultiSelect from "@/components/shared/niche-multi-select";
 import { CURRENCIES, currencySymbol } from "@/lib/currencies";
+import { DELIVERABLE_LABELS, BINARY_DELIVERABLE_CODES } from "@/lib/deliverables";
 
 type Deal = Record<string, unknown>;
 type Brief = Record<string, unknown>;
@@ -1272,36 +1273,16 @@ function Field({ label, value, onChange, type = "text" }: {
   );
 }
 
-// Deliverable label map — exported so the brief editor and new-deal form can reuse it.
-export const DELIVERABLE_LABELS: Record<string, string> = {
-  // Instagram
-  IGR: "Instagram Reels",
-  IGS: "Instagram Stories",
-  // TikTok
-  TIKTOK: "TikTok Videos",
-  // YouTube (broken down by format)
-  YT_DEDICATED: "YouTube Dedicated Review",
-  YT_INTEGRATED: "YouTube Integrated Review",
-  YT_PODCAST: "YouTube Podcast Ad Read",
-  // UGC
-  UGC: "UGC Videos",
-  // Other platforms / formats
-  NEWSLETTER: "Newsletter",
-  APP_PARTNERSHIP: "App Partnership",
-  BLOG: "Blog Post",
-  // Rights / extras — rendered as Yes/No toggles, excluded from content briefs
-  WHITELIST: "Whitelisting",
-  PAID_AD: "Paid Ad Usage Rights",
-  RAW_FOOTAGE: "Raw Footage",
-  LINK_BIO: "Link in Bio",
-};
-
-// Codes that are binary Yes/No grants rather than countable deliverables.
-export const BINARY_DELIVERABLE_CODES = new Set(["WHITELIST", "PAID_AD", "RAW_FOOTAGE", "LINK_BIO"]);
+// Re-export the canonical registry so existing importers of this file
+// (`import { DELIVERABLE_LABELS, BINARY_DELIVERABLE_CODES } from .../deal-detail-client`)
+// keep working without churn.
+export { DELIVERABLE_LABELS, BINARY_DELIVERABLE_CODES };
 
 // Codes that are rights/extras — excluded from the content brief deliverable list.
 // Denis (support) writes the brief for the actual content deliverables only.
-export const BRIEF_EXCLUDED_CODES = new Set(["WHITELIST", "PAID_AD", "RAW_FOOTAGE", "LINK_BIO"]);
+// Mirrors BINARY_DELIVERABLE_CODES today; kept as a separate export so future
+// per-context divergence stays cheap to introduce.
+export const BRIEF_EXCLUDED_CODES = BINARY_DELIVERABLE_CODES;
 
 // Format a single deliverable for display.
 export function formatDeliverable(item: { code: string; count: number }): string | null {
