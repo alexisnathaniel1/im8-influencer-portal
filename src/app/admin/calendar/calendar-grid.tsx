@@ -13,7 +13,7 @@ type EventKind = "submit_due" | "review_due" | "submitted" | "approved" | "live"
 const KIND_CONFIG: Record<EventKind, { label: string; bg: string; text: string; dot: string }> = {
   submit_due: { label: "Creator deadline", bg: "bg-orange-50",  text: "text-orange-800",  dot: "bg-orange-500"  },
   review_due: { label: "Review deadline",  bg: "bg-indigo-50",  text: "text-indigo-700",  dot: "bg-indigo-500"  },
-  submitted:  { label: "Submitted",        bg: "bg-amber-50",   text: "text-amber-800",   dot: "bg-amber-500"   },
+  submitted:  { label: "Submitted",        bg: "bg-teal-50",    text: "text-teal-700",    dot: "bg-teal-500"    },
   approved:   { label: "Approved",         bg: "bg-lime-50",    text: "text-lime-800",    dot: "bg-lime-600"    },
   live:       { label: "Live",             bg: "bg-fuchsia-50", text: "text-fuchsia-700", dot: "bg-fuchsia-500" },
 };
